@@ -42,6 +42,7 @@ node server/index.js
 - `COMPILE_JOB_MEM_MB`
 - `COMPILE_CPU_SHARE`
 - `COMPILE_TIMEOUT_MS`
+- `LATEX_BIN_PATH`（可选：自定义 LaTeX 可执行文件目录）
 
 ## 6. Docker 编译（可选）
 
@@ -64,4 +65,3 @@ export OPENAI_MODEL="gpt-5.2-codex"
 - 编译失败：检查 `collabtex-data/projects/<id>/build/main.log`
 - 页面打不开：确认 `3080/3081` 端口可用
 - 同步失败：确认 PDF 是最新编译结果
-
