@@ -4,7 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="${DATA_DIR:-$ROOT_DIR/collabtex-data}"
 WEB_PORT="${WEB_PORT:-3080}"
-WS_PORT="${WS_PORT:-3081}"
+if [[ -z "${WS_PORT:-}" ]]; then
+  WS_PORT="$((WEB_PORT + 1))"
+else
+  WS_PORT="${WS_PORT}"
+fi
 WEB_HOST="${WEB_HOST:-0.0.0.0}"
 WS_HOST="${WS_HOST:-0.0.0.0}"
 INIT_PASSWORD="${INIT_PASSWORD:-ChangeMe!2026}"
@@ -40,4 +44,11 @@ nohup env \
   > "$DATA_DIR/server.log" 2>&1 &
 
 echo $! > "$DATA_DIR/server.pid"
-echo "Started CollabTeX: http://${WEB_HOST}:${WEB_PORT} (pid $(cat "$DATA_DIR/server.pid"))"
+sleep 1
+if kill -0 "$(cat "$DATA_DIR/server.pid")" 2>/dev/null; then
+  echo "Started CollabTeX: http://${WEB_HOST}:${WEB_PORT} (pid $(cat "$DATA_DIR/server.pid"))"
+else
+  echo "Failed to start CollabTeX. See log: $DATA_DIR/server.log"
+  rm -f "$DATA_DIR/server.pid"
+  exit 1
+fi
