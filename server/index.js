@@ -38,6 +38,7 @@ import { createCollabServer } from "./collab.js";
 
 import Busboy from "busboy";
 import unzipper from "unzipper";
+import archiver from "archiver";
 
 const WEB_PORT = Number(process.env.WEB_PORT || 3080);
 const WS_PORT = Number(process.env.WS_PORT || (Number.isFinite(WEB_PORT) ? WEB_PORT + 1 : 3081));
@@ -69,6 +70,15 @@ function normalizeRelPath(p) {
     .replace(/\\/g, "/")
     .replace(/^\/+/, "")
     .replace(/\/+$/, "");
+}
+
+function sanitizeZipName(name) {
+  const safe = String(name || "")
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_");
+  return safe || "collabtex-project";
 }
 
 function remapPathPrefix(pathStr, fromPrefix, toPrefix) {
@@ -569,6 +579,37 @@ async function main() {
     await cleanupProject(projDir, p.mainFile, { force: forceClean });
     const tree = await listProjectTree(projDir);
     res.json({ tree, mainFile: p.mainFile, compiler: p.compiler || "pdflatex" });
+  });
+
+  app.get("/api/projects/:id/export.zip", requireAuth(session), async (req, res) => {
+    const projectId = req.params.id;
+    const db = await loadProjects(dataDir);
+    const p = db.projects.find((x) => x.id === projectId);
+    if (!p) return jsonError(res, 404, "project not found");
+    if (!canAccessProject(p, req.user.username)) return jsonError(res, 403, "forbidden");
+
+    const projDir = projectPath(dataDir, projectId);
+    const files = await listProjectTree(projDir);
+    const zipName = `${sanitizeZipName(p.name || `project-${projectId.slice(0, 8)}`)}.zip`;
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    archive.on("error", (err) => {
+      try {
+        res.status(500).end(err && err.message ? err.message : "zip failed");
+      } catch {
+        // ignore
+      }
+    });
+    archive.pipe(res);
+
+    for (const rel of files) {
+      const abs = resolveProjectFilePath(dataDir, projectId, rel);
+      archive.file(abs, { name: rel });
+    }
+    archive.finalize();
   });
 
   app.post("/api/projects/:id/search", requireAuth(session), async (req, res) => {

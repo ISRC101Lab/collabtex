@@ -17,6 +17,7 @@
     "@codemirror/legacy-modes": "^6.4.3",
     "@hocuspocus/provider": "^2.15.0",
     "@hocuspocus/server": "^2.15.0",
+    "archiver": "^7.0.1",
     "busboy": "^1.6.0",
     "codemirror": "^6.0.2",
     "express": "^4.19.2",

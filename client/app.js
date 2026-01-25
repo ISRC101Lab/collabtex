@@ -151,6 +151,7 @@ const I18N = {
     "返回": "Back",
     "创建": "Create",
     "导入 Zip": "Import Zip",
+    "导出 Zip": "Export Zip",
     "导入": "Import",
     "我的项目": "My Projects",
     "项目管理": "Project Manager",
@@ -8594,6 +8595,25 @@ function renderProject() {
     mount(render());
   };
 
+  const exportProjectZip = () => {
+    if (!app.current.project) return;
+    const token = localStorage.getItem("ct_session_token") || "";
+    const qs = token ? `?token=${encodeURIComponent(token)}` : "";
+    const baseName = String(app.current.project.name || `project-${app.current.project.id.slice(0, 8)}`)
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .replace(/\s+/g, "_")
+      .replace(/_+/g, "_");
+    const name = baseName || "collabtex-project";
+    const url = `/api/projects/${app.current.project.id}/export.zip${qs}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
 
   const uploadFile = async (file, targetPath) => {
     if (!file) return;
@@ -8752,6 +8772,7 @@ function renderProject() {
           },
         }),
         btn(t("上传"), { onClick: () => uploadInput.click() }),
+        btn(t("导出 Zip"), { kind: "tiny", onClick: () => exportProjectZip() }),
         btn(t("管理"), { kind: "tiny", onClick: () => showFileActions() }),
         btn(t("隐藏侧栏"), { kind: "tiny", onClick: () => setLeftCollapsed(true) }),
       ]),

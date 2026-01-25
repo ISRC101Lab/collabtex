@@ -12,6 +12,7 @@ A minimal, self‑hosted, Overleaf‑like editor focused on the paper‑writing 
 - PDF preview (PDF.js) with paging/zoom
 - SyncTeX: source → PDF (button) and PDF → source (click)
 - File tree management: create/upload/rename/move/delete
+- Export project as Zip
 - Optional one‑click AI compile fix (server‑side Codex CLI)
 - Local accounts only (no public registration)
 
