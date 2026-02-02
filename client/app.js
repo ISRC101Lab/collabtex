@@ -1386,7 +1386,13 @@ async function ensurePdfDoc(projectId, { refresh = false } = {}) {
     app.ui.pdfDoc = null;
   }
   const pdfjs = await loadPdfJs();
-  app.ui.pdfLoadingTask = pdfjs.getDocument({ url });
+  app.ui.pdfLoadingTask = pdfjs.getDocument({
+    url,
+    withCredentials: true,
+    cMapUrl: "/cmaps/",
+    cMapPacked: true,
+    standardFontDataUrl: "/standard_fonts/",
+  });
   const doc = await app.ui.pdfLoadingTask.promise;
   app.ui.pdfDoc = doc;
   app.ui.pdfDocUrl = url;
