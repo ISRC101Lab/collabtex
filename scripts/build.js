@@ -19,6 +19,22 @@ try {
   // ignore if dependency not installed yet
 }
 
+// PDF.js CMaps and standard fonts (for CJK rendering)
+try {
+  const cmapsSrc = path.join(root, "node_modules", "pdfjs-dist", "cmaps");
+  const cmapsDst = path.join(publicDir, "cmaps");
+  await fs.cp(cmapsSrc, cmapsDst, { recursive: true });
+} catch {
+  // ignore if dependency not installed yet
+}
+try {
+  const fontsSrc = path.join(root, "node_modules", "pdfjs-dist", "standard_fonts");
+  const fontsDst = path.join(publicDir, "standard_fonts");
+  await fs.cp(fontsSrc, fontsDst, { recursive: true });
+} catch {
+  // ignore if dependency not installed yet
+}
+
 await esbuild.build({
   entryPoints: [path.join(clientDir, "app.js")],
   bundle: true,
