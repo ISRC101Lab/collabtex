@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="${DATA_DIR:-$ROOT_DIR/collabtex-data}"
-WEB_PORT="${WEB_PORT:-3080}"
+WEB_PORT="${WEB_PORT:-4090}"
 if [[ -z "${WS_PORT:-}" ]]; then
   WS_PORT="$((WEB_PORT + 1))"
 else
@@ -11,7 +11,7 @@ else
 fi
 WEB_HOST="${WEB_HOST:-0.0.0.0}"
 WS_HOST="${WS_HOST:-0.0.0.0}"
-INIT_PASSWORD="${INIT_PASSWORD:-ChangeMe!2026}"
+INIT_PASSWORD="admin"
 OPEN_ACCESS="${OPEN_ACCESS:-0}"
 COMPILE_DOCKER="${COMPILE_DOCKER:-0}"
 LATEX_BIN_PATH="${LATEX_BIN_PATH:-}"

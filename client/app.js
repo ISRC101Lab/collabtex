@@ -147,6 +147,24 @@ const I18N = {
     "密码": "Password",
     "用户名 (admin / user01..user09)": "Username (admin / user01..user09)",
     "项目": "Projects",
+    "你的项目": "Your projects",
+    "所有项目": "All projects",
+    "与你共享": "Shared with you",
+    "搜索项目...": "Search projects...",
+    "新建": "New",
+    "分享": "Share",
+    "视图设置": "View settings",
+    "代码": "Code",
+    "侧栏": "Sidebar",
+    "刚刚": "Just now",
+    "{n}分钟": "{n} min",
+    "{n}小时": "{n} h",
+    "{n}天": "{n} d",
+    "{n}月": "{n} mo",
+    "{n}年": "{n} y",
+    "用户": "User",
+    "列表视图": "List view",
+    "网格视图": "Grid view",
     "退出": "Log out",
     "返回": "Back",
     "创建": "Create",
@@ -1998,6 +2016,11 @@ const app = {
     templatesLoaded: false,
     projectFilter: localStorage.getItem("ct_project_filter") || "",
     projectCategory: localStorage.getItem("ct_project_category") || "all",
+    projectScope: localStorage.getItem("ct_project_scope") || "mine",
+    projectView: localStorage.getItem("ct_project_view") || "list",
+    leftRailMode: localStorage.getItem("ct_left_rail_mode") || "files",
+    leftPaneTab: localStorage.getItem("ct_left_pane_tab") || "files",
+    assistantEnabled: localStorage.getItem("ct_assistant_enabled") !== "0",
     autoCompile: autoCompileDefault,
     autoCompileDirty: false,
     autoCompileDirtyAt: 0,
@@ -7899,6 +7922,32 @@ function projectMatchesFilter(project, filterText, category) {
   return hay.includes(q);
 }
 
+function projectMatchesScope(project, scope, me) {
+  if (!project) return false;
+  const mode = String(scope || "all");
+  if (mode === "mine") return !!me && project.owner === me.username;
+  if (mode === "shared") return !!me && project.owner !== me.username;
+  return true;
+}
+
+function formatProjectAge(project) {
+  const stamp = project && (project.updatedAt || project.createdAt);
+  const ts = stamp ? Date.parse(stamp) : NaN;
+  if (!Number.isFinite(ts)) return "";
+  const diff = Math.max(0, Date.now() - ts);
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return t("刚刚");
+  if (mins < 60) return t("{n}分钟", { n: mins });
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return t("{n}小时", { n: hours });
+  const days = Math.floor(hours / 24);
+  if (days < 30) return t("{n}天", { n: days });
+  const months = Math.floor(days / 30);
+  if (months < 12) return t("{n}月", { n: months });
+  const years = Math.floor(months / 12);
+  return t("{n}年", { n: years });
+}
+
 function renderFileTree() {
   const container = h("div", { class: "filetree", id: "fileTree" });
 
@@ -8372,39 +8421,24 @@ function renderProjects() {
   const importZip = input({ type: "file" });
   importZip.accept = ".zip";
 
-  const list = h("div", { class: "project-list", id: "projectList" });
-
-  const categories = Array.from(new Set(app.projects.map((p) => String(p.category || "").trim()).filter(Boolean))).sort();
-  if (app.ui.projectCategory !== "all" && !categories.includes(app.ui.projectCategory)) {
+  if (app.ui.projectCategory !== "all") {
     app.ui.projectCategory = "all";
     localStorage.setItem("ct_project_category", "all");
   }
-  const categorySelect = h("select", {
-    class: "input",
-    onchange: (ev) => {
-      app.ui.projectCategory = ev.target.value || "all";
-      localStorage.setItem("ct_project_category", app.ui.projectCategory);
-      if (app.ui.refreshProjectList) app.ui.refreshProjectList();
-    },
-  });
-  categorySelect.appendChild(
-    h("option", { value: "all", html: t("全部分类"), selected: app.ui.projectCategory === "all" ? "" : null })
-  );
-  for (const cat of categories) {
-    categorySelect.appendChild(
-      h("option", { value: cat, html: cat, selected: app.ui.projectCategory === cat ? "" : null })
-    );
+  if (!["all", "mine", "shared"].includes(app.ui.projectScope)) {
+    app.ui.projectScope = "mine";
+    localStorage.setItem("ct_project_scope", "mine");
+  }
+  if (!["list", "grid"].includes(app.ui.projectView)) {
+    app.ui.projectView = "list";
+    localStorage.setItem("ct_project_view", "list");
   }
 
-  const projectFilterInput = input({
-    placeholder: t("搜索项目/标签/分类..."),
-    value: app.ui.projectFilter,
-    oninput: (ev) => {
-      app.ui.projectFilter = ev.target.value || "";
-      localStorage.setItem("ct_project_filter", app.ui.projectFilter);
-      if (app.ui.refreshProjectList) app.ui.refreshProjectList();
-    },
-  });
+  const scopeLabel = (scope) => {
+    if (scope === "all") return t("所有项目");
+    if (scope === "shared") return t("与你共享");
+    return t("你的项目");
+  };
 
   const showProjectSettings = (p) => {
     const nameInput = input({ value: p.name || "" });
@@ -8452,120 +8486,270 @@ function renderProjects() {
     showModal({ title: t("项目设置"), bodyEl: body, actions: [saveBtn, delBtn] });
   };
 
+  const openProject = async (p) => {
+    cleanupEditor();
+    app.view = "project";
+    app.current.openFile = null;
+    app.ui.openFiles = [];
+    app.ui.fileFilter = "";
+    app.ui.openFolders = new Set([""]);
+    await loadProject(p.id, { resetTab: true });
+    history.pushState({}, "", `#project/${p.id}`);
+    mount(render());
+  };
+
+  const openCreateModal = () => {
+    const body = h("div", { class: "modal-form" }, [
+      h("div", { class: "label", html: t("名称") }),
+      newName,
+      h("div", { class: "label", html: t("模板") }),
+      templateSelect,
+    ]);
+    const createBtn = btn(t("创建"), {
+      kind: "primary",
+      onClick: async () => {
+        await api("/api/projects", {
+          method: "POST",
+          body: JSON.stringify({
+            name: newName.value.trim() || undefined,
+            mainFile: "main.tex",
+            template: templateSelect.value || "blank",
+          }),
+        });
+        await loadProjects();
+        newName.value = "";
+        closeModal();
+        mount(render());
+      },
+    });
+    showModal({ title: t("创建"), bodyEl: body, actions: [createBtn] });
+  };
+
+  const openImportModal = () => {
+    const body = h("div", { class: "modal-form" }, [
+      h("div", { class: "label", html: t("名称") }),
+      importName,
+      h("div", { class: "label", html: t("主文件 (例如 main.tex 或 ICS/main.tex)") }),
+      importMain,
+      h("div", { class: "label", html: t("导入") }),
+      importZip,
+    ]);
+    const importBtn = btn(t("导入"), {
+      kind: "primary",
+      onClick: async () => {
+        const file = importZip.files && importZip.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        if (importName.value.trim()) fd.append("name", importName.value.trim());
+        fd.append("mainFile", importMain.value.trim() || "main.tex");
+        fd.append("zip", file);
+        await api("/api/projects/import", { method: "POST", body: fd });
+        await loadProjects();
+        importZip.value = "";
+        closeModal();
+        mount(render());
+      },
+    });
+    showModal({ title: t("导入"), bodyEl: body, actions: [importBtn] });
+  };
+
+  const list = h("div", { class: "project-rows", id: "projectList" });
+
   const drawList = () => {
     list.innerHTML = "";
-    const filtered = app.projects.filter((p) => projectMatchesFilter(p, app.ui.projectFilter, app.ui.projectCategory));
+    list.classList.toggle("grid", app.ui.projectView === "grid");
+    const filtered = app.projects.filter((p) =>
+      projectMatchesScope(p, app.ui.projectScope, app.me) &&
+      projectMatchesFilter(p, app.ui.projectFilter, app.ui.projectCategory)
+    );
     if (!filtered.length) {
       list.appendChild(h("div", { class: "hint", html: t("(无匹配文件)") }));
       return;
     }
-    for (const p of filtered) {
-      const tags = formatTagList(p.tags || []);
-      const tagRow = h("div", { class: "project-tags" }, tags.map((tag) => h("span", { class: "tag-chip", html: tag })));
-      const category = p.category ? h("span", { class: "project-category", html: p.category }) : null;
-      list.appendChild(
-        h("div", { class: "project-row" }, [
-          h("div", { class: "project-meta" }, [
-            h("div", { class: "project-name", html: p.name }),
-            h("div", { class: "hint", html: t("{id} · 所有者: {owner}", { id: p.id, owner: p.owner }) }),
-            category ? h("div", { class: "project-extra" }, [category]) : null,
-            tags.length ? tagRow : null,
-          ]),
-          h("div", { class: "project-actions" }, [
-            btn(t("管理"), { kind: "tiny", onClick: () => showProjectSettings(p) }),
-            btn(t("打开"), {
-              kind: "primary",
-              onClick: async () => {
-                cleanupEditor();
-                app.view = "project";
-                app.current.openFile = null;
-                app.ui.openFiles = [];
-                app.ui.fileFilter = "";
-                app.ui.openFolders = new Set([""]);
-                await loadProject(p.id, { resetTab: true });
-                history.pushState({}, "", `#project/${p.id}`);
-                mount(render());
-              },
-            }),
-          ]),
-        ])
-      );
+    const sorted = filtered.slice().sort((a, b) => {
+      const ta = Date.parse(a.updatedAt || a.createdAt || 0);
+      const tb = Date.parse(b.updatedAt || b.createdAt || 0);
+      return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
+    });
+    for (const p of sorted) {
+      const row = h("div", {
+        class: "project-item",
+        onclick: () => openProject(p),
+        title: p.name || p.id,
+      }, [
+        h("div", { class: "project-item-icon", html: "TeX" }),
+        h("div", { class: "project-item-main" }, [
+          h("div", { class: "project-item-name", html: p.name || p.id }),
+          h("div", { class: "project-item-sub", html: p.owner ? p.owner : "" }),
+        ]),
+        h("div", { class: "project-item-actions" }, [
+          h("div", { class: "project-item-time", html: formatProjectAge(p) }),
+          h("button", {
+            class: "project-item-more",
+            onclick: (ev) => {
+              ev.stopPropagation();
+              showProjectSettings(p);
+            },
+            html: "⋯",
+          }),
+        ]),
+      ]);
+      list.appendChild(row);
     }
   };
   drawList();
   app.ui.refreshProjectList = drawList;
 
-  return h("div", { class: "page" }, [
-    topbar(t("项目"), [
-      badge(app.me.username + (app.me.isAdmin ? " (admin)" : "")),
-      btn(t("退出"), {
-        onClick: async () => {
-          await api("/api/logout", { method: "POST" });
-          localStorage.removeItem("ct_session_token");
-          app.me = null;
-          cleanupEditor();
-          app.current.openFile = null;
-          app.ui.openFiles = [];
-          app.ui.fileFilter = "";
-          app.view = "login";
-          mount(render());
-        },
-      }),
+  const scopeButtons = {};
+  const setProjectScope = (scope) => {
+    app.ui.projectScope = scope;
+    localStorage.setItem("ct_project_scope", scope);
+    for (const [k, b] of Object.entries(scopeButtons)) b.classList.toggle("active", k === scope);
+    titleEl.textContent = scopeLabel(scope);
+    drawList();
+  };
+  const setProjectView = (view) => {
+    const next = view === "grid" ? "grid" : "list";
+    app.ui.projectView = next;
+    localStorage.setItem("ct_project_view", next);
+    listBtn.classList.toggle("active", next === "list");
+    gridBtn.classList.toggle("active", next === "grid");
+    drawList();
+  };
+
+  const projectFilterInput = h("input", {
+    class: "projects-search-input",
+    placeholder: t("搜索项目..."),
+    value: app.ui.projectFilter,
+    oninput: (ev) => {
+      app.ui.projectFilter = ev.target.value || "";
+      localStorage.setItem("ct_project_filter", app.ui.projectFilter);
+      drawList();
+    },
+  });
+
+  const listBtn = h("button", {
+    class: `view-toggle ${app.ui.projectView !== "grid" ? "active" : ""}`.trim(),
+    title: t("列表视图"),
+    onclick: () => setProjectView("list"),
+    html: "☰",
+  });
+  const gridBtn = h("button", {
+    class: `view-toggle ${app.ui.projectView === "grid" ? "active" : ""}`.trim(),
+    title: t("网格视图"),
+    onclick: () => setProjectView("grid"),
+    html: "▦",
+  });
+
+  const titleEl = h("div", { class: "projects-title", html: scopeLabel(app.ui.projectScope) });
+
+  const navItem = (scope, label) => {
+    const b = h("button", {
+      class: `projects-nav-item ${app.ui.projectScope === scope ? "active" : ""}`.trim(),
+      onclick: () => setProjectScope(scope),
+      html: label,
+    });
+    scopeButtons[scope] = b;
+    return b;
+  };
+
+  const user = app.me || { username: "User", isAdmin: false };
+  const color = pickColor(user.username || "U");
+  const userCard = h("div", { class: "user-card" }, [
+    h("div", { class: "user-avatar", html: (user.username || "U").charAt(0).toUpperCase() }),
+    h("div", { class: "user-meta" }, [
+      h("div", { class: "user-name", html: user.username || "User" }),
+      h("div", { class: "user-role", html: user.isAdmin ? "admin" : t("用户") }),
     ]),
-    h("div", { class: "container" }, [
-      h("div", { class: "card" }, [
-        sectionTitle(t("创建")),
-        h("div", { class: "row" }, [
-          newName,
-          templateSelect,
-          btn(t("创建"), {
-            kind: "primary",
-            onClick: async () => {
-              await api("/api/projects", {
-                method: "POST",
-                body: JSON.stringify({
-                  name: newName.value.trim() || undefined,
-                  mainFile: "main.tex",
-                  template: templateSelect.value || "blank",
-                }),
-              });
-              await loadProjects();
-              newName.value = "";
-              mount(render());
-            },
-          }),
-        ]),
-        h("div", { class: "divider" }),
-        sectionTitle(t("导入 Zip")),
-        h("div", { class: "row" }, [
-          importName,
-          importMain,
-          importZip,
-          btn(t("导入"), {
-            onClick: async () => {
-              const file = importZip.files && importZip.files[0];
-              if (!file) return;
-              const fd = new FormData();
-              if (importName.value.trim()) fd.append("name", importName.value.trim());
-              fd.append("mainFile", importMain.value.trim() || "main.tex");
-              fd.append("zip", file);
-              await api("/api/projects/import", { method: "POST", body: fd });
-              await loadProjects();
-              importZip.value = "";
-              mount(render());
-            },
-          }),
-        ]),
-      ]),
-      h("div", { class: "card" }, [
-        sectionTitle(t("项目管理")),
-        h("div", { class: "project-filters" }, [
-          projectFilterInput,
-          categorySelect,
-        ]),
-        list,
-      ]),
+  ]);
+  userCard.style.setProperty("--user-accent", color.color);
+
+  const doLogout = async () => {
+    await api("/api/logout", { method: "POST" });
+    localStorage.removeItem("ct_session_token");
+    app.me = null;
+    cleanupEditor();
+    app.current.openFile = null;
+    app.ui.openFiles = [];
+    app.ui.fileFilter = "";
+    app.view = "login";
+    mount(render());
+  };
+
+  const openProjectSettings = () => {
+    const nameInput = input({ value: p.name || "" });
+    const categoryInput = input({ value: p.category || "", placeholder: t("分类") });
+    const tagsInput = input({ value: formatTagList(p.tags || []).join(", "), placeholder: t("标签(逗号分隔)") });
+
+    const body = h("div", { class: "project-settings" }, [
+      h("div", { class: "label", html: t("名称") }),
+      nameInput,
+      h("div", { class: "label", html: t("分类") }),
+      categoryInput,
+      h("div", { class: "label", html: t("标签") }),
+      tagsInput,
+    ]);
+
+    const saveBtn = btn(t("保存"), {
+      kind: "primary",
+      onClick: async () => {
+        const payload = {
+          name: nameInput.value.trim() || p.name,
+          category: categoryInput.value.trim(),
+          tags: normalizeTagList(tagsInput.value),
+        };
+        await api(`/api/projects/${p.id}/meta`, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        await loadProjects();
+        closeModal();
+        mount(render());
+      },
+    });
+
+    const delBtn = btn(t("删除项目"), {
+      kind: "danger",
+      onClick: async () => {
+        if (!confirm(t("确认删除项目 {name} ?", { name: p.name }))) return;
+        await api(`/api/projects/${p.id}`, { method: "DELETE" });
+        await loadProjects();
+        closeModal();
+        await goProjects();
+      },
+    });
+
+    showModal({ title: t("项目设置"), bodyEl: body, actions: [saveBtn, delBtn] });
+  };
+
+  const sidebar = h("aside", { class: "projects-sidebar" }, [
+    userCard,
+    h("div", { class: "projects-nav" }, [
+      navItem("all", t("所有项目")),
+      navItem("mine", t("你的项目")),
+      navItem("shared", t("与你共享")),
     ]),
+    h("div", { class: "sidebar-spacer" }),
+    h("button", { class: "sidebar-logout", onclick: doLogout }, t("退出")),
+  ]);
+
+  const actions = h("div", { class: "projects-actions" }, [
+    h("div", { class: "view-toggle-group" }, [listBtn, gridBtn]),
+    btn(`${t("导入")} ▾`, { kind: "pill", onClick: openImportModal }),
+    btn(`+ ${t("新建")}`, { kind: "pill primary", onClick: openCreateModal }),
+  ]);
+
+  const main = h("div", { class: "projects-main" }, [
+    h("div", { class: "projects-topbar" }, [
+      titleEl,
+      h("div", { class: "projects-search" }, [projectFilterInput]),
+      actions,
+    ]),
+    h("div", { class: "projects-content" }, [list]),
+  ]);
+
+  return h("div", { class: "page projects-page" }, [
+    h("div", { class: "projects-shell" }, [sidebar, main]),
   ]);
 }
 
@@ -8646,11 +8830,30 @@ function renderProject() {
     },
   });
 
-  const shareUser = input({ placeholder: t("分享给 (如 user01)") });
+  const openShareModal = () => {
+    const userInput = input({ placeholder: t("分享给 (如 user01)") });
+    const body = h("div", { class: "modal-form" }, [
+      h("div", { class: "label", html: t("分享给 (如 user01)") }),
+      userInput,
+    ]);
+    const shareBtn = btn(t("分享"), {
+      kind: "primary",
+      onClick: async () => {
+        const username = userInput.value.trim();
+        if (!username) return;
+        await api(`/api/projects/${p.id}/share`, {
+          method: "POST",
+          body: JSON.stringify({ username }),
+        });
+        closeModal();
+      },
+    });
+    showModal({ title: t("分享"), bodyEl: body, actions: [shareBtn] });
+  };
 
   let filterTimer = null;
   const filterInput = h("input", {
-    class: "input",
+    class: "left-search-input",
     placeholder: t("筛选文件..."),
     value: app.ui.fileFilter,
     oninput: (ev) => {
@@ -8662,14 +8865,16 @@ function renderProject() {
       }, 120);
     },
   });
-  const clearFilterBtn = btn(t("清空"), {
-    kind: "tiny",
-    onClick: () => {
+  const clearFilterBtn = h("button", {
+    class: "left-icon-btn",
+    title: t("清空"),
+    onclick: () => {
       app.ui.fileFilter = "";
       filterInput.value = "";
       if (app.ui.refreshFileTree) app.ui.refreshFileTree();
     },
   });
+  clearFilterBtn.textContent = "×";
   const viewFocusBtn = btn(t("仅文稿"), {
     kind: "tiny",
     onClick: () => setFileView("focus"),
@@ -8682,12 +8887,6 @@ function renderProject() {
   viewAllBtn.classList.add("toggle-btn");
   if (app.ui.fileView === "focus") viewFocusBtn.classList.add("active");
   else viewAllBtn.classList.add("active");
-  const viewRow = h("div", { class: "filetree-view" }, [
-    h("span", { class: "hint", html: t("视图") }),
-    viewFocusBtn,
-    viewAllBtn,
-  ]);
-  const filterRow = h("div", { class: "filetree-search" }, [filterInput, clearFilterBtn, viewRow]);
   const showFileActions = () => {
     const selectedCount = app.ui.selectedFiles ? app.ui.selectedFiles.size : 0;
     const body = h("div", { class: "file-actions-modal" }, [
@@ -8758,37 +8957,176 @@ function renderProject() {
     mount(render());
   };
 
+  if (app.ui.leftRailMode !== "files" && app.ui.leftRailMode !== "view") app.ui.leftRailMode = "files";
+  if (app.ui.leftPaneTab !== "files" && app.ui.leftPaneTab !== "chats") app.ui.leftPaneTab = "files";
+  if (!app.ui.assistantEnabled && app.ui.leftPaneTab === "chats") app.ui.leftPaneTab = "files";
+
+  const setLeftRailMode = (mode) => {
+    const next = mode === "view" ? "view" : "files";
+    app.ui.leftRailMode = next;
+    localStorage.setItem("ct_left_rail_mode", next);
+    if (app.ui.leftCollapsed) setLeftCollapsed(false);
+    mount(render());
+  };
+  const setLeftPaneTab = (tab) => {
+    const next = tab === "chats" ? "chats" : "files";
+    app.ui.leftPaneTab = next;
+    localStorage.setItem("ct_left_pane_tab", next);
+    mount(render());
+  };
+  const setAssistantEnabled = (next) => {
+    app.ui.assistantEnabled = !!next;
+    localStorage.setItem("ct_assistant_enabled", app.ui.assistantEnabled ? "1" : "0");
+    if (!app.ui.assistantEnabled && app.ui.leftPaneTab === "chats") {
+      app.ui.leftPaneTab = "files";
+      localStorage.setItem("ct_left_pane_tab", "files");
+    }
+    if (!app.ui.assistantEnabled && app.ui.rightTab === "ai") {
+      app.ui.rightTab = "pdf";
+      localStorage.setItem("ct_rightTab", "pdf");
+    }
+    mount(render());
+  };
+
+  const layoutFlags = () => ({
+    code: app.ui.layoutMode !== "pdf",
+    pdf: app.ui.layoutMode !== "editor",
+  });
+  const resolveLayoutMode = (codeOn, pdfOn) => {
+    if (!codeOn && !pdfOn) return "balanced";
+    if (codeOn && pdfOn) return "balanced";
+    return codeOn ? "editor" : "pdf";
+  };
+  const viewToggleRow = (label, checked, onToggle) => {
+    const inputEl = h("input", {
+      type: "checkbox",
+      checked,
+      onchange: (ev) => onToggle(!!ev.target.checked, ev),
+    });
+    return h("label", { class: "view-toggle" }, [
+      h("span", { class: "view-label", html: label }),
+      h("span", { class: "view-switch-wrap" }, [
+        inputEl,
+        h("span", { class: "view-switch" }),
+      ]),
+    ]);
+  };
+
+  const viewPanel = h("div", { class: "view-panel" }, [
+    h("div", { class: "view-panel-title", html: t("视图设置") }),
+    viewToggleRow(t("代码"), layoutFlags().code, (checked, ev) => {
+      const flags = layoutFlags();
+      if (!checked && !flags.pdf) {
+        ev.target.checked = true;
+        return;
+      }
+      setLayoutMode(resolveLayoutMode(checked, flags.pdf));
+    }),
+    viewToggleRow("PDF", layoutFlags().pdf, (checked, ev) => {
+      const flags = layoutFlags();
+      if (!checked && !flags.code) {
+        ev.target.checked = true;
+        return;
+      }
+      setLayoutMode(resolveLayoutMode(flags.code, checked));
+    }),
+    viewToggleRow(t("侧栏"), !app.ui.leftCollapsed, (checked) => setLeftCollapsed(!checked ? true : false)),
+    viewToggleRow(t("助手"), app.ui.assistantEnabled, (checked) => setAssistantEnabled(checked)),
+  ]);
+
   const recentFilesEl = null;
   const pinnedFilesEl = renderPinnedFiles();
-  const leftChildren = [
-    h("div", { class: "pane-header" }, [
-      h("div", { class: "pane-title", html: t("文件") }),
-      h("div", { class: "pane-actions" }, [
-        btn(t("+ 新文件"), {
-          onClick: async () => {
-            const rel = prompt(t("新文件路径"), "main.tex");
-            if (!rel) return;
-            await api(`/api/projects/${p.id}/file`, {
-              method: "POST",
-              body: JSON.stringify({ path: rel, content: "" }),
-            });
-            await loadProject(p.id);
-            cleanupEditor();
-            mount(render());
-          },
-        }),
-        btn(t("上传"), { onClick: () => uploadInput.click() }),
-        btn(t("导出 Zip"), { kind: "tiny", onClick: () => exportProjectZip() }),
-        btn(t("管理"), { kind: "tiny", onClick: () => showFileActions() }),
-        btn(t("隐藏侧栏"), { kind: "tiny", onClick: () => setLeftCollapsed(true) }),
-      ]),
-    ]),
-    filterRow,
-    uploadInput,
+
+  const projectBtn = h("button", {
+    class: "project-title-btn",
+    title: p.name || p.id,
+    onclick: () => openProjectSettings(),
+    html: `${p.name || p.id} ▾`,
+  });
+  const shareBtn = h("button", { class: "share-btn", onclick: openShareModal, html: t("分享") });
+
+  const filesTabBtn = h("button", {
+    class: `left-tab ${app.ui.leftPaneTab === "files" ? "active" : ""}`.trim(),
+    onclick: () => setLeftPaneTab("files"),
+    html: t("文件"),
+  });
+  const chatTabBtn = h("button", {
+    class: `left-tab ${app.ui.leftPaneTab === "chats" ? "active" : ""}`.trim(),
+    onclick: () => setLeftPaneTab("chats"),
+    html: "Chats",
+  });
+  const tabsRow = h("div", { class: "left-tabs" }, [
+    filesTabBtn,
+    app.ui.assistantEnabled ? chatTabBtn : null,
+  ]);
+
+  const newFileBtn = h("button", {
+    class: "left-icon-btn",
+    title: t("+ 新文件"),
+    onclick: async () => {
+      const rel = prompt(t("新文件路径"), "main.tex");
+      if (!rel) return;
+      await api(`/api/projects/${p.id}/file`, {
+        method: "POST",
+        body: JSON.stringify({ path: rel, content: "" }),
+      });
+      await loadProject(p.id);
+      cleanupEditor();
+      mount(render());
+    },
+  });
+  newFileBtn.textContent = "+";
+  const uploadBtn = h("button", {
+    class: "left-icon-btn",
+    title: t("上传"),
+    onclick: () => uploadInput.click(),
+  });
+  uploadBtn.textContent = "↑";
+  const manageBtn = h("button", {
+    class: "left-icon-btn",
+    title: t("管理"),
+    onclick: () => showFileActions(),
+  });
+  manageBtn.textContent = "⋯";
+  const exportBtn = h("button", {
+    class: "left-icon-btn",
+    title: t("导出 Zip"),
+    onclick: () => exportProjectZip(),
+  });
+  exportBtn.textContent = "Z";
+
+  const toolsRow = h("div", { class: "left-tools" }, [
+    filterInput,
+    clearFilterBtn,
+    newFileBtn,
+    uploadBtn,
+    exportBtn,
+    manageBtn,
+  ]);
+  const viewControls = h("div", { class: "left-view-row" }, [viewFocusBtn, viewAllBtn]);
+
+  const headerChildren = [
+    h("div", { class: "left-header-top" }, [projectBtn, shareBtn]),
   ];
-  if (pinnedFilesEl) leftChildren.push(pinnedFilesEl);
-  if (recentFilesEl) leftChildren.push(recentFilesEl);
-  leftChildren.push(renderFileTree());
+  if (app.ui.leftRailMode === "files") {
+    headerChildren.push(tabsRow);
+    if (app.ui.leftPaneTab === "files") headerChildren.push(toolsRow, viewControls);
+  } else {
+    headerChildren.push(h("div", { class: "left-header-sub", html: t("视图设置") }));
+  }
+
+  const leftHeader = h("div", { class: "left-pane-header" }, headerChildren);
+
+  const leftBody = h("div", { class: "left-pane-body" }, []);
+  if (app.ui.leftRailMode === "view") {
+    leftBody.appendChild(viewPanel);
+  } else if (app.ui.leftPaneTab === "chats" && app.ui.assistantEnabled) {
+    leftBody.appendChild(renderChatPanel());
+  } else {
+    if (pinnedFilesEl) leftBody.appendChild(pinnedFilesEl);
+    if (recentFilesEl) leftBody.appendChild(recentFilesEl);
+    leftBody.appendChild(renderFileTree());
+  }
 
   const left = h(
     "div",
@@ -8803,7 +9141,7 @@ function renderProject() {
       },
       ondrop: onDrop,
     },
-    leftChildren
+    [leftHeader, uploadInput, leftBody]
   );
 
   const wrapCmd = (cmd) => `${cmd}{` + "{{sel}}" + "{{cursor}}" + "}";
@@ -9601,6 +9939,9 @@ function renderProject() {
     logs: h("div", { class: "tab-page log-page", id: "tab_logs" }, [logHeader, summaryBox, aiFixBox, logDiv]),
     settings: h("div", { class: "tab-page", id: "tab_settings" }, [settingsPage]),
   };
+  if (app.ui.assistantEnabled) {
+    tabPages.ai = h("div", { class: "tab-page", id: "tab_ai" }, [renderChatPanel()]);
+  }
 
   const tabBtns = {};
   const selectTab = (key) => {
@@ -9645,6 +9986,7 @@ function renderProject() {
       mkTabBtn(t("PDF 预览"), "pdf"),
       mkTabBtn(t("日志"), "logs"),
       mkTabBtn(t("设置页"), "settings"),
+      app.ui.assistantEnabled ? mkTabBtn(t("AI"), "ai") : null,
     ]),
     h("div", { class: "tab-body" }, Object.values(tabPages)),
   ]);
@@ -9678,13 +10020,33 @@ function renderProject() {
     right,
   ]);
 
-  return h("div", { class: "page" }, [
-    topbar(`${p.name}`, [
-      badge(p.id),
-      badge(app.me.username + (app.me.isAdmin ? " (admin)" : "")),
+  const me = app.me || { username: "User" };
+  const railColor = pickColor(me.username || "U");
+  const railAvatar = h("div", { class: "rail-avatar", html: (me.username || "U").charAt(0).toUpperCase() });
+  railAvatar.style.setProperty("--user-accent", railColor.color);
+  const railBtn = (mode, label, title) => h("button", {
+    class: `rail-btn ${app.ui.leftRailMode === mode ? "active" : ""}`.trim(),
+    title,
+    onclick: () => setLeftRailMode(mode),
+    html: label,
+  });
+  const rail = h("div", { class: "studio-rail" }, [
+    h("div", { class: "studio-rail-group" }, [
+      railBtn("files", "☰", t("文件")),
+      railBtn("view", "⚙", t("视图设置")),
     ]),
-    layout,
+    h("div", { class: "studio-rail-footer" }, [
+      h("div", { class: "rail-status", html: t("在线") }),
+      railAvatar,
+    ]),
   ]);
+
+  const shell = h("div", { class: "studio-shell" }, [
+    rail,
+    h("div", { class: "studio-main" }, [layout]),
+  ]);
+
+  return h("div", { class: "page studio-page" }, [shell]);
 }
 
 function renderLoading() {
