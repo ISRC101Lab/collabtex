@@ -11,6 +11,13 @@ await fs.mkdir(publicDir, { recursive: true });
 // Copy static files
 await fs.copyFile(path.join(clientDir, "index.html"), path.join(publicDir, "index.html"));
 await fs.copyFile(path.join(clientDir, "style.css"), path.join(publicDir, "style.css"));
+try {
+  const assetsSrc = path.join(clientDir, "assets");
+  const assetsDst = path.join(publicDir, "assets");
+  await fs.cp(assetsSrc, assetsDst, { recursive: true });
+} catch {
+  // ignore if assets not present yet
+}
 // PDF.js worker
 try {
   const workerSrc = path.join(root, "node_modules", "pdfjs-dist", "build", "pdf.worker.min.mjs");

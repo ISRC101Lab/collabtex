@@ -137,6 +137,7 @@ const AI_PROFILE_CHAT_KEY = "ct_ai_profile_chat";
 const AI_PROFILE_DIAG_KEY = "ct_ai_profile_diag";
 
 const LANG_KEY = "ct_lang";
+const PROJECT_THUMB_URL = "/assets/project-thumb.svg";
 const I18N = {
   en: {
     "内网协作 LaTeX": "Intranet LaTeX Collaboration",
@@ -165,6 +166,11 @@ const I18N = {
     "用户": "User",
     "列表视图": "List view",
     "网格视图": "Grid view",
+    "切换用户": "Switch user",
+    "切换": "Switch",
+    "请输入用户名和密码": "Enter username and password",
+    "重试": "Retry",
+    "自动登录失败": "Auto login failed",
     "退出": "Log out",
     "返回": "Back",
     "创建": "Create",
@@ -199,6 +205,7 @@ const I18N = {
     "重命名": "Rename",
     "删除": "Delete",
     "重命名为": "Rename to",
+    "确认删除": "Confirm delete",
     "确认删除 {name} ?": "Delete {name}?",
     "结构": "Structure",
     "章节": "Section",
@@ -989,8 +996,7 @@ function clear() {
 function mount(node) {
   if (app && app.ui) applyTheme(app.ui.theme || "default");
   if (app && app.ui) applyEditorPrefs();
-  clear();
-  root.appendChild(node);
+  root.replaceChildren(node);
   syncTopbarHeight();
   syncResizeObserver();
   reattachEditorView();
@@ -2021,6 +2027,9 @@ const app = {
     leftRailMode: localStorage.getItem("ct_left_rail_mode") || "files",
     leftPaneTab: localStorage.getItem("ct_left_pane_tab") || "files",
     assistantEnabled: localStorage.getItem("ct_assistant_enabled") !== "0",
+    dropdownOpen: "",
+    switchError: "",
+    projectDeleteArmed: "",
     autoCompile: autoCompileDefault,
     autoCompileDirty: false,
     autoCompileDirtyAt: 0,
@@ -3083,6 +3092,27 @@ async function loadMe() {
   if (me && me.token) localStorage.setItem("ct_session_token", me.token);
 }
 
+async function tryAutoLogin() {
+  const stored = String(localStorage.getItem("ct_last_user") || "").trim();
+  const candidates = [];
+  if (stored) candidates.push(stored);
+  if (!candidates.includes("admin")) candidates.push("admin");
+  for (const username of candidates) {
+    try {
+      const loginRes = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password: "admin" }),
+      });
+      if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
+      localStorage.setItem("ct_last_user", username);
+      return true;
+    } catch {
+      // try next candidate
+    }
+  }
+  return false;
+}
+
 const AI_CONTEXT_LIMIT = 12000;
 
 async function loadProjects() {
@@ -3224,6 +3254,94 @@ function closeModal() {
 function showModal({ title, bodyEl, actions = [] }) {
   app.modal = { title, bodyEl, actions };
   mount(render());
+}
+
+function clearDropdowns() {
+  if (!app || !app.ui) return;
+  app.ui.dropdownOpen = "";
+  app.ui.projectDeleteArmed = "";
+}
+
+function toggleDropdown(id, ev) {
+  if (ev) ev.stopPropagation();
+  const next = app.ui.dropdownOpen === id ? "" : id;
+  app.ui.dropdownOpen = next;
+  if (next === "user") app.ui.switchError = "";
+  if (!next || !next.startsWith("project:")) app.ui.projectDeleteArmed = "";
+  if (next.startsWith("project:") && app.ui.projectDeleteArmed && next !== `project:${app.ui.projectDeleteArmed}`) {
+    app.ui.projectDeleteArmed = "";
+  }
+  mount(render());
+}
+
+function dropdownMenu(id, body) {
+  if (app.ui.dropdownOpen !== id) return null;
+  return h("div", { class: "dropdown-menu", onclick: (ev) => ev.stopPropagation() }, [body]);
+}
+
+function buildProjectSettingsPanel(project, { onDelete } = {}) {
+  if (!project) return;
+  const nameInput = input({ value: project.name || "" });
+  const categoryInput = input({ value: project.category || "", placeholder: t("分类") });
+  const tagsInput = input({ value: formatTagList(project.tags || []).join(", "), placeholder: t("标签(逗号分隔)") });
+
+  const body = h("div", { class: "dropdown-panel project-actions-panel" }, [
+    h("div", { class: "label", html: t("名称") }),
+    nameInput,
+    h("div", { class: "label", html: t("分类") }),
+    categoryInput,
+    h("div", { class: "label", html: t("标签") }),
+    tagsInput,
+  ]);
+
+  const saveBtn = btn(t("保存"), {
+    kind: "primary",
+    onClick: async (ev) => {
+      ev.stopPropagation();
+      const payload = {
+        name: nameInput.value.trim() || project.name,
+        category: categoryInput.value.trim(),
+        tags: normalizeTagList(tagsInput.value),
+      };
+      await api(`/api/projects/${project.id}/meta`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      project.name = payload.name;
+      project.category = payload.category;
+      project.tags = payload.tags;
+      await loadProjects();
+      if (app.current.project && app.current.project.id === project.id) {
+        app.current.project = app.projects.find((p) => p.id === project.id) || project;
+      }
+      clearDropdowns();
+      mount(render());
+    },
+  });
+
+  const isArmed = app.ui.projectDeleteArmed === project.id;
+  const delBtn = btn(isArmed ? t("确认删除") : t("删除项目"), {
+    kind: isArmed ? "danger" : "",
+    onClick: async (ev) => {
+      ev.stopPropagation();
+      if (!isArmed) {
+        app.ui.projectDeleteArmed = project.id;
+        mount(render());
+        return;
+      }
+      await api(`/api/projects/${project.id}`, { method: "DELETE" });
+      clearDropdowns();
+      if (onDelete) {
+        await onDelete();
+        return;
+      }
+      await loadProjects();
+      mount(render());
+    },
+  });
+
+  body.appendChild(h("div", { class: "dropdown-actions" }, [saveBtn, delBtn]));
+  return body;
 }
 
 async function openFile(filePath) {
@@ -8381,6 +8499,7 @@ function renderLogin() {
                   body: JSON.stringify({ username: user.value.trim(), password: pass.value }),
                 });
                 if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
+                localStorage.setItem("ct_last_user", user.value.trim() || "admin");
                 await loadMe();
                 await loadProjects();
                 app.view = "projects";
@@ -8440,52 +8559,6 @@ function renderProjects() {
     return t("你的项目");
   };
 
-  const showProjectSettings = (p) => {
-    const nameInput = input({ value: p.name || "" });
-    const categoryInput = input({ value: p.category || "", placeholder: t("分类") });
-    const tagsInput = input({ value: formatTagList(p.tags || []).join(", "), placeholder: t("标签(逗号分隔)") });
-
-    const body = h("div", { class: "project-settings" }, [
-      h("div", { class: "label", html: t("名称") }),
-      nameInput,
-      h("div", { class: "label", html: t("分类") }),
-      categoryInput,
-      h("div", { class: "label", html: t("标签") }),
-      tagsInput,
-    ]);
-
-    const saveBtn = btn(t("保存"), {
-      kind: "primary",
-      onClick: async () => {
-        const payload = {
-          name: nameInput.value.trim() || p.name,
-          category: categoryInput.value.trim(),
-          tags: normalizeTagList(tagsInput.value),
-        };
-        await api(`/api/projects/${p.id}/meta`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        await loadProjects();
-        closeModal();
-        mount(render());
-      },
-    });
-
-    const delBtn = btn(t("删除项目"), {
-      kind: "danger",
-      onClick: async () => {
-        if (!confirm(t("确认删除项目 {name} ?", { name: p.name }))) return;
-        await api(`/api/projects/${p.id}`, { method: "DELETE" });
-        await loadProjects();
-        closeModal();
-        mount(render());
-      },
-    });
-
-    showModal({ title: t("项目设置"), bodyEl: body, actions: [saveBtn, delBtn] });
-  };
-
   const openProject = async (p) => {
     cleanupEditor();
     app.view = "project";
@@ -8496,61 +8569,6 @@ function renderProjects() {
     await loadProject(p.id, { resetTab: true });
     history.pushState({}, "", `#project/${p.id}`);
     mount(render());
-  };
-
-  const openCreateModal = () => {
-    const body = h("div", { class: "modal-form" }, [
-      h("div", { class: "label", html: t("名称") }),
-      newName,
-      h("div", { class: "label", html: t("模板") }),
-      templateSelect,
-    ]);
-    const createBtn = btn(t("创建"), {
-      kind: "primary",
-      onClick: async () => {
-        await api("/api/projects", {
-          method: "POST",
-          body: JSON.stringify({
-            name: newName.value.trim() || undefined,
-            mainFile: "main.tex",
-            template: templateSelect.value || "blank",
-          }),
-        });
-        await loadProjects();
-        newName.value = "";
-        closeModal();
-        mount(render());
-      },
-    });
-    showModal({ title: t("创建"), bodyEl: body, actions: [createBtn] });
-  };
-
-  const openImportModal = () => {
-    const body = h("div", { class: "modal-form" }, [
-      h("div", { class: "label", html: t("名称") }),
-      importName,
-      h("div", { class: "label", html: t("主文件 (例如 main.tex 或 ICS/main.tex)") }),
-      importMain,
-      h("div", { class: "label", html: t("导入") }),
-      importZip,
-    ]);
-    const importBtn = btn(t("导入"), {
-      kind: "primary",
-      onClick: async () => {
-        const file = importZip.files && importZip.files[0];
-        if (!file) return;
-        const fd = new FormData();
-        if (importName.value.trim()) fd.append("name", importName.value.trim());
-        fd.append("mainFile", importMain.value.trim() || "main.tex");
-        fd.append("zip", file);
-        await api("/api/projects/import", { method: "POST", body: fd });
-        await loadProjects();
-        importZip.value = "";
-        closeModal();
-        mount(render());
-      },
-    });
-    showModal({ title: t("导入"), bodyEl: body, actions: [importBtn] });
   };
 
   const list = h("div", { class: "project-rows", id: "projectList" });
@@ -8572,26 +8590,30 @@ function renderProjects() {
       return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
     });
     for (const p of sorted) {
+      const menuId = `project:${p.id}`;
+      const actionsMenu = dropdownMenu(menuId, buildProjectSettingsPanel(p));
+      const actionsBtn = h("button", {
+        class: "project-item-more",
+        onclick: (ev) => toggleDropdown(menuId, ev),
+        html: "⋯",
+      });
+      const actionsWrap = h("div", { class: "dropdown dropdown-right" }, [actionsBtn, actionsMenu]);
+
       const row = h("div", {
         class: "project-item",
         onclick: () => openProject(p),
         title: p.name || p.id,
       }, [
-        h("div", { class: "project-item-icon", html: "TeX" }),
+        h("div", { class: "project-item-icon" }, [
+          h("img", { class: "project-item-thumb", src: PROJECT_THUMB_URL, alt: "PDF" }),
+        ]),
         h("div", { class: "project-item-main" }, [
           h("div", { class: "project-item-name", html: p.name || p.id }),
           h("div", { class: "project-item-sub", html: p.owner ? p.owner : "" }),
         ]),
         h("div", { class: "project-item-actions" }, [
           h("div", { class: "project-item-time", html: formatProjectAge(p) }),
-          h("button", {
-            class: "project-item-more",
-            onclick: (ev) => {
-              ev.stopPropagation();
-              showProjectSettings(p);
-            },
-            html: "⋯",
-          }),
+          actionsWrap,
         ]),
       ]);
       list.appendChild(row);
@@ -8655,12 +8677,16 @@ function renderProjects() {
 
   const user = app.me || { username: "User", isAdmin: false };
   const color = pickColor(user.username || "U");
-  const userCard = h("div", { class: "user-card" }, [
+  const userCard = h("button", {
+    class: "user-card dropdown-trigger",
+    onclick: (ev) => toggleDropdown("user", ev),
+  }, [
     h("div", { class: "user-avatar", html: (user.username || "U").charAt(0).toUpperCase() }),
     h("div", { class: "user-meta" }, [
       h("div", { class: "user-name", html: user.username || "User" }),
       h("div", { class: "user-role", html: user.isAdmin ? "admin" : t("用户") }),
     ]),
+    h("div", { class: "user-caret", html: "▾" }),
   ]);
   userCard.style.setProperty("--user-accent", color.color);
 
@@ -8676,67 +8702,121 @@ function renderProjects() {
     mount(render());
   };
 
-  const openProjectSettings = () => {
-    const nameInput = input({ value: p.name || "" });
-    const categoryInput = input({ value: p.category || "", placeholder: t("分类") });
-    const tagsInput = input({ value: formatTagList(p.tags || []).join(", "), placeholder: t("标签(逗号分隔)") });
-
-    const body = h("div", { class: "project-settings" }, [
-      h("div", { class: "label", html: t("名称") }),
-      nameInput,
-      h("div", { class: "label", html: t("分类") }),
-      categoryInput,
-      h("div", { class: "label", html: t("标签") }),
-      tagsInput,
-    ]);
-
-    const saveBtn = btn(t("保存"), {
-      kind: "primary",
-      onClick: async () => {
-        const payload = {
-          name: nameInput.value.trim() || p.name,
-          category: categoryInput.value.trim(),
-          tags: normalizeTagList(tagsInput.value),
-        };
-        await api(`/api/projects/${p.id}/meta`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        await loadProjects();
-        closeModal();
-        mount(render());
-      },
-    });
-
-    const delBtn = btn(t("删除项目"), {
-      kind: "danger",
-      onClick: async () => {
-        if (!confirm(t("确认删除项目 {name} ?", { name: p.name }))) return;
-        await api(`/api/projects/${p.id}`, { method: "DELETE" });
-        await loadProjects();
-        closeModal();
-        await goProjects();
-      },
-    });
-
-    showModal({ title: t("项目设置"), bodyEl: body, actions: [saveBtn, delBtn] });
+  const doSwitchUser = async (username, password) => {
+    const clean = String(username || "").trim();
+    const pass = String(password || "").trim();
+    if (!clean || !pass) {
+      app.ui.switchError = t("请输入用户名和密码");
+      mount(render());
+      return;
+    }
+    app.ui.switchError = "";
+    try {
+      const loginRes = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify({ username: clean, password: pass }),
+      });
+      if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
+      localStorage.setItem("ct_last_user", clean);
+      await loadMe();
+      await loadProjects();
+      clearDropdowns();
+      app.view = "projects";
+      mount(render());
+    } catch (e) {
+      app.ui.switchError = e && e.message ? e.message : String(e);
+      mount(render());
+    }
   };
 
+  const switchUserInput = input({ placeholder: t("用户名") });
+  const switchPassInput = input({ placeholder: t("密码"), type: "password" });
+  const userMenu = dropdownMenu("user", h("div", { class: "user-menu" }, [
+    h("div", { class: "user-menu-title", html: t("切换用户") }),
+    h("div", { class: "user-menu-row" }, [
+      switchUserInput,
+      switchPassInput,
+      btn(t("切换"), {
+        kind: "primary",
+        onClick: (ev) => {
+          ev.stopPropagation();
+          doSwitchUser(switchUserInput.value, switchPassInput.value);
+        },
+      }),
+    ]),
+    app.ui.switchError ? h("div", { class: "hint error", html: app.ui.switchError }) : null,
+  ]));
   const sidebar = h("aside", { class: "projects-sidebar" }, [
-    userCard,
+    h("div", { class: "dropdown dropdown-left" }, [userCard, userMenu]),
     h("div", { class: "projects-nav" }, [
       navItem("all", t("所有项目")),
       navItem("mine", t("你的项目")),
       navItem("shared", t("与你共享")),
     ]),
     h("div", { class: "sidebar-spacer" }),
-    h("button", { class: "sidebar-logout", onclick: doLogout }, t("退出")),
+  ]);
+
+  const createPanel = h("div", { class: "dropdown-panel" }, [
+    h("div", { class: "label", html: t("名称") }),
+    newName,
+    h("div", { class: "label", html: t("模板") }),
+    templateSelect,
+    btn(t("创建"), {
+      kind: "primary",
+      onClick: async (ev) => {
+        ev.stopPropagation();
+        await api("/api/projects", {
+          method: "POST",
+          body: JSON.stringify({
+            name: newName.value.trim() || undefined,
+            mainFile: "main.tex",
+            template: templateSelect.value || "blank",
+          }),
+        });
+        await loadProjects();
+        newName.value = "";
+        clearDropdowns();
+        mount(render());
+      },
+    }),
+  ]);
+
+  const importPanel = h("div", { class: "dropdown-panel" }, [
+    h("div", { class: "label", html: t("名称") }),
+    importName,
+    h("div", { class: "label", html: t("主文件 (例如 main.tex 或 ICS/main.tex)") }),
+    importMain,
+    h("div", { class: "label", html: t("导入") }),
+    importZip,
+    btn(t("导入"), {
+      kind: "primary",
+      onClick: async (ev) => {
+        ev.stopPropagation();
+        const file = importZip.files && importZip.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        if (importName.value.trim()) fd.append("name", importName.value.trim());
+        fd.append("mainFile", importMain.value.trim() || "main.tex");
+        fd.append("zip", file);
+        await api("/api/projects/import", { method: "POST", body: fd });
+        await loadProjects();
+        importZip.value = "";
+        clearDropdowns();
+        mount(render());
+      },
+    }),
   ]);
 
   const actions = h("div", { class: "projects-actions" }, [
     h("div", { class: "view-toggle-group" }, [listBtn, gridBtn]),
-    btn(`${t("导入")} ▾`, { kind: "pill", onClick: openImportModal }),
-    btn(`+ ${t("新建")}`, { kind: "pill primary", onClick: openCreateModal }),
+    h("div", { class: "dropdown dropdown-right" }, [
+      btn(`${t("导入")} ▾`, { kind: "pill", onClick: (ev) => toggleDropdown("import", ev) }),
+      dropdownMenu("import", importPanel),
+    ]),
+    h("div", { class: "dropdown dropdown-right" }, [
+      btn(`+ ${t("新建")}`, { kind: "pill primary", onClick: (ev) => toggleDropdown("create", ev) }),
+      dropdownMenu("create", createPanel),
+    ]),
   ]);
 
   const main = h("div", { class: "projects-main" }, [
@@ -9037,12 +9117,14 @@ function renderProject() {
   const recentFilesEl = null;
   const pinnedFilesEl = renderPinnedFiles();
 
+  const projectSettingsMenu = dropdownMenu("project-settings", buildProjectSettingsPanel(p, { onDelete: goProjects }));
   const projectBtn = h("button", {
-    class: "project-title-btn",
+    class: "project-title-btn dropdown-trigger",
     title: p.name || p.id,
-    onclick: () => openProjectSettings(),
+    onclick: (ev) => toggleDropdown("project-settings", ev),
     html: `${p.name || p.id} ▾`,
   });
+  const projectBtnWrap = h("div", { class: "dropdown dropdown-left" }, [projectBtn, projectSettingsMenu]);
   const shareBtn = h("button", { class: "share-btn", onclick: openShareModal, html: t("分享") });
 
   const filesTabBtn = h("button", {
@@ -9106,7 +9188,7 @@ function renderProject() {
   const viewControls = h("div", { class: "left-view-row" }, [viewFocusBtn, viewAllBtn]);
 
   const headerChildren = [
-    h("div", { class: "left-header-top" }, [projectBtn, shareBtn]),
+    h("div", { class: "left-header-top" }, [projectBtnWrap, shareBtn]),
   ];
   if (app.ui.leftRailMode === "files") {
     headerChildren.push(tabsRow);
@@ -10129,6 +10211,12 @@ window.addEventListener("resize", () => {
       renderPdfPages({ projectId: app.current.project.id }).catch(() => {});
     }
   });
+});
+document.addEventListener("click", () => {
+  if (app && app.ui && app.ui.dropdownOpen) {
+    clearDropdowns();
+    mount(render());
+  }
 });
 window.addEventListener("keydown", (ev) => {
   if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s" && ev.shiftKey) {
