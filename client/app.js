@@ -172,6 +172,9 @@ const I18N = {
     "重试": "Retry",
     "管理员密码": "Admin password",
     "进入": "Enter",
+    "临时用户": "Guest",
+    "切换账号后可用": "Available after switching account",
+    "临时用户暂无项目": "No projects for guest user",
     "自动登录失败": "Auto login failed",
     "退出": "Log out",
     "返回": "Back",
@@ -2037,6 +2040,7 @@ const app = {
     projectRenameId: "",
     projectDeleteArmed: "",
     authError: "",
+    guestMode: false,
     autoCompile: autoCompileDefault,
     autoCompileDirty: false,
     autoCompileDirtyAt: 0,
@@ -3096,7 +3100,16 @@ function scheduleStatus(view) {
 async function loadMe() {
   const me = await api("/api/me");
   app.me = me && me.authenticated ? me : null;
+  if (app.me && app.ui) app.ui.guestMode = false;
   if (me && me.token) localStorage.setItem("ct_session_token", me.token);
+}
+
+function enterGuestMode() {
+  if (!app || !app.ui) return;
+  app.ui.guestMode = true;
+  app.me = { username: t("临时用户"), isAdmin: false, authenticated: false, guest: true };
+  app.projects = [];
+  app.view = "projects";
 }
 
 async function tryAutoLogin() {
@@ -3130,6 +3143,10 @@ async function tryAutoLogin() {
 const AI_CONTEXT_LIMIT = 12000;
 
 async function loadProjects() {
+  if (app && app.ui && app.ui.guestMode) {
+    app.projects = [];
+    return;
+  }
   if (app && app.ui && !app.ui.templatesLoaded) {
     try {
       const tpl = await api("/api/templates");
@@ -8571,6 +8588,12 @@ function renderProjects() {
   importZip.onchange = async (ev) => {
     const file = ev.target.files && ev.target.files[0];
     if (!file) return;
+    if (app.ui.guestMode) {
+      app.ui.importError = t("请先切换用户");
+      mount(render());
+      ev.target.value = "";
+      return;
+    }
     const baseName = file.name.replace(/\.[^.]+$/, "").trim();
     const fd = new FormData();
     if (baseName) fd.append("name", baseName);
@@ -8626,20 +8649,12 @@ function renderProjects() {
     mount(render());
   };
 
-  const texFiles = Array.isArray(app.current.tree) ? app.current.tree.filter((f) => f.endsWith(".tex")) : [];
-  if (app.ui.pdfTargetFile && !texFiles.includes(app.ui.pdfTargetFile)) texFiles.unshift(app.ui.pdfTargetFile);
-  if (!texFiles.length && app.current.mainFile) texFiles.push(app.current.mainFile);
-  const pdfTargetSelect = h("select", {
-    class: "input pdf-target",
-    id: "pdfTargetSelect",
-    onchange: (ev) => setPdfTargetFile(ev.target.value),
-  });
-  for (const f of texFiles) {
-    const opt = h("option", { value: f, selected: f === getPdfTargetFile(p.id) ? "" : null, html: f });
-    pdfTargetSelect.appendChild(opt);
-  }
-
   const createProject = async () => {
+    if (app.ui.guestMode) {
+      app.ui.importError = t("请先切换用户");
+      mount(render());
+      return;
+    }
     try {
       const res = await api("/api/projects", {
         method: "POST",
@@ -8672,7 +8687,8 @@ function renderProjects() {
       projectMatchesFilter(p, app.ui.projectFilter, app.ui.projectCategory)
     );
     if (!filtered.length) {
-      list.appendChild(h("div", { class: "hint", html: t("(无匹配文件)") }));
+      const emptyLabel = app.ui.guestMode ? t("临时用户暂无项目") : t("(无匹配文件)");
+      list.appendChild(h("div", { class: "hint", html: emptyLabel }));
       return;
     }
     const sorted = filtered.slice().sort((a, b) => {
@@ -8787,21 +8803,15 @@ function renderProjects() {
   userCard.style.setProperty("--user-accent", color.color);
 
   const doLogout = async () => {
-    await api("/api/logout", { method: "POST" });
+    try { await api("/api/logout", { method: "POST" }); } catch {}
     localStorage.removeItem("ct_session_token");
-    app.me = null;
     cleanupEditor();
     app.current.openFile = null;
     app.ui.openFiles = [];
     app.ui.fileFilter = "";
-    app.view = "loading";
-    app.ui.authError = "";
+    enterGuestMode();
+    await loadProjects();
     mount(render());
-    bootstrap().catch((e) => {
-      console.error(e);
-      app.ui.authError = t("自动登录失败");
-      mount(render());
-    });
   };
 
   const doSwitchUser = async (username, password) => {
@@ -8858,11 +8868,16 @@ function renderProjects() {
     h("div", { class: "sidebar-spacer" }),
   ]);
 
+  const canEditProjects = !app.ui.guestMode;
   const actions = h("div", { class: "projects-actions" }, [
     h("div", { class: "view-toggle-group" }, [listBtn, gridBtn]),
     importZip,
-    btn(t("导入"), { kind: "pill", onClick: () => importZip.click() }),
-    btn(`+ ${t("新建")}`, { kind: "pill primary", onClick: (ev) => { ev.stopPropagation(); createProject(); } }),
+    btn(t("导入"), { kind: "pill", disabled: !canEditProjects, onClick: () => importZip.click() }),
+    btn(`+ ${t("新建")}`, {
+      kind: "pill primary",
+      disabled: !canEditProjects,
+      onClick: (ev) => { ev.stopPropagation(); createProject(); },
+    }),
   ]);
 
   const importErrorEl = app.ui.importError
@@ -8885,8 +8900,9 @@ function renderProjects() {
 
 function renderProject() {
   const p = app.current.project;
+  const me = app.me || { username: "", isAdmin: false };
   applySplitVars();
-  const isOwnerOrAdmin = app.me.isAdmin || p.owner === app.me.username;
+  const isOwnerOrAdmin = me.isAdmin || p.owner === me.username;
 
   const goProjects = async () => {
     cleanupEditor();
@@ -8903,22 +8919,16 @@ function renderProject() {
   };
 
   const doLogout = async () => {
-    await api("/api/logout", { method: "POST" });
+    try { await api("/api/logout", { method: "POST" }); } catch {}
     localStorage.removeItem("ct_session_token");
-    app.me = null;
     cleanupEditor();
     stopMonitorPolling();
     app.ui.selectRightTab = null;
     app.ui.openFiles = [];
     app.ui.fileFilter = "";
-    app.view = "loading";
-    app.ui.authError = "";
+    enterGuestMode();
+    await loadProjects();
     mount(render());
-    bootstrap().catch((e) => {
-      console.error(e);
-      app.ui.authError = t("自动登录失败");
-      mount(render());
-    });
   };
 
   const exportProjectZip = () => {
@@ -9170,6 +9180,151 @@ function renderProject() {
     viewToggleRow(t("助手"), app.ui.assistantEnabled, (checked) => setAssistantEnabled(checked)),
   ]);
 
+  const texFiles = Array.isArray(app.current.tree) ? app.current.tree.filter((f) => f.endsWith(".tex")) : [];
+  const mainSelect = h("select", { class: "input", id: "mainSelect" }, []);
+  for (const f of texFiles) {
+    const opt = h("option", { value: f, selected: f === app.current.mainFile ? "" : null, html: f });
+    mainSelect.appendChild(opt);
+  }
+  mainSelect.disabled = !isOwnerOrAdmin;
+
+  const compilerSelect = h("select", { class: "input", id: "compilerSelect" }, [
+    h("option", { value: "pdflatex", selected: app.current.compiler === "pdflatex" ? "" : null, html: "pdfLaTeX" }),
+    h("option", { value: "xelatex", selected: app.current.compiler === "xelatex" ? "" : null, html: "XeLaTeX" }),
+    h("option", { value: "lualatex", selected: app.current.compiler === "lualatex" ? "" : null, html: "LuaLaTeX" }),
+  ]);
+  compilerSelect.disabled = !isOwnerOrAdmin;
+
+  const targetFiles = texFiles.slice();
+  if (app.ui.pdfTargetFile && !targetFiles.includes(app.ui.pdfTargetFile)) targetFiles.unshift(app.ui.pdfTargetFile);
+  if (!targetFiles.length && app.current.mainFile) targetFiles.push(app.current.mainFile);
+  const pdfTargetSelect = h("select", {
+    class: "input pdf-target",
+    id: "pdfTargetSelect",
+    onchange: (ev) => setPdfTargetFile(ev.target.value),
+  });
+  for (const f of targetFiles) {
+    const opt = h("option", { value: f, selected: f === getPdfTargetFile(p.id) ? "" : null, html: f });
+    pdfTargetSelect.appendChild(opt);
+  }
+
+  const pdfZoomSelect = h(
+    "select",
+    {
+      class: "input pdf-zoom",
+      id: "pdfZoomSelect",
+      onchange: (ev) => setPdfView({ projectId: p.id, zoom: ev.target.value }),
+    },
+    [
+      h("option", { value: "page-width", html: t("适合宽度"), selected: app.ui.pdfZoom === "page-width" ? "" : null }),
+      h("option", { value: "page-fit", html: t("适合页面"), selected: app.ui.pdfZoom === "page-fit" ? "" : null }),
+      h("option", { value: "100", html: "100%", selected: app.ui.pdfZoom === "100" ? "" : null }),
+      h("option", { value: "125", html: "125%", selected: app.ui.pdfZoom === "125" ? "" : null }),
+      h("option", { value: "150", html: "150%", selected: app.ui.pdfZoom === "150" ? "" : null }),
+      h("option", { value: "200", html: "200%", selected: app.ui.pdfZoom === "200" ? "" : null }),
+    ]
+  );
+
+  const hasPdf = !!(app.current.artifacts && app.current.artifacts.pdf && app.current.artifacts.pdf.exists);
+  const openPdfMenuBtn = btn(t("打开 PDF"), {
+    kind: "menu-item",
+    disabled: !hasPdf,
+    onClick: (ev) => {
+      ev.stopPropagation();
+      window.open(pdfUrl(p.id, Date.now(), app.ui.pdfPage, app.ui.pdfZoom, getPdfTargetFile(p.id)), "_blank");
+      clearDropdowns();
+    },
+  });
+  openPdfMenuBtn.id = "openPdfBtn";
+
+  const refreshPdfMenuBtn = btn(t("刷新预览"), {
+    kind: "menu-item",
+    onClick: (ev) => {
+      ev.stopPropagation();
+      setPdfView({ projectId: p.id, refresh: true });
+      clearDropdowns();
+    },
+  });
+
+  const applyMainBtn = btn(t("设置"), {
+    kind: "tiny",
+    disabled: !isOwnerOrAdmin,
+    onClick: async (ev) => {
+      ev.stopPropagation();
+      if (!mainSelect.value) return;
+      await api(`/api/projects/${p.id}/main`, {
+        method: "POST",
+        body: JSON.stringify({ mainFile: mainSelect.value }),
+      });
+      await loadProject(p.id);
+      cleanupEditor();
+      mount(render());
+    },
+  });
+
+  const applyCompilerBtn = btn(t("设置"), {
+    kind: "tiny",
+    disabled: !isOwnerOrAdmin,
+    onClick: async (ev) => {
+      ev.stopPropagation();
+      await api(`/api/projects/${p.id}/compiler`, {
+        method: "POST",
+        body: JSON.stringify({ compiler: compilerSelect.value }),
+      });
+      await loadProject(p.id);
+      cleanupEditor();
+      mount(render());
+    },
+  });
+
+  const autoCompileToggle = h("label", { class: "toggle" }, [
+    h("input", {
+      type: "checkbox",
+      checked: app.ui.autoCompile,
+      onchange: (ev) => {
+        app.ui.autoCompile = ev.target.checked;
+        localStorage.setItem("ct_autoCompile", app.ui.autoCompile ? "1" : "0");
+      },
+    }),
+    h("span", { html: t("自动编译") }),
+  ]);
+
+  const autoSyncToggle = h("label", { class: "toggle" }, [
+    h("input", {
+      type: "checkbox",
+      checked: app.ui.autoSyncPdf,
+      onchange: (ev) => {
+        app.ui.autoSyncPdf = ev.target.checked;
+        localStorage.setItem("ct_autoSyncPdf", app.ui.autoSyncPdf ? "1" : "0");
+        if (app.ui.autoSyncPdf) schedulePdfSync();
+      },
+    }),
+    h("span", { html: t("自动同步 PDF") }),
+  ]);
+
+  const settingsMenu = dropdownMenu("panel-settings", h("div", { class: "dropdown-panel settings-panel" }, [
+    h("div", { class: "label", html: t("预览文件") }),
+    pdfTargetSelect,
+    h("div", { class: "label", html: t("缩放") }),
+    pdfZoomSelect,
+    h("div", { class: "menu-sep" }),
+    h("div", { class: "label", html: t("主文件") }),
+    h("div", { class: "row" }, [mainSelect, applyMainBtn]),
+    h("div", { class: "label", html: t("编译器") }),
+    h("div", { class: "row" }, [compilerSelect, applyCompilerBtn]),
+    h("div", { class: "settings-toggles" }, [autoCompileToggle, autoSyncToggle]),
+    h("div", { class: "menu-sep" }),
+    openPdfMenuBtn,
+    refreshPdfMenuBtn,
+  ]));
+
+  const settingsBtn = btn(t("设置"), { kind: "tiny", onClick: (ev) => toggleDropdown("panel-settings", ev) });
+  const settingsWrap = h(
+    "div",
+    { class: "dropdown dropdown-left", "data-dropdown-id": "panel-settings" },
+    [settingsBtn, settingsMenu]
+  );
+
   const recentFilesEl = null;
   const pinnedFilesEl = renderPinnedFiles();
 
@@ -9246,33 +9401,9 @@ function renderProject() {
   ]);
   const viewControls = h("div", { class: "left-view-row" }, [viewFocusBtn, viewAllBtn]);
 
-  const rightTabItem = (label, key) =>
-    btn(label, {
-      kind: `menu-item ${app.ui.rightTab === key ? "active" : ""}`.trim(),
-      onClick: (ev) => {
-        ev.stopPropagation();
-        selectTab(key);
-        clearDropdowns();
-      },
-    });
-  const rightTabMenu = dropdownMenu("right-tab", h("div", { class: "dropdown-panel right-tab-panel" }, [
-    h("div", { class: "label", html: t("预览文件") }),
-    pdfTargetSelect,
-    h("div", { class: "menu-sep" }),
-    rightTabItem(t("PDF 预览"), "pdf"),
-    rightTabItem(t("日志"), "logs"),
-    rightTabItem(t("设置页"), "settings"),
-    app.ui.assistantEnabled ? rightTabItem(t("AI"), "ai") : null,
-  ]));
-  const rightTabBtn = btn(t("设置"), { kind: "tiny", onClick: (ev) => toggleDropdown("right-tab", ev) });
-  const rightTabWrap = h(
-    "div",
-    { class: "dropdown dropdown-left", "data-dropdown-id": "right-tab" },
-    [rightTabBtn, rightTabMenu]
-  );
-
+  const headerActions = h("div", { class: "left-header-actions" }, [shareBtn, settingsWrap]);
   const headerChildren = [
-    h("div", { class: "left-header-top" }, [projectBtnWrap, shareBtn, rightTabWrap]),
+    h("div", { class: "left-header-top" }, [projectBtnWrap, headerActions]),
   ];
   if (app.ui.leftRailMode === "files") {
     headerChildren.push(tabsRow);
@@ -9569,18 +9700,6 @@ function renderProject() {
     ]),
   ]);
 
-  const mainSelect = h("select", { class: "input", id: "mainSelect" }, []);
-  for (const f of app.current.tree.filter((x) => x.endsWith(".tex"))) {
-    const opt = h("option", { value: f, selected: f === app.current.mainFile ? "" : null, html: f });
-    mainSelect.appendChild(opt);
-  }
-
-  const compilerSelect = h("select", { class: "input", id: "compilerSelect" }, [
-    h("option", { value: "pdflatex", selected: app.current.compiler === "pdflatex" ? "" : null, html: "pdfLaTeX" }),
-    h("option", { value: "xelatex", selected: app.current.compiler === "xelatex" ? "" : null, html: "XeLaTeX" }),
-    h("option", { value: "lualatex", selected: app.current.compiler === "lualatex" ? "" : null, html: "LuaLaTeX" }),
-  ]);
-
   const themeSelect = h(
     "select",
     {
@@ -9822,16 +9941,6 @@ function renderProject() {
     },
   });
 
-  const hasPdf = !!(app.current.artifacts && app.current.artifacts.pdf && app.current.artifacts.pdf.exists);
-  const openPdfBtn = btn(t("打开 PDF"), {
-    id: "openPdfBtn",
-    disabled: !hasPdf,
-    onClick: () => {
-      window.open(pdfUrl(p.id, Date.now(), app.ui.pdfPage, app.ui.pdfZoom, getPdfTargetFile(p.id)), "_blank");
-    },
-  });
-  openPdfBtn.classList.add("pdf-action");
-
   const pdfHint = h("div", {
     class: "hint",
     id: "pdfHint",
@@ -9900,60 +10009,8 @@ function renderProject() {
       renderPdfPages({ projectId: p.id, refresh: true }).catch(() => {});
     }, 0);
   }
-
-  const pdfPageInput = h("input", {
-    class: "input pdf-page",
-    id: "pdfPageInput",
-    type: "number",
-    min: "1",
-    value: app.ui.pdfPage || 1,
-    onchange: (ev) => setPdfView({ projectId: p.id, page: ev.target.value }),
-  });
-
-  const pdfZoomSelect = h(
-    "select",
-    {
-      class: "input pdf-zoom",
-      id: "pdfZoomSelect",
-      onchange: (ev) => setPdfView({ projectId: p.id, zoom: ev.target.value }),
-    },
-    [
-      h("option", { value: "page-width", html: t("适合宽度"), selected: app.ui.pdfZoom === "page-width" ? "" : null }),
-      h("option", { value: "page-fit", html: t("适合页面"), selected: app.ui.pdfZoom === "page-fit" ? "" : null }),
-      h("option", { value: "100", html: "100%", selected: app.ui.pdfZoom === "100" ? "" : null }),
-      h("option", { value: "125", html: "125%", selected: app.ui.pdfZoom === "125" ? "" : null }),
-      h("option", { value: "150", html: "150%", selected: app.ui.pdfZoom === "150" ? "" : null }),
-      h("option", { value: "200", html: "200%", selected: app.ui.pdfZoom === "200" ? "" : null }),
-    ]
-  );
-
-  const pdfPrevBtn = btn("‹", {
-    kind: "tiny ghost",
-    onClick: () => setPdfView({ projectId: p.id, page: Math.max(1, (app.ui.pdfPage || 1) - 1) }),
-  });
-  pdfPrevBtn.title = t("上一页");
-  const pdfNextBtn = btn("›", {
-    kind: "tiny ghost",
-    onClick: () => setPdfView({ projectId: p.id, page: (app.ui.pdfPage || 1) + 1 }),
-  });
-  pdfNextBtn.title = t("下一页");
-  const pdfRefreshBtn = btn("↻", {
-    kind: "tiny ghost",
-    onClick: () => setPdfView({ projectId: p.id, refresh: true }),
-  });
-  pdfRefreshBtn.title = t("刷新");
-
   compileBtn.classList.add("pdf-action");
-  const pdfToolbar = h("div", { class: "pdf-toolbar" }, [
-    h("div", { class: "pdf-toolbar-left" }, []),
-    h("div", { class: "pdf-toolbar-center" }, [
-      pdfPrevBtn,
-      pdfPageInput,
-      h("span", { class: "pdf-page-info", id: "pdfPageInfo", html: app.ui.pdfPageCount ? `/${app.ui.pdfPageCount}` : "" }),
-      pdfNextBtn,
-    ]),
-    h("div", { class: "pdf-toolbar-right" }, [compileBtn, openPdfBtn, pdfZoomSelect, pdfRefreshBtn]),
-  ]);
+  const pdfActions = h("div", { class: "pdf-action-bar" }, [compileBtn]);
 
   const logDiv = h("div", { class: "log", id: "compileLog" });
   logDiv.textContent = app.current.lastLog || "";
@@ -9999,99 +10056,21 @@ function renderProject() {
     [h("div", { class: "summary-title", html: t("AI 修复建议") }), aiFixTextEl]
   );
 
-
-  const settingsPage = h("div", { class: "tab-page-inner" }, [
-    sectionTitle(t("主文件")),
-    h("div", { class: "row" }, [
-      mainSelect,
-      btn(t("设置"), {
-        onClick: async () => {
-          await api(`/api/projects/${p.id}/main`, {
-            method: "POST",
-            body: JSON.stringify({ mainFile: mainSelect.value }),
-          });
-          await loadProject(p.id);
-          cleanupEditor();
-          mount(render());
-        },
-      }),
-    ]),
-    sectionTitle(t("编译器")),
-    h("div", { class: "row" }, [
-      compilerSelect,
-      btn(t("设置"), {
-        onClick: async () => {
-          await api(`/api/projects/${p.id}/compiler`, {
-            method: "POST",
-            body: JSON.stringify({ compiler: compilerSelect.value }),
-          });
-          await loadProject(p.id);
-          cleanupEditor();
-          mount(render());
-        },
-      }),
-    ]),
-    sectionTitle(t("编译选项")),
-    h("div", { class: "row" }, [
-      h("label", { class: "toggle" }, [
-        h("input", {
-          type: "checkbox",
-          checked: app.ui.autoCompile,
-          onchange: (ev) => {
-            app.ui.autoCompile = ev.target.checked;
-            localStorage.setItem("ct_autoCompile", app.ui.autoCompile ? "1" : "0");
-          },
-        }),
-        h("span", { html: t("自动编译") }),
-      ]),
-      h("label", { class: "toggle" }, [
-        h("input", {
-          type: "checkbox",
-          checked: app.ui.autoSyncPdf,
-          onchange: (ev) => {
-            app.ui.autoSyncPdf = ev.target.checked;
-            localStorage.setItem("ct_autoSyncPdf", app.ui.autoSyncPdf ? "1" : "0");
-            if (app.ui.autoSyncPdf) schedulePdfSync();
-          },
-        }),
-        h("span", { html: t("自动同步 PDF") }),
-      ]),
-    ]),
-  ]);
-
+  const pdfPane = h("div", { class: "pdf-pane" }, [pdfViewer, pdfActions]);
   const tabPages = {
-    pdf: h("div", { class: "tab-page pdf-page", id: "tab_pdf" }, [
-      pdfToolbar,
-      h("div", { class: "pdf-pane" }, [pdfViewer]),
-    ]),
+    pdf: h("div", { class: "tab-page pdf-page", id: "tab_pdf" }, [pdfPane]),
     logs: h("div", { class: "tab-page log-page", id: "tab_logs" }, [logHeader, summaryBox, aiFixBox, logDiv]),
-    settings: h("div", { class: "tab-page", id: "tab_settings" }, [settingsPage]),
   };
-  if (app.ui.assistantEnabled) {
-    tabPages.ai = h("div", { class: "tab-page", id: "tab_ai" }, [renderChatPanel()]);
-  }
 
-  const tabBtns = {};
-  const selectTab = (key) => {
-    if (!tabPages[key]) key = "pdf";
+  const selectTab = () => {
+    const key = "pdf";
     app.ui.rightTab = key;
     localStorage.setItem("ct_rightTab", key);
     for (const [k, el] of Object.entries(tabPages)) el.style.display = k === key ? "" : "none";
-    for (const [k, b] of Object.entries(tabBtns)) b.classList.toggle("active", k === key);
-    if (key === "monitor") startMonitorPolling();
-    else stopMonitorPolling();
+    stopMonitorPolling();
   };
   app.ui.selectRightTab = selectTab;
-
-  const mkTabBtn = (label, key) => {
-    const b = h("button", { class: `tab-btn ${app.ui.rightTab === key ? "active" : ""}`.trim(), onclick: () => selectTab(key) });
-    b.textContent = label;
-    tabBtns[key] = b;
-    return b;
-  };
-
-  // Apply initial selection once pages exist.
-  selectTab(app.ui.rightTab || "pdf");
+  selectTab();
 
   const right = h("div", { class: "pane right-pane", id: "rightPane" }, [
     h("div", { class: "tab-body" }, Object.values(tabPages)),
@@ -10126,9 +10105,9 @@ function renderProject() {
     right,
   ]);
 
-  const me = app.me || { username: "User" };
-  const railColor = pickColor(me.username || "U");
-  const railAvatar = h("div", { class: "rail-avatar", html: (me.username || "U").charAt(0).toUpperCase() });
+  const railUser = me || { username: "User" };
+  const railColor = pickColor(railUser.username || "U");
+  const railAvatar = h("div", { class: "rail-avatar", html: (railUser.username || "U").charAt(0).toUpperCase() });
   railAvatar.style.setProperty("--user-accent", railColor.color);
   const railBtn = (mode, label, title) => h("button", {
     class: `rail-btn ${app.ui.leftRailMode === mode ? "active" : ""}`.trim(),
@@ -10150,7 +10129,6 @@ function renderProject() {
       railBtn("view", "⚙", t("视图设置")),
     ]),
     h("div", { class: "studio-rail-footer" }, [
-      h("div", { class: "rail-status", html: t("在线") }),
       railAvatar,
     ]),
   ]);
@@ -10164,43 +10142,9 @@ function renderProject() {
 }
 
 function renderLoading() {
-  const attempt = async (pwd) => {
-    const clean = String(pwd || "").trim();
-    if (!clean) return;
-    localStorage.setItem("ct_admin_password", clean);
-    app.ui.authError = "";
-    app.view = "loading";
-    mount(render());
-    try {
-      await bootstrap();
-    } catch (e) {
-      console.error(e);
-      app.ui.authError = t("自动登录失败");
-      mount(render());
-    }
-  };
-
-  const passwordInput = input({ placeholder: t("管理员密码"), type: "password" });
-  passwordInput.onkeydown = (ev) => {
-    if (ev.key === "Enter") attempt(passwordInput.value);
-  };
-  const enterBtn = btn(t("进入"), { kind: "primary", onClick: () => attempt(passwordInput.value) });
-
-  const body = app.ui.authError
-    ? h("div", { class: "center" }, [
-        h("div", { class: "card auth" }, [
-          h("div", { class: "h1", html: t("自动登录失败") }),
-          h("div", { class: "form" }, [
-            h("div", { class: "label", html: t("管理员密码") }),
-            passwordInput,
-            enterBtn,
-          ]),
-        ]),
-      ])
-    : h("div", { class: "center" }, [h("div", { class: "hint", html: t("加载中...") })]);
   return h("div", { class: "page" }, [
     topbar(t("加载中..."), []),
-    body,
+    h("div", { class: "center" }, [h("div", { class: "hint", html: t("加载中...") })]),
   ]);
 }
 
@@ -10225,7 +10169,7 @@ function renderModalOverlay() {
 function render() {
   let page;
   if (app.view === "loading") page = renderLoading();
-  else if (app.view === "login") page = renderLoading();
+  else if (app.view === "login") page = renderProjects();
   else if (app.view === "projects") page = renderProjects();
   else if (app.view === "project") page = renderProject();
   else page = renderLoading();
@@ -10247,22 +10191,19 @@ async function bootstrap() {
     if (ok) await loadMe().catch(() => {});
   }
   if (!app.me) {
-    app.view = "loading";
-    app.ui.authError = t("自动登录失败");
+    localStorage.removeItem("ct_session_token");
+    enterGuestMode();
+    await loadProjects();
     mount(render());
     return;
   }
 
   await loadProjects();
-
-  const hash = location.hash || "#projects";
-  if (hash.startsWith("#project/")) {
-    const projectId = hash.slice("#project/".length);
-    app.view = "project";
-    await loadProject(projectId, { resetTab: true });
-  } else {
-    app.view = "projects";
+  const hash = location.hash || "";
+  if (hash && hash.startsWith("#project/")) {
+    history.replaceState({}, "", "#projects");
   }
+  app.view = "projects";
 
   mount(render());
 }
@@ -10342,7 +10283,6 @@ window.addEventListener("unhandledrejection", (ev) => reportUiError(ev && ev.rea
 
 bootstrap().catch((e) => {
   console.error(e);
-  app.view = "loading";
-  app.ui.authError = t("自动登录失败");
-  mount(render());
+  enterGuestMode();
+  loadProjects().then(() => mount(render())).catch(() => mount(render()));
 });
