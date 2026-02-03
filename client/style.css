@@ -2499,13 +2499,23 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  background: #222222;
-  border: 1px solid #2f2f2f;
-  border-radius: 12px;
+  background: #1f1f1f;
+  border: 1px solid #2b2b2b;
+  border-radius: 10px;
   padding: 10px;
   min-width: 220px;
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
   z-index: 20;
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  will-change: opacity, transform;
+}
+.dropdown[data-open="1"] .dropdown-menu {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 .dropdown-left .dropdown-menu { left: 0; right: auto; }
 .dropdown-right .dropdown-menu { right: 0; left: auto; }
@@ -2683,20 +2693,19 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  background: #1f1f1f;
-  border: 1px solid #2a2a2a;
+  background: #1a1a1a;
+  border: 1px solid #2b2b2b;
   border-radius: 12px;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 .project-rows.grid .project-item {
   flex-direction: column;
   align-items: flex-start;
 }
 .project-item:hover {
-  background: #242424;
-  border-color: #353535;
-  transform: translateY(-1px);
+  background: #202020;
+  border-color: #303030;
 }
 .project-item-icon {
   width: 46px;

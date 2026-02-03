@@ -1000,6 +1000,7 @@ function mount(node) {
   syncTopbarHeight();
   syncResizeObserver();
   reattachEditorView();
+  applyDropdownState();
   ensureLayoutVisible();
   setTimeout(() => ensureLayoutVisible(), 0);
 }
@@ -3260,6 +3261,7 @@ function clearDropdowns() {
   if (!app || !app.ui) return;
   app.ui.dropdownOpen = "";
   app.ui.projectDeleteArmed = "";
+  applyDropdownState();
 }
 
 function toggleDropdown(id, ev) {
@@ -3271,12 +3273,22 @@ function toggleDropdown(id, ev) {
   if (next.startsWith("project:") && app.ui.projectDeleteArmed && next !== `project:${app.ui.projectDeleteArmed}`) {
     app.ui.projectDeleteArmed = "";
   }
-  mount(render());
+  applyDropdownState();
 }
 
 function dropdownMenu(id, body) {
-  if (app.ui.dropdownOpen !== id) return null;
   return h("div", { class: "dropdown-menu", onclick: (ev) => ev.stopPropagation() }, [body]);
+}
+
+function applyDropdownState() {
+  if (!app || !app.ui) return;
+  const open = app.ui.dropdownOpen || "";
+  const dropdowns = document.querySelectorAll(".dropdown[data-dropdown-id]");
+  dropdowns.forEach((el) => {
+    const id = el.getAttribute("data-dropdown-id") || "";
+    if (open && id === open) el.setAttribute("data-open", "1");
+    else el.removeAttribute("data-open");
+  });
 }
 
 function buildProjectSettingsPanel(project, { onDelete } = {}) {
@@ -8597,7 +8609,10 @@ function renderProjects() {
         onclick: (ev) => toggleDropdown(menuId, ev),
         html: "⋯",
       });
-      const actionsWrap = h("div", { class: "dropdown dropdown-right" }, [actionsBtn, actionsMenu]);
+      const actionsWrap = h("div", { class: "dropdown dropdown-right", "data-dropdown-id": menuId }, [
+        actionsBtn,
+        actionsMenu,
+      ]);
 
       const row = h("div", {
         class: "project-item",
@@ -8747,7 +8762,7 @@ function renderProjects() {
     app.ui.switchError ? h("div", { class: "hint error", html: app.ui.switchError }) : null,
   ]));
   const sidebar = h("aside", { class: "projects-sidebar" }, [
-    h("div", { class: "dropdown dropdown-left" }, [userCard, userMenu]),
+    h("div", { class: "dropdown dropdown-left", "data-dropdown-id": "user" }, [userCard, userMenu]),
     h("div", { class: "projects-nav" }, [
       navItem("all", t("所有项目")),
       navItem("mine", t("你的项目")),
@@ -8809,11 +8824,11 @@ function renderProjects() {
 
   const actions = h("div", { class: "projects-actions" }, [
     h("div", { class: "view-toggle-group" }, [listBtn, gridBtn]),
-    h("div", { class: "dropdown dropdown-right" }, [
+    h("div", { class: "dropdown dropdown-right", "data-dropdown-id": "import" }, [
       btn(`${t("导入")} ▾`, { kind: "pill", onClick: (ev) => toggleDropdown("import", ev) }),
       dropdownMenu("import", importPanel),
     ]),
-    h("div", { class: "dropdown dropdown-right" }, [
+    h("div", { class: "dropdown dropdown-right", "data-dropdown-id": "create" }, [
       btn(`+ ${t("新建")}`, { kind: "pill primary", onClick: (ev) => toggleDropdown("create", ev) }),
       dropdownMenu("create", createPanel),
     ]),
@@ -9124,7 +9139,10 @@ function renderProject() {
     onclick: (ev) => toggleDropdown("project-settings", ev),
     html: `${p.name || p.id} ▾`,
   });
-  const projectBtnWrap = h("div", { class: "dropdown dropdown-left" }, [projectBtn, projectSettingsMenu]);
+  const projectBtnWrap = h("div", {
+    class: "dropdown dropdown-left",
+    "data-dropdown-id": "project-settings",
+  }, [projectBtn, projectSettingsMenu]);
   const shareBtn = h("button", { class: "share-btn", onclick: openShareModal, html: t("分享") });
 
   const filesTabBtn = h("button", {
@@ -10215,7 +10233,6 @@ window.addEventListener("resize", () => {
 document.addEventListener("click", () => {
   if (app && app.ui && app.ui.dropdownOpen) {
     clearDropdowns();
-    mount(render());
   }
 });
 window.addEventListener("keydown", (ev) => {
