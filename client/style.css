@@ -1637,8 +1637,8 @@ html.tree-compact .tree-count {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 8px 0 12px;
+  gap: 8px;
+  padding: 6px 0 10px;
   width: 100%;
 }
 .pdf-page-wrap {
@@ -1651,7 +1651,7 @@ html.tree-compact .tree-count {
   margin: 0;
   background: #ffffff;
   border-radius: 8px;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
 }
 .pdf-marker {
   position: absolute;
@@ -1689,30 +1689,47 @@ html.tree-compact .tree-count {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 4px 6px 6px;
+  gap: 8px;
+  padding: 6px;
 }
 .pdf-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 8px;
-  padding: 4px 6px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel-strong);
-  flex-wrap: wrap;
+  padding: 6px 8px;
+  border: 1px solid #2a2a2a;
+  background: #1c1c1c;
+  border-radius: 10px;
   position: sticky;
   top: 0;
   z-index: 2;
 }
-.pdf-toolbar .input {
-  padding: 5px 8px;
-  font-size: 12px;
+.pdf-toolbar-left,
+.pdf-toolbar-center,
+.pdf-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.pdf-toolbar .pdf-page { width: 70px; }
+.pdf-toolbar-left { min-width: 0; }
+.pdf-toolbar-center { justify-self: center; }
+.pdf-toolbar-right { justify-self: end; }
+.pdf-toolbar .input {
+  height: 30px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: #1a1a1a;
+  border-color: #2a2a2a;
+}
+.pdf-toolbar .pdf-page {
+  width: 56px;
+  text-align: center;
+}
 .pdf-toolbar .pdf-zoom { width: 120px; }
 .pdf-toolbar .pdf-target {
-  min-width: 200px;
-  max-width: 360px;
+  min-width: 140px;
+  max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1720,19 +1737,16 @@ html.tree-compact .tree-count {
 .pdf-page-info {
   font-size: 11px;
   color: var(--muted);
-  margin-right: 6px;
 }
-.pdf-label {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+.btn.ghost {
+  background: transparent;
+  border-color: #2b2b2b;
+  color: #cfcfcf;
+  box-shadow: none;
 }
-.pdf-sep {
-  width: 1px;
-  height: 18px;
-  background: rgba(15, 23, 42, 0.12);
-  margin: 0 2px;
+.btn.ghost:hover {
+  background: #262626;
+  border-color: #3a3a3a;
 }
 
 .monitor-header {

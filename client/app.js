@@ -9895,42 +9895,31 @@ function renderProject() {
     pdfTargetSelect.appendChild(opt);
   }
 
+  const pdfPrevBtn = btn("‹", {
+    kind: "tiny ghost",
+    onClick: () => setPdfView({ projectId: p.id, page: Math.max(1, (app.ui.pdfPage || 1) - 1) }),
+  });
+  pdfPrevBtn.title = t("上一页");
+  const pdfNextBtn = btn("›", {
+    kind: "tiny ghost",
+    onClick: () => setPdfView({ projectId: p.id, page: (app.ui.pdfPage || 1) + 1 }),
+  });
+  pdfNextBtn.title = t("下一页");
+  const pdfRefreshBtn = btn("↻", {
+    kind: "tiny ghost",
+    onClick: () => setPdfView({ projectId: p.id, refresh: true }),
+  });
+  pdfRefreshBtn.title = t("刷新");
+
   const pdfToolbar = h("div", { class: "pdf-toolbar" }, [
-    h("span", { class: "pdf-label", html: t("预览文件") }),
-    pdfTargetSelect,
-    btn(t("上一页"), {
-      kind: "tiny",
-      onClick: () => setPdfView({ projectId: p.id, page: Math.max(1, (app.ui.pdfPage || 1) - 1) }),
-    }),
-    h("span", { class: "pdf-label", html: t("页码") }),
-    pdfPageInput,
-    h("span", { class: "pdf-page-info", id: "pdfPageInfo", html: app.ui.pdfPageCount ? `/${app.ui.pdfPageCount}` : "" }),
-    btn(t("下一页"), {
-      kind: "tiny",
-      onClick: () => setPdfView({ projectId: p.id, page: (app.ui.pdfPage || 1) + 1 }),
-    }),
-    h("span", { class: "pdf-sep" }),
-    h("span", { class: "pdf-label", html: t("缩放") }),
-    btn("-", {
-      kind: "tiny",
-      onClick: () => zoomStep(-1),
-      title: t("缩小"),
-    }),
-    pdfZoomSelect,
-    btn("+", {
-      kind: "tiny",
-      onClick: () => zoomStep(1),
-      title: t("放大"),
-    }),
-    btn("100%", {
-      kind: "tiny",
-      onClick: () => setPdfView({ projectId: p.id, zoom: "100" }),
-      title: t("重置缩放"),
-    }),
-    btn(t("刷新"), {
-      kind: "tiny",
-      onClick: () => setPdfView({ projectId: p.id, refresh: true }),
-    }),
+    h("div", { class: "pdf-toolbar-left" }, [pdfTargetSelect]),
+    h("div", { class: "pdf-toolbar-center" }, [
+      pdfPrevBtn,
+      pdfPageInput,
+      h("span", { class: "pdf-page-info", id: "pdfPageInfo", html: app.ui.pdfPageCount ? `/${app.ui.pdfPageCount}` : "" }),
+      pdfNextBtn,
+    ]),
+    h("div", { class: "pdf-toolbar-right" }, [pdfZoomSelect, pdfRefreshBtn]),
   ]);
 
   const logDiv = h("div", { class: "log", id: "compileLog" });
