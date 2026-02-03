@@ -8561,9 +8561,15 @@ function renderProjects() {
     fd.append("zip", file);
     app.ui.importError = "";
     try {
-      await api("/api/projects/import", { method: "POST", body: fd });
+      const res = await api("/api/projects/import", { method: "POST", body: fd });
       await loadProjects();
-      mount(render());
+      clearDropdowns();
+      const created = res && res.project ? res.project : null;
+      if (created && created.id) {
+        await openProject(created);
+      } else {
+        mount(render());
+      }
     } catch (e) {
       app.ui.importError = e && e.message ? e.message : String(e);
       mount(render());
@@ -8800,7 +8806,7 @@ function renderProjects() {
       kind: "primary",
       onClick: async (ev) => {
         ev.stopPropagation();
-        await api("/api/projects", {
+        const res = await api("/api/projects", {
           method: "POST",
           body: JSON.stringify({
             name: newName.value.trim() || undefined,
@@ -8811,7 +8817,12 @@ function renderProjects() {
         await loadProjects();
         newName.value = "";
         clearDropdowns();
-        mount(render());
+        const created = res && res.project ? res.project : null;
+        if (created && created.id) {
+          await openProject(created);
+        } else {
+          mount(render());
+        }
       },
     }),
   ]);
