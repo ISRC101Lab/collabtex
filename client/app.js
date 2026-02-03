@@ -3313,7 +3313,7 @@ function buildProjectSettingsPanel(project, { onDelete } = {}) {
   }
 
   const saveBtn = btn(t("保存"), {
-    kind: "primary",
+    kind: "primary menu-inline",
     onClick: async (ev) => {
       ev.stopPropagation();
       const payload = {
@@ -3334,6 +3334,7 @@ function buildProjectSettingsPanel(project, { onDelete } = {}) {
   });
 
   const renameBtn = btn(t("重命名"), {
+    kind: "menu-item",
     onClick: (ev) => {
       ev.stopPropagation();
       app.ui.projectRenameId = project.id;
@@ -3343,6 +3344,7 @@ function buildProjectSettingsPanel(project, { onDelete } = {}) {
   });
 
   const cancelBtn = btn(t("取消"), {
+    kind: "menu-inline",
     onClick: (ev) => {
       ev.stopPropagation();
       app.ui.projectRenameId = "";
@@ -3352,7 +3354,7 @@ function buildProjectSettingsPanel(project, { onDelete } = {}) {
 
   const isArmed = app.ui.projectDeleteArmed === project.id;
   const delBtn = btn(isArmed ? t("确认删除") : t("删除项目"), {
-    kind: isArmed ? "danger" : "",
+    kind: isArmed ? "menu-item danger" : "menu-item",
     onClick: async (ev) => {
       ev.stopPropagation();
       if (!isArmed) {
@@ -3371,8 +3373,12 @@ function buildProjectSettingsPanel(project, { onDelete } = {}) {
     },
   });
 
-  body.appendChild(h("div", { class: "dropdown-actions" }, isEditing ? [saveBtn, cancelBtn] : [renameBtn]));
-  body.appendChild(h("div", { class: "dropdown-actions" }, [delBtn]));
+  if (isEditing) {
+    body.appendChild(h("div", { class: "menu-inline" }, [saveBtn, cancelBtn]));
+  } else {
+    body.appendChild(renameBtn);
+  }
+  body.appendChild(delBtn);
   return body;
 }
 

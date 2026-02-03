@@ -2558,10 +2558,38 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   height: 34px;
 }
 .project-actions-panel { min-width: 200px; }
-.project-actions-panel .btn {
+.project-actions-panel .btn { box-shadow: none; }
+.project-actions-panel .btn.menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid #2b2b2b;
+  color: #d7d7d7;
+}
+.project-actions-panel .btn.menu-item:hover {
+  background: #262626;
+  border-color: #3a3a3a;
+}
+.project-actions-panel .btn.menu-item.danger {
+  color: #ffb4b4;
+  border-color: #3a2a2a;
+}
+.project-actions-panel .btn.menu-item.danger:hover {
+  background: rgba(255, 85, 85, 0.1);
+  border-color: #5a2a2a;
+}
+.project-actions-panel .menu-inline {
+  display: flex;
+  gap: 6px;
+}
+.project-actions-panel .menu-inline .btn {
+  flex: 1;
   padding: 6px 8px;
   font-size: 12px;
-  box-shadow: none;
+  border-radius: 7px;
 }
 .user-card {
   display: flex;
