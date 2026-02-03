@@ -8616,6 +8616,19 @@ function renderProjects() {
     mount(render());
   };
 
+  const texFiles = Array.isArray(app.current.tree) ? app.current.tree.filter((f) => f.endsWith(".tex")) : [];
+  if (app.ui.pdfTargetFile && !texFiles.includes(app.ui.pdfTargetFile)) texFiles.unshift(app.ui.pdfTargetFile);
+  if (!texFiles.length && app.current.mainFile) texFiles.push(app.current.mainFile);
+  const pdfTargetSelect = h("select", {
+    class: "input pdf-target",
+    id: "pdfTargetSelect",
+    onchange: (ev) => setPdfTargetFile(ev.target.value),
+  });
+  for (const f of texFiles) {
+    const opt = h("option", { value: f, selected: f === getPdfTargetFile(p.id) ? "" : null, html: f });
+    pdfTargetSelect.appendChild(opt);
+  }
+
   const createProject = async () => {
     try {
       const res = await api("/api/projects", {
@@ -9211,8 +9224,33 @@ function renderProject() {
   ]);
   const viewControls = h("div", { class: "left-view-row" }, [viewFocusBtn, viewAllBtn]);
 
+  const rightTabItem = (label, key) =>
+    btn(label, {
+      kind: `menu-item ${app.ui.rightTab === key ? "active" : ""}`.trim(),
+      onClick: (ev) => {
+        ev.stopPropagation();
+        selectTab(key);
+        clearDropdowns();
+      },
+    });
+  const rightTabMenu = dropdownMenu("right-tab", h("div", { class: "dropdown-panel right-tab-panel" }, [
+    h("div", { class: "label", html: t("预览文件") }),
+    pdfTargetSelect,
+    h("div", { class: "menu-sep" }),
+    rightTabItem(t("PDF 预览"), "pdf"),
+    rightTabItem(t("日志"), "logs"),
+    rightTabItem(t("设置页"), "settings"),
+    app.ui.assistantEnabled ? rightTabItem(t("AI"), "ai") : null,
+  ]));
+  const rightTabBtn = btn(t("设置"), { kind: "tiny", onClick: (ev) => toggleDropdown("right-tab", ev) });
+  const rightTabWrap = h(
+    "div",
+    { class: "dropdown dropdown-left", "data-dropdown-id": "right-tab" },
+    [rightTabBtn, rightTabMenu]
+  );
+
   const headerChildren = [
-    h("div", { class: "left-header-top" }, [projectBtnWrap, shareBtn]),
+    h("div", { class: "left-header-top" }, [projectBtnWrap, shareBtn, rightTabWrap]),
   ];
   if (app.ui.leftRailMode === "files") {
     headerChildren.push(tabsRow);
@@ -9867,20 +9905,6 @@ function renderProject() {
     ]
   );
 
-  const texFiles = Array.isArray(app.current.tree) ? app.current.tree.filter((f) => f.endsWith(".tex")) : [];
-  if (app.ui.pdfTargetFile && !texFiles.includes(app.ui.pdfTargetFile)) texFiles.unshift(app.ui.pdfTargetFile);
-  if (!texFiles.length && app.current.mainFile) texFiles.push(app.current.mainFile);
-
-  const pdfTargetSelect = h("select", {
-    class: "input pdf-target",
-    id: "pdfTargetSelect",
-    onchange: (ev) => setPdfTargetFile(ev.target.value),
-  });
-  for (const f of texFiles) {
-    const opt = h("option", { value: f, selected: f === getPdfTargetFile(p.id) ? "" : null, html: f });
-    pdfTargetSelect.appendChild(opt);
-  }
-
   const pdfPrevBtn = btn("‹", {
     kind: "tiny ghost",
     onClick: () => setPdfView({ projectId: p.id, page: Math.max(1, (app.ui.pdfPage || 1) - 1) }),
@@ -9899,7 +9923,7 @@ function renderProject() {
 
   compileBtn.classList.add("pdf-action");
   const pdfToolbar = h("div", { class: "pdf-toolbar" }, [
-    h("div", { class: "pdf-toolbar-left" }, [pdfTargetSelect]),
+    h("div", { class: "pdf-toolbar-left" }, []),
     h("div", { class: "pdf-toolbar-center" }, [
       pdfPrevBtn,
       pdfPageInput,
@@ -10048,12 +10072,6 @@ function renderProject() {
   selectTab(app.ui.rightTab || "pdf");
 
   const right = h("div", { class: "pane right-pane", id: "rightPane" }, [
-    h("div", { class: "tabs" }, [
-      mkTabBtn(t("PDF 预览"), "pdf"),
-      mkTabBtn(t("日志"), "logs"),
-      mkTabBtn(t("设置页"), "settings"),
-      app.ui.assistantEnabled ? mkTabBtn(t("AI"), "ai") : null,
-    ]),
     h("div", { class: "tab-body" }, Object.values(tabPages)),
   ]);
 
