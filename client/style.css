@@ -2537,40 +2537,65 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   gap: 10px;
   min-width: 220px;
 }
-.user-menu-title { font-weight: 600; }
+.user-menu-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: #cfcfcf;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
 .user-menu-row {
   display: grid;
   gap: 8px;
+}
+.user-menu-row .input {
+  height: 34px;
+}
+.user-menu-row .btn {
+  height: 34px;
 }
 .project-actions-panel { min-width: 240px; }
 .user-card {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-radius: 12px;
-  background: #232323;
+  background: linear-gradient(180deg, #252525, #1f1f1f);
   border: 1px solid #2f2f2f;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.user-card:hover {
+  background: linear-gradient(180deg, #2a2a2a, #222222);
+  border-color: #3a3a3a;
 }
 .user-avatar {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: var(--user-accent, #6d6dff);
   color: #fff;
   font-weight: 600;
+  font-size: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 0 0 2px rgba(31, 31, 31, 0.9),
+    0 8px 18px rgba(0, 0, 0, 0.35);
 }
 .user-meta { display: flex; flex-direction: column; gap: 2px; }
-.user-name { font-size: 13px; font-weight: 600; }
+.user-name { font-size: 14px; font-weight: 600; letter-spacing: 0.01em; }
 .user-role {
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: #a3a3a3;
+}
+.user-caret {
+  margin-left: auto;
   color: #9a9a9a;
+  font-size: 12px;
 }
 .projects-nav {
   display: flex;
