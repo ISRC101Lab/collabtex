@@ -8680,7 +8680,10 @@ function renderProjects() {
         ]),
         h("div", { class: "project-item-main" }, [
           h("div", { class: "project-item-name", html: p.name || p.id }),
-          h("div", { class: "project-item-sub", html: p.owner ? p.owner : "" }),
+        h("div", {
+          class: "project-item-sub",
+          html: app.me && p.owner === app.me.username ? "" : (p.owner || ""),
+        }),
         ]),
         h("div", { class: "project-item-actions" }, [
           h("div", { class: "project-item-time", html: formatProjectAge(p) }),
@@ -8755,7 +8758,6 @@ function renderProjects() {
     h("div", { class: "user-avatar", html: (user.username || "U").charAt(0).toUpperCase() }),
     h("div", { class: "user-meta" }, [
       h("div", { class: "user-name", html: user.username || "User" }),
-      h("div", { class: "user-role", html: user.isAdmin ? "admin" : t("用户") }),
     ]),
     h("div", { class: "user-caret", html: "▾" }),
   ]);
