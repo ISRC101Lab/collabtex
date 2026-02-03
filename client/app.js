@@ -3295,16 +3295,10 @@ function applyDropdownState() {
 function buildProjectSettingsPanel(project, { onDelete } = {}) {
   if (!project) return;
   const nameInput = input({ value: project.name || "" });
-  const categoryInput = input({ value: project.category || "", placeholder: t("分类") });
-  const tagsInput = input({ value: formatTagList(project.tags || []).join(", "), placeholder: t("标签(逗号分隔)") });
 
   const body = h("div", { class: "dropdown-panel project-actions-panel" }, [
     h("div", { class: "label", html: t("名称") }),
     nameInput,
-    h("div", { class: "label", html: t("分类") }),
-    categoryInput,
-    h("div", { class: "label", html: t("标签") }),
-    tagsInput,
   ]);
 
   const saveBtn = btn(t("保存"), {
@@ -3313,16 +3307,12 @@ function buildProjectSettingsPanel(project, { onDelete } = {}) {
       ev.stopPropagation();
       const payload = {
         name: nameInput.value.trim() || project.name,
-        category: categoryInput.value.trim(),
-        tags: normalizeTagList(tagsInput.value),
       };
       await api(`/api/projects/${project.id}/meta`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
       project.name = payload.name;
-      project.category = payload.category;
-      project.tags = payload.tags;
       await loadProjects();
       if (app.current.project && app.current.project.id === project.id) {
         app.current.project = app.projects.find((p) => p.id === project.id) || project;
