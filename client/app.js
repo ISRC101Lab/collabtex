@@ -2034,6 +2034,7 @@ const app = {
     importError: "",
     projectRenameId: "",
     projectDeleteArmed: "",
+    authError: "",
     autoCompile: autoCompileDefault,
     autoCompileDirty: false,
     autoCompileDirtyAt: 0,
@@ -3101,17 +3102,24 @@ async function tryAutoLogin() {
   const candidates = [];
   if (stored) candidates.push(stored);
   if (!candidates.includes("admin")) candidates.push("admin");
+  const passCandidates = [];
+  const storedPass = String(localStorage.getItem("ct_admin_password") || "").trim();
+  if (storedPass) passCandidates.push(storedPass);
+  if (!passCandidates.includes("ChangeMe!2026")) passCandidates.push("ChangeMe!2026");
+  if (!passCandidates.includes("admin")) passCandidates.push("admin");
   for (const username of candidates) {
-    try {
-      const loginRes = await api("/api/login", {
-        method: "POST",
-        body: JSON.stringify({ username, password: "admin" }),
-      });
-      if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
-      localStorage.setItem("ct_last_user", username);
-      return true;
-    } catch {
-      // try next candidate
+    for (const password of passCandidates) {
+      try {
+        const loginRes = await api("/api/login", {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        });
+        if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
+        localStorage.setItem("ct_last_user", username);
+        return true;
+      } catch {
+        // try next password
+      }
     }
   }
   return false;
@@ -8784,8 +8792,14 @@ function renderProjects() {
     app.current.openFile = null;
     app.ui.openFiles = [];
     app.ui.fileFilter = "";
-    app.view = "login";
+    app.view = "loading";
+    app.ui.authError = "";
     mount(render());
+    bootstrap().catch((e) => {
+      console.error(e);
+      app.ui.authError = t("自动登录失败");
+      mount(render());
+    });
   };
 
   const doSwitchUser = async (username, password) => {
@@ -8895,8 +8909,14 @@ function renderProject() {
     app.ui.selectRightTab = null;
     app.ui.openFiles = [];
     app.ui.fileFilter = "";
-    app.view = "login";
+    app.view = "loading";
+    app.ui.authError = "";
     mount(render());
+    bootstrap().catch((e) => {
+      console.error(e);
+      app.ui.authError = t("自动登录失败");
+      mount(render());
+    });
   };
 
   const exportProjectZip = () => {
@@ -10142,9 +10162,29 @@ function renderProject() {
 }
 
 function renderLoading() {
+  const retryBtn = btn(t("重试"), {
+    kind: "primary",
+    onClick: () => {
+      app.ui.authError = "";
+      bootstrap().catch((e) => {
+        console.error(e);
+        app.ui.authError = t("自动登录失败");
+        mount(render());
+      });
+    },
+  });
+  const body = app.ui.authError
+    ? h("div", { class: "center" }, [
+        h("div", { class: "card auth" }, [
+          h("div", { class: "h1", html: t("自动登录失败") }),
+          h("div", { class: "hint", html: t("重试") }),
+          retryBtn,
+        ]),
+      ])
+    : h("div", { class: "center" }, [h("div", { class: "hint", html: t("加载中...") })]);
   return h("div", { class: "page" }, [
     topbar(t("加载中..."), []),
-    h("div", { class: "center" }, [h("div", { class: "hint", html: t("加载中...") })]),
+    body,
   ]);
 }
 
@@ -10169,7 +10209,7 @@ function renderModalOverlay() {
 function render() {
   let page;
   if (app.view === "loading") page = renderLoading();
-  else if (app.view === "login") page = renderLogin();
+  else if (app.view === "login") page = renderLoading();
   else if (app.view === "projects") page = renderProjects();
   else if (app.view === "project") page = renderProject();
   else page = renderLoading();
@@ -10181,12 +10221,18 @@ function render() {
 
 async function bootstrap() {
   app.view = "loading";
+  app.ui.authError = "";
   applySplitVars();
   mount(render());
 
-  await loadMe();
+  await loadMe().catch(() => {});
   if (!app.me) {
-    app.view = "login";
+    const ok = await tryAutoLogin();
+    if (ok) await loadMe().catch(() => {});
+  }
+  if (!app.me) {
+    app.view = "loading";
+    app.ui.authError = t("自动登录失败");
     mount(render());
     return;
   }
@@ -10280,6 +10326,7 @@ window.addEventListener("unhandledrejection", (ev) => reportUiError(ev && ev.rea
 
 bootstrap().catch((e) => {
   console.error(e);
-  app.view = "login";
+  app.view = "loading";
+  app.ui.authError = t("自动登录失败");
   mount(render());
 });
