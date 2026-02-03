@@ -10075,7 +10075,6 @@ function renderProject() {
     h("div", { class: "pane-header" }, [
       h("div", { class: "pane-title", html: t("输出") }),
       h("div", { class: "pane-actions" }, [
-        btn(t("返回项目列表"), { kind: "tiny", onClick: () => goProjects() }),
         btn(app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), {
           kind: "tiny",
           onClick: () => toggleLeftPane(),
@@ -10136,8 +10135,15 @@ function renderProject() {
     onclick: () => setLeftRailMode(mode),
     html: label,
   });
+  const railActionBtn = (label, title, onClick) => h("button", {
+    class: "rail-btn rail-action",
+    title,
+    onclick: onClick,
+    html: label,
+  });
   const rail = h("div", { class: "studio-rail" }, [
     h("div", { class: "studio-rail-group" }, [
+      railActionBtn("⟵", t("返回项目列表"), () => goProjects()),
       railBtn("files", "☰", t("文件")),
       railBtn("view", "⚙", t("视图设置")),
     ]),
