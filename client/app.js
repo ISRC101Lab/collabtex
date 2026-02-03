@@ -170,6 +170,8 @@ const I18N = {
     "切换": "Switch",
     "请输入用户名和密码": "Enter username and password",
     "重试": "Retry",
+    "管理员密码": "Admin password",
+    "进入": "Enter",
     "自动登录失败": "Auto login failed",
     "退出": "Log out",
     "返回": "Back",
@@ -10162,23 +10164,37 @@ function renderProject() {
 }
 
 function renderLoading() {
-  const retryBtn = btn(t("重试"), {
-    kind: "primary",
-    onClick: () => {
-      app.ui.authError = "";
-      bootstrap().catch((e) => {
-        console.error(e);
-        app.ui.authError = t("自动登录失败");
-        mount(render());
-      });
-    },
-  });
+  const attempt = async (pwd) => {
+    const clean = String(pwd || "").trim();
+    if (!clean) return;
+    localStorage.setItem("ct_admin_password", clean);
+    app.ui.authError = "";
+    app.view = "loading";
+    mount(render());
+    try {
+      await bootstrap();
+    } catch (e) {
+      console.error(e);
+      app.ui.authError = t("自动登录失败");
+      mount(render());
+    }
+  };
+
+  const passwordInput = input({ placeholder: t("管理员密码"), type: "password" });
+  passwordInput.onkeydown = (ev) => {
+    if (ev.key === "Enter") attempt(passwordInput.value);
+  };
+  const enterBtn = btn(t("进入"), { kind: "primary", onClick: () => attempt(passwordInput.value) });
+
   const body = app.ui.authError
     ? h("div", { class: "center" }, [
         h("div", { class: "card auth" }, [
           h("div", { class: "h1", html: t("自动登录失败") }),
-          h("div", { class: "hint", html: t("重试") }),
-          retryBtn,
+          h("div", { class: "form" }, [
+            h("div", { class: "label", html: t("管理员密码") }),
+            passwordInput,
+            enterBtn,
+          ]),
         ]),
       ])
     : h("div", { class: "center" }, [h("div", { class: "hint", html: t("加载中...") })]);
