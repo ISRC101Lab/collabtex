@@ -8530,24 +8530,6 @@ function renderLogin() {
 }
 
 function renderProjects() {
-  const newName = input({ placeholder: t("新项目名称") });
-  const templateLabels = {
-    "blank": t("空白模板"),
-    "acm-sigconf": t("ACM SIGCONF 模板"),
-    "ai-generic": t("AI 会议模板"),
-  };
-  const templates = Array.isArray(app.ui.templates) && app.ui.templates.length
-    ? app.ui.templates
-    : [
-        { id: "blank", name: templateLabels["blank"], mainFile: "main.tex" },
-        { id: "acm-sigconf", name: templateLabels["acm-sigconf"], mainFile: "main.tex" },
-        { id: "ai-generic", name: templateLabels["ai-generic"], mainFile: "main.tex" },
-      ];
-  const templateSelect = h("select", { class: "input", title: t("模板") }, []);
-  for (const tpl of templates) {
-    const label = templateLabels[tpl.id] || tpl.name || tpl.id;
-    templateSelect.appendChild(h("option", { value: tpl.id, html: label }));
-  }
   const importZip = input({ type: "file", id: "projectImportInput" });
   importZip.accept = ".zip";
   importZip.style.display = "none";
@@ -8607,6 +8589,29 @@ function renderProjects() {
     await loadProject(p.id, { resetTab: true });
     history.pushState({}, "", `#project/${p.id}`);
     mount(render());
+  };
+
+  const createProject = async () => {
+    try {
+      const res = await api("/api/projects", {
+        method: "POST",
+        body: JSON.stringify({
+          mainFile: "main.tex",
+          template: "blank",
+        }),
+      });
+      await loadProjects();
+      clearDropdowns();
+      const created = res && res.project ? res.project : null;
+      if (created && created.id) {
+        await openProject(created);
+      } else {
+        mount(render());
+      }
+    } catch (e) {
+      app.ui.importError = e && e.message ? e.message : String(e);
+      mount(render());
+    }
   };
 
   const list = h("div", { class: "project-rows", id: "projectList" });
@@ -8797,44 +8802,11 @@ function renderProjects() {
     h("div", { class: "sidebar-spacer" }),
   ]);
 
-  const createPanel = h("div", { class: "dropdown-panel" }, [
-    h("div", { class: "label", html: t("名称") }),
-    newName,
-    h("div", { class: "label", html: t("模板") }),
-    templateSelect,
-    btn(t("创建"), {
-      kind: "primary",
-      onClick: async (ev) => {
-        ev.stopPropagation();
-        const res = await api("/api/projects", {
-          method: "POST",
-          body: JSON.stringify({
-            name: newName.value.trim() || undefined,
-            mainFile: "main.tex",
-            template: templateSelect.value || "blank",
-          }),
-        });
-        await loadProjects();
-        newName.value = "";
-        clearDropdowns();
-        const created = res && res.project ? res.project : null;
-        if (created && created.id) {
-          await openProject(created);
-        } else {
-          mount(render());
-        }
-      },
-    }),
-  ]);
-
   const actions = h("div", { class: "projects-actions" }, [
     h("div", { class: "view-toggle-group" }, [listBtn, gridBtn]),
     importZip,
     btn(t("导入"), { kind: "pill", onClick: () => importZip.click() }),
-    h("div", { class: "dropdown dropdown-right", "data-dropdown-id": "create" }, [
-      btn(`+ ${t("新建")}`, { kind: "pill primary", onClick: (ev) => toggleDropdown("create", ev) }),
-      dropdownMenu("create", createPanel),
-    ]),
+    btn(`+ ${t("新建")}`, { kind: "pill primary", onClick: (ev) => { ev.stopPropagation(); createProject(); } }),
   ]);
 
   const importErrorEl = app.ui.importError
