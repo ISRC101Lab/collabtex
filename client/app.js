@@ -9785,6 +9785,7 @@ function renderProject() {
       window.open(pdfUrl(p.id, Date.now(), app.ui.pdfPage, app.ui.pdfZoom, getPdfTargetFile(p.id)), "_blank");
     },
   });
+  openPdfBtn.classList.add("pdf-action");
 
   const pdfHint = h("div", {
     class: "hint",
@@ -9911,6 +9912,7 @@ function renderProject() {
   });
   pdfRefreshBtn.title = t("刷新");
 
+  compileBtn.classList.add("pdf-action");
   const pdfToolbar = h("div", { class: "pdf-toolbar" }, [
     h("div", { class: "pdf-toolbar-left" }, [pdfTargetSelect]),
     h("div", { class: "pdf-toolbar-center" }, [
@@ -9919,7 +9921,7 @@ function renderProject() {
       h("span", { class: "pdf-page-info", id: "pdfPageInfo", html: app.ui.pdfPageCount ? `/${app.ui.pdfPageCount}` : "" }),
       pdfNextBtn,
     ]),
-    h("div", { class: "pdf-toolbar-right" }, [pdfZoomSelect, pdfRefreshBtn]),
+    h("div", { class: "pdf-toolbar-right" }, [compileBtn, openPdfBtn, pdfZoomSelect, pdfRefreshBtn]),
   ]);
 
   const logDiv = h("div", { class: "log", id: "compileLog" });
@@ -10064,16 +10066,9 @@ function renderProject() {
     h("div", { class: "pane-header" }, [
       h("div", { class: "pane-title", html: t("输出") }),
       h("div", { class: "pane-actions" }, [
-        btn(app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), {
-          kind: "tiny",
-          onClick: () => toggleLeftPane(),
-        }),
-        compileBtn,
         statusPill,
         stagePill,
         metaPill,
-        openPdfBtn,
-        h("div", { class: "hint", html: `${t("在线")}: <span id="onlineUsers">${t("(无人)")}</span>` }),
       ]),
     ]),
     h("div", { class: "tabs" }, [
@@ -10133,6 +10128,7 @@ function renderProject() {
   const rail = h("div", { class: "studio-rail" }, [
     h("div", { class: "studio-rail-group" }, [
       railActionBtn("⟵", t("返回项目列表"), () => goProjects()),
+      railActionBtn("▤", app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), () => toggleLeftPane()),
       railBtn("files", "☰", t("文件")),
       railBtn("view", "⚙", t("视图设置")),
     ]),

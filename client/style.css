@@ -1722,6 +1722,14 @@ html.tree-compact .tree-count {
   background: #1a1a1a;
   border-color: #2a2a2a;
 }
+.pdf-toolbar .btn {
+  height: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.pdf-toolbar .btn.primary {
+  box-shadow: none;
+}
 .pdf-toolbar .pdf-page {
   width: 56px;
   text-align: center;
@@ -2881,6 +2889,16 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   background: #1d1d1d;
   color: #bdbdbd;
   cursor: pointer;
+}
+.rail-btn.rail-action {
+  background: transparent;
+  border-color: #2a2a2a;
+  color: #a8a8a8;
+}
+.rail-btn.rail-action:hover {
+  background: #222222;
+  border-color: #3a3a3a;
+  color: #ffffff;
 }
 .rail-btn.active {
   background: #2b2b2b;
