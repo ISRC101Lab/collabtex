@@ -8345,22 +8345,28 @@ function renderFileTree() {
           const ext = child.name.includes(".") ? child.name.split(".").pop() : "";
           const extLower = String(ext || "").toLowerCase();
           const extLabel = ext ? ext.slice(0, 4).toUpperCase() : "FILE";
-          const textChildren = [
-            h("button", {
-              class: "tree-filebtn",
-              html: child.name,
-              title: full,
-              onclick: async (ev) => {
-                ev.stopPropagation();
-                await openFile(full);
-              },
-            }),
-          ];
+          const nameBtn = h("button", {
+            class: "tree-filebtn",
+            html: child.name,
+            title: full,
+            onclick: async (ev) => {
+              ev.stopPropagation();
+              await openFile(full);
+            },
+          });
+          const badgeEls = [];
           if (full === app.current.mainFile) {
-            textChildren.push(h("span", { class: "tree-badge", html: t("主") }));
+            badgeEls.push(h("span", { class: "tree-badge", html: t("主") }));
           }
           if (pinned) {
-            textChildren.push(h("span", { class: "tree-pin-ind", html: "PIN", title: t("置顶") }));
+            badgeEls.push(h("span", { class: "tree-pin-ind", html: "PIN", title: t("置顶") }));
+          }
+          const nameRow = h("div", { class: "tree-name-row" }, [nameBtn, ...badgeEls]);
+          const textChildren = [nameRow];
+          const slashIdx = full.lastIndexOf("/");
+          if (slashIdx > 0) {
+            const sub = full.slice(0, slashIdx);
+            if (sub) textChildren.push(h("div", { class: "tree-subpath", html: sub, title: sub }));
           }
 
           const row = h(
@@ -9111,6 +9117,10 @@ function renderProject() {
     const next = mode === "view" ? "view" : "files";
     app.ui.leftRailMode = next;
     localStorage.setItem("ct_left_rail_mode", next);
+    if (next === "files" && app.ui.leftPaneTab !== "files") {
+      app.ui.leftPaneTab = "files";
+      localStorage.setItem("ct_left_pane_tab", "files");
+    }
     if (app.ui.leftCollapsed) setLeftCollapsed(false);
     mount(render());
   };
@@ -9131,6 +9141,18 @@ function renderProject() {
       app.ui.rightTab = "pdf";
       localStorage.setItem("ct_rightTab", "pdf");
     }
+    mount(render());
+  };
+
+  const openChatPane = () => {
+    if (!app.ui.assistantEnabled) return;
+    app.ui.leftPaneTab = "chats";
+    localStorage.setItem("ct_left_pane_tab", "chats");
+    if (app.ui.leftRailMode !== "files") {
+      app.ui.leftRailMode = "files";
+      localStorage.setItem("ct_left_rail_mode", "files");
+    }
+    if (app.ui.leftCollapsed) setLeftCollapsed(false);
     mount(render());
   };
 
@@ -9302,6 +9324,18 @@ function renderProject() {
     h("span", { html: t("自动同步 PDF") }),
   ]);
 
+  const deleteProjectBtn = btn(t("删除项目"), {
+    kind: "menu-item danger",
+    disabled: !isOwnerOrAdmin,
+    onClick: async (ev) => {
+      ev.stopPropagation();
+      if (!confirm(t("确认删除 {name} ?", { name: p.name || p.id }))) return;
+      await api(`/api/projects/${p.id}`, { method: "DELETE" });
+      clearDropdowns();
+      await goProjects();
+    },
+  });
+
   const settingsMenu = dropdownMenu("panel-settings", h("div", { class: "dropdown-panel settings-panel" }, [
     h("div", { class: "label", html: t("预览文件") }),
     pdfTargetSelect,
@@ -9316,6 +9350,8 @@ function renderProject() {
     h("div", { class: "menu-sep" }),
     openPdfMenuBtn,
     refreshPdfMenuBtn,
+    h("div", { class: "menu-sep" }),
+    deleteProjectBtn,
   ]));
 
   const settingsBtn = btn(t("设置"), { kind: "tiny", onClick: (ev) => toggleDropdown("panel-settings", ev) });
@@ -9340,21 +9376,6 @@ function renderProject() {
     "data-dropdown-id": "project-settings",
   }, [projectBtn, projectSettingsMenu]);
   const shareBtn = h("button", { class: "share-btn", onclick: openShareModal, html: t("分享") });
-
-  const filesTabBtn = h("button", {
-    class: `left-tab ${app.ui.leftPaneTab === "files" ? "active" : ""}`.trim(),
-    onclick: () => setLeftPaneTab("files"),
-    html: t("文件"),
-  });
-  const chatTabBtn = h("button", {
-    class: `left-tab ${app.ui.leftPaneTab === "chats" ? "active" : ""}`.trim(),
-    onclick: () => setLeftPaneTab("chats"),
-    html: "Chats",
-  });
-  const tabsRow = h("div", { class: "left-tabs" }, [
-    filesTabBtn,
-    app.ui.assistantEnabled ? chatTabBtn : null,
-  ]);
 
   const newFileBtn = h("button", {
     class: "left-icon-btn",
@@ -9406,8 +9427,8 @@ function renderProject() {
     h("div", { class: "left-header-top" }, [projectBtnWrap, headerActions]),
   ];
   if (app.ui.leftRailMode === "files") {
-    headerChildren.push(tabsRow);
     if (app.ui.leftPaneTab === "files") headerChildren.push(toolsRow, viewControls);
+    else headerChildren.push(h("div", { class: "left-header-sub", html: t("聊天") }));
   } else {
     headerChildren.push(h("div", { class: "left-header-sub", html: t("视图设置") }));
   }
@@ -9441,89 +9462,7 @@ function renderProject() {
     [leftHeader, uploadInput, leftBody]
   );
 
-  const wrapCmd = (cmd) => `${cmd}{` + "{{sel}}" + "{{cursor}}" + "}";
-  const envBlock = (name, body) => `\\begin{${name}}\n${body}\n\\end{${name}}`;
-
-  const toolBtn = (label, snippet, title) => {
-    const b = btn(label, { kind: "tiny", onClick: () => insertSnippet(snippet) });
-    if (title) b.title = title;
-    return b;
-  };
-  const actionBtn = (label, onClick, title) => {
-    const b = btn(label, { kind: "tiny", onClick });
-    if (title) b.title = title;
-    return b;
-  };
-
-  const figureSnippet = [
-    "\\begin{figure}[t]",
-    "  \\centering",
-    "  \\includegraphics[width=0.8\\linewidth]{fig.pdf}",
-    "  \\caption{" + "{{cursor}}" + "}",
-    "  \\label{fig:}",
-    "\\end{figure}",
-  ].join("\n");
-
-  const tableSnippet = [
-    "\\begin{table}[t]",
-    "  \\centering",
-    "  \\begin{tabular}{l l}",
-    "    A & B \\\\",
-    "  \\end{tabular}",
-    "  \\caption{" + "{{cursor}}" + "}",
-    "  \\label{tab:}",
-    "\\end{table}",
-  ].join("\n");
-
-  const toolbarToggleBtn = actionBtn(app.ui.toolbarCollapsed ? t("更多") : t("收起"), () =>
-    setToolbarCollapsed(!app.ui.toolbarCollapsed)
-  );
-  toolbarToggleBtn.id = "toolbarToggleBtn";
-
-  const toolbarPrimary = h("div", { class: "toolbar-group primary" }, [
-    toolBtn(t("章节"), wrapCmd("\\section")),
-    toolBtn(t("公式"), envBlock("equation", "  " + "{{cursor}}")),
-    actionBtn(t("图"), showImageInsert),
-    toolBtn(t("表"), tableSnippet),
-    toolBtn(t("引用"), wrapCmd("\\cite")),
-    toolbarToggleBtn,
-  ]);
-
-  const toolbarAdvanced = app.ui.toolbarCollapsed
-    ? []
-    : [
-        h("div", { class: "toolbar-group" }, [
-          h("div", { class: "toolbar-label", html: t("结构") }),
-          toolBtn(t("小节"), wrapCmd("\\subsection")),
-          toolBtn(t("小小节"), wrapCmd("\\subsubsection")),
-        ]),
-        h("div", { class: "toolbar-group" }, [
-          h("div", { class: "toolbar-label", html: t("文字") }),
-          toolBtn(t("加粗"), wrapCmd("\\textbf")),
-          toolBtn(t("斜体"), wrapCmd("\\emph")),
-          toolBtn(t("行内公式"), "$" + "{{sel}}" + "{{cursor}}" + "$"),
-        ]),
-        h("div", { class: "toolbar-group" }, [
-          h("div", { class: "toolbar-label", html: t("块") }),
-          toolBtn(t("项目符号"), envBlock("itemize", "  \\item " + "{{cursor}}")),
-          toolBtn(t("编号列表"), envBlock("enumerate", "  \\item " + "{{cursor}}")),
-        ]),
-        h("div", { class: "toolbar-group" }, [
-          h("div", { class: "toolbar-label", html: t("插入") }),
-          actionBtn(t("绘图"), showChartBuilder),
-          toolBtn(t("引用号"), wrapCmd("\\ref")),
-          toolBtn(t("标签"), wrapCmd("\\label")),
-        ]),
-        h("div", { class: "toolbar-group" }, [
-          h("div", { class: "toolbar-label", html: t("快捷") }),
-          actionBtn(t("同步 PDF"), syncPdfToCursor, t("同步到 PDF")),
-        ]),
-      ];
-
-  const editorToolbar = h("div", { class: `editor-toolbar${app.ui.toolbarCollapsed ? " compact" : ""}`, id: "editorToolbar" }, [
-    toolbarPrimary,
-    ...toolbarAdvanced,
-  ]);
+  const editorToolbar = h("div", { class: "editor-toolbar minimal", id: "editorToolbar" }, []);
 
   const bottomLog = h("pre", { class: "bottom-log", id: "bottomLog" });
   bottomLog.textContent = app.ui.bottomMode === "log" ? app.current.lastLog || "" : app.ui.bottomTerminalLog || "";
@@ -9758,6 +9697,7 @@ function renderProject() {
 
   const compileBtn = btn(t("编译"), { kind: "primary", onClick: () => compileProject({ mode: "full" }), id: "compileBtn" });
   compileBtn.title = t("编译 (Ctrl/Cmd+S)");
+  compileBtn.classList.add("compile-btn");
 
   const aiProfiles = app.ui.aiProfiles || [];
 
@@ -10121,11 +10061,20 @@ function renderProject() {
     onclick: onClick,
     html: label,
   });
+  const railChatBtn = app.ui.assistantEnabled
+    ? h("button", {
+        class: `rail-btn ${app.ui.leftPaneTab === "chats" ? "active" : ""}`.trim(),
+        title: t("聊天"),
+        onclick: () => openChatPane(),
+        html: "💬",
+      })
+    : null;
   const rail = h("div", { class: "studio-rail" }, [
     h("div", { class: "studio-rail-group" }, [
       railActionBtn("⟵", t("返回项目列表"), () => goProjects()),
       railActionBtn("▤", app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), () => toggleLeftPane()),
       railBtn("files", "☰", t("文件")),
+      railChatBtn,
       railBtn("view", "⚙", t("视图设置")),
     ]),
     h("div", { class: "studio-rail-footer" }, [
