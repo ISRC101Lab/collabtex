@@ -205,6 +205,7 @@ const I18N = {
     "重命名": "Rename",
     "删除": "Delete",
     "重命名为": "Rename to",
+    "取消": "Cancel",
     "确认删除": "Confirm delete",
     "确认删除 {name} ?": "Delete {name}?",
     "结构": "Structure",
@@ -2031,6 +2032,7 @@ const app = {
     dropdownOpen: "",
     switchError: "",
     importError: "",
+    projectRenameId: "",
     projectDeleteArmed: "",
     autoCompile: autoCompileDefault,
     autoCompileDirty: false,
@@ -3261,6 +3263,7 @@ function showModal({ title, bodyEl, actions = [] }) {
 function clearDropdowns() {
   if (!app || !app.ui) return;
   app.ui.dropdownOpen = "";
+  app.ui.projectRenameId = "";
   app.ui.projectDeleteArmed = "";
   applyDropdownState();
 }
@@ -3270,9 +3273,15 @@ function toggleDropdown(id, ev) {
   const next = app.ui.dropdownOpen === id ? "" : id;
   app.ui.dropdownOpen = next;
   if (next === "user") app.ui.switchError = "";
-  if (!next || !next.startsWith("project:")) app.ui.projectDeleteArmed = "";
+  if (!next || !next.startsWith("project:")) {
+    app.ui.projectDeleteArmed = "";
+    app.ui.projectRenameId = "";
+  }
   if (next.startsWith("project:") && app.ui.projectDeleteArmed && next !== `project:${app.ui.projectDeleteArmed}`) {
     app.ui.projectDeleteArmed = "";
+  }
+  if (next.startsWith("project:") && app.ui.projectRenameId && next !== `project:${app.ui.projectRenameId}`) {
+    app.ui.projectRenameId = "";
   }
   applyDropdownState();
 }
@@ -3295,11 +3304,13 @@ function applyDropdownState() {
 function buildProjectSettingsPanel(project, { onDelete } = {}) {
   if (!project) return;
   const nameInput = input({ value: project.name || "" });
+  const isEditing = app.ui.projectRenameId === project.id;
 
-  const body = h("div", { class: "dropdown-panel project-actions-panel" }, [
-    h("div", { class: "label", html: t("名称") }),
-    nameInput,
-  ]);
+  const body = h("div", { class: "dropdown-panel project-actions-panel" }, []);
+  if (isEditing) {
+    body.appendChild(h("div", { class: "label", html: t("名称") }));
+    body.appendChild(nameInput);
+  }
 
   const saveBtn = btn(t("保存"), {
     kind: "primary",
@@ -3318,6 +3329,23 @@ function buildProjectSettingsPanel(project, { onDelete } = {}) {
         app.current.project = app.projects.find((p) => p.id === project.id) || project;
       }
       clearDropdowns();
+      mount(render());
+    },
+  });
+
+  const renameBtn = btn(t("重命名"), {
+    onClick: (ev) => {
+      ev.stopPropagation();
+      app.ui.projectRenameId = project.id;
+      app.ui.projectDeleteArmed = "";
+      mount(render());
+    },
+  });
+
+  const cancelBtn = btn(t("取消"), {
+    onClick: (ev) => {
+      ev.stopPropagation();
+      app.ui.projectRenameId = "";
       mount(render());
     },
   });
@@ -3343,7 +3371,8 @@ function buildProjectSettingsPanel(project, { onDelete } = {}) {
     },
   });
 
-  body.appendChild(h("div", { class: "dropdown-actions" }, [saveBtn, delBtn]));
+  body.appendChild(h("div", { class: "dropdown-actions" }, isEditing ? [saveBtn, cancelBtn] : [renameBtn]));
+  body.appendChild(h("div", { class: "dropdown-actions" }, [delBtn]));
   return body;
 }
 

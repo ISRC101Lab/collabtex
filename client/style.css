@@ -2532,6 +2532,9 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   gap: 8px;
   justify-content: flex-end;
 }
+.dropdown-actions + .dropdown-actions {
+  margin-top: 4px;
+}
 .user-menu {
   display: grid;
   gap: 10px;
