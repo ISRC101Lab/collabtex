@@ -2030,6 +2030,7 @@ const app = {
     assistantEnabled: localStorage.getItem("ct_assistant_enabled") !== "0",
     dropdownOpen: "",
     switchError: "",
+    importError: "",
     projectDeleteArmed: "",
     autoCompile: autoCompileDefault,
     autoCompileDirty: false,
@@ -8547,10 +8548,29 @@ function renderProjects() {
     const label = templateLabels[tpl.id] || tpl.name || tpl.id;
     templateSelect.appendChild(h("option", { value: tpl.id, html: label }));
   }
-  const importName = input({ placeholder: t("导入项目名称 (可选)") });
-  const importMain = input({ placeholder: t("主文件 (例如 main.tex 或 ICS/main.tex)"), value: "main.tex" });
-  const importZip = input({ type: "file" });
+  const importZip = input({ type: "file", id: "projectImportInput" });
   importZip.accept = ".zip";
+  importZip.style.display = "none";
+  importZip.onchange = async (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const baseName = file.name.replace(/\.[^.]+$/, "").trim();
+    const fd = new FormData();
+    if (baseName) fd.append("name", baseName);
+    fd.append("mainFile", "main.tex");
+    fd.append("zip", file);
+    app.ui.importError = "";
+    try {
+      await api("/api/projects/import", { method: "POST", body: fd });
+      await loadProjects();
+      mount(render());
+    } catch (e) {
+      app.ui.importError = e && e.message ? e.message : String(e);
+      mount(render());
+    } finally {
+      importZip.value = "";
+    }
+  };
 
   if (app.ui.projectCategory !== "all") {
     app.ui.projectCategory = "all";
@@ -8796,43 +8816,19 @@ function renderProjects() {
     }),
   ]);
 
-  const importPanel = h("div", { class: "dropdown-panel" }, [
-    h("div", { class: "label", html: t("名称") }),
-    importName,
-    h("div", { class: "label", html: t("主文件 (例如 main.tex 或 ICS/main.tex)") }),
-    importMain,
-    h("div", { class: "label", html: t("导入") }),
-    importZip,
-    btn(t("导入"), {
-      kind: "primary",
-      onClick: async (ev) => {
-        ev.stopPropagation();
-        const file = importZip.files && importZip.files[0];
-        if (!file) return;
-        const fd = new FormData();
-        if (importName.value.trim()) fd.append("name", importName.value.trim());
-        fd.append("mainFile", importMain.value.trim() || "main.tex");
-        fd.append("zip", file);
-        await api("/api/projects/import", { method: "POST", body: fd });
-        await loadProjects();
-        importZip.value = "";
-        clearDropdowns();
-        mount(render());
-      },
-    }),
-  ]);
-
   const actions = h("div", { class: "projects-actions" }, [
     h("div", { class: "view-toggle-group" }, [listBtn, gridBtn]),
-    h("div", { class: "dropdown dropdown-right", "data-dropdown-id": "import" }, [
-      btn(`${t("导入")} ▾`, { kind: "pill", onClick: (ev) => toggleDropdown("import", ev) }),
-      dropdownMenu("import", importPanel),
-    ]),
+    importZip,
+    btn(t("导入"), { kind: "pill", onClick: () => importZip.click() }),
     h("div", { class: "dropdown dropdown-right", "data-dropdown-id": "create" }, [
       btn(`+ ${t("新建")}`, { kind: "pill primary", onClick: (ev) => toggleDropdown("create", ev) }),
       dropdownMenu("create", createPanel),
     ]),
   ]);
+
+  const importErrorEl = app.ui.importError
+    ? h("div", { class: "hint error project-import-error", html: app.ui.importError })
+    : null;
 
   const main = h("div", { class: "projects-main" }, [
     h("div", { class: "projects-topbar" }, [
@@ -8840,7 +8836,7 @@ function renderProjects() {
       h("div", { class: "projects-search" }, [projectFilterInput]),
       actions,
     ]),
-    h("div", { class: "projects-content" }, [list]),
+    h("div", { class: "projects-content" }, [importErrorEl, list]),
   ]);
 
   return h("div", { class: "page projects-page" }, [

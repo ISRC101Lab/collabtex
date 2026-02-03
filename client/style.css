@@ -2678,6 +2678,9 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   overflow: auto;
   padding: 16px 20px 24px;
 }
+.project-import-error {
+  margin-bottom: 8px;
+}
 .project-rows {
   display: flex;
   flex-direction: column;
