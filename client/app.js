@@ -9762,21 +9762,6 @@ function renderProject() {
     },
   });
 
-  const statusPill = h("span", {
-    id: "compileStatus",
-    class: "compile-status",
-    "data-status": app.compile.status,
-    html: compileStatusLabel(app.compile.status),
-  });
-  const stagePill = h("span", {
-    class: "compile-stage",
-    id: "compileStage",
-    html: app.compile.stage || "",
-    style: app.compile.stage ? "" : "display:none",
-  });
-  const metaPill = h("span", { class: "compile-meta", id: "compileMeta", html: "" });
-  setTimeout(() => updateCompileMetaView(), 0);
-
   const hasPdf = !!(app.current.artifacts && app.current.artifacts.pdf && app.current.artifacts.pdf.exists);
   const openPdfBtn = btn(t("打开 PDF"), {
     id: "openPdfBtn",
@@ -10063,14 +10048,6 @@ function renderProject() {
   selectTab(app.ui.rightTab || "pdf");
 
   const right = h("div", { class: "pane right-pane", id: "rightPane" }, [
-    h("div", { class: "pane-header" }, [
-      h("div", { class: "pane-title", html: t("输出") }),
-      h("div", { class: "pane-actions" }, [
-        statusPill,
-        stagePill,
-        metaPill,
-      ]),
-    ]),
     h("div", { class: "tabs" }, [
       mkTabBtn(t("PDF 预览"), "pdf"),
       mkTabBtn(t("日志"), "logs"),
