@@ -9,7 +9,10 @@ const publicDir = path.join(root, "public");
 await fs.mkdir(publicDir, { recursive: true });
 
 // Copy static files
-await fs.copyFile(path.join(clientDir, "index.html"), path.join(publicDir, "index.html"));
+const buildId = Date.now().toString();
+const indexSrc = await fs.readFile(path.join(clientDir, "index.html"), "utf8");
+const indexOut = indexSrc.replaceAll("{{BUILD_ID}}", buildId);
+await fs.writeFile(path.join(publicDir, "index.html"), indexOut);
 await fs.copyFile(path.join(clientDir, "style.css"), path.join(publicDir, "style.css"));
 try {
   const assetsSrc = path.join(clientDir, "assets");
