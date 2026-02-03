@@ -2561,13 +2561,14 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   gap: 12px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: linear-gradient(180deg, #252525, #1f1f1f);
+  background: linear-gradient(180deg, #262626, #1f1f1f);
   border: 1px solid #2f2f2f;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
 .user-card:hover {
-  background: linear-gradient(180deg, #2a2a2a, #222222);
+  background: linear-gradient(180deg, #2b2b2b, #222222);
   border-color: #3a3a3a;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.25);
 }
 .user-avatar {
   width: 38px;
@@ -2587,10 +2588,16 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
 .user-meta { display: flex; flex-direction: column; gap: 2px; }
 .user-name { font-size: 14px; font-weight: 600; letter-spacing: 0.01em; }
 .user-role {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid #343434;
+  background: #1a1a1a;
   font-size: 9.5px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #a3a3a3;
+  color: #b0b0b0;
 }
 .user-caret {
   margin-left: auto;
@@ -2854,15 +2861,31 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   color: #7c7c7c;
 }
 .rail-avatar {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--user-accent, #6d6dff);
   color: #fff;
   font-weight: 600;
+  font-size: 13px;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow:
+    0 0 0 2px rgba(16, 16, 16, 0.9),
+    0 8px 18px rgba(0, 0, 0, 0.35);
+}
+.rail-avatar::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3ddc84;
+  border: 2px solid #101010;
 }
 .studio-main {
   flex: 1;
