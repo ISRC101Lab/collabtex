@@ -7389,6 +7389,7 @@ function renderFileTree() {
 
   const draw = () => {
     container.innerHTML = "";
+    const frag = document.createDocumentFragment();
     const filter = app.ui.fileFilter.trim().toLowerCase();
     const baseList = app.current.tree || [];
     const viewList = app.ui.fileView === "all" ? baseList : baseList.filter((p) => isFocusFile(p));
