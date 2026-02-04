@@ -590,6 +590,14 @@ async function renderPdfPages({ projectId, refresh = false } = {}) {
   const pagesHost = document.getElementById("pdfPages");
   if (!viewer || !pagesHost) return;
   const prevScrollTop = viewer.scrollTop;
+  const clientW = viewer.clientWidth;
+  const clientH = viewer.clientHeight;
+  if (clientW < 40 || clientH < 40) {
+    setTimeout(() => {
+      renderPdfPages({ projectId: pid, refresh }).catch(() => {});
+    }, 80);
+    return;
+  }
 
   const doc = await ensurePdfDoc(pid, { refresh });
   const total = doc.numPages || 1;
@@ -8256,51 +8264,6 @@ function renderProject() {
     },
   });
   clearFilterBtn.appendChild(iconSvg("clear", { size: 12 }));
-  const showFileActions = () => {
-    const selectedCount = app.ui.selectedFiles ? app.ui.selectedFiles.size : 0;
-    const body = h("div", { class: "file-actions-modal" }, [
-      h("div", { class: "hint", html: t("已选择 {n} 个文件", { n: selectedCount }) }),
-      btn(t("定位当前文件"), { onClick: () => { revealActiveFile(); closeModal(); } }),
-      btn(t("新文件夹"), {
-        onClick: async () => {
-          const rel = prompt(t("文件夹路径"), "assets");
-          const clean = String(rel || "").trim().replace(/\/+$/, "");
-          if (!clean) return;
-          await api(`/api/projects/${app.current.project.id}/file`, {
-            method: "POST",
-            body: JSON.stringify({ path: `${clean}/${FOLDER_PLACEHOLDER}`, content: "" }),
-          });
-          await loadProject(app.current.project.id);
-          cleanupEditor();
-          mount(render());
-        },
-      }),
-      btn(t("展开全部"), { onClick: () => { expandAllFolders(); closeModal(); } }),
-      btn(t("收起全部"), { onClick: () => { collapseAllFolders(); closeModal(); } }),
-      btn(app.ui.fileMultiSelect ? t("退出多选") : t("开启多选"), {
-        onClick: () => { toggleFileMultiSelect(); closeModal(); },
-      }),
-      btn(t("置顶所选"), {
-        disabled: selectedCount === 0,
-        onClick: () => { pinFiles(Array.from(app.ui.selectedFiles || [])); closeModal(); },
-      }),
-      btn(t("取消置顶所选"), {
-        disabled: selectedCount === 0,
-        onClick: () => { unpinFiles(Array.from(app.ui.selectedFiles || [])); closeModal(); },
-      }),
-      btn(t("删除所选"), {
-        kind: "danger",
-        disabled: selectedCount === 0,
-        onClick: () => { deleteSelectedFiles(); closeModal(); },
-      }),
-      btn(t("移动所选"), {
-        disabled: selectedCount === 0,
-        onClick: () => { moveSelectedFiles(); closeModal(); },
-      }),
-    ]);
-    showModal({ title: t("文件管理"), bodyEl: body, actions: [] });
-  };
-
   const onDrop = async (ev) => {
     ev.preventDefault();
     ev.currentTarget.classList.remove("drop-ready");
@@ -8590,12 +8553,6 @@ function renderProject() {
     onclick: () => uploadInput.click(),
   });
   uploadBtn.appendChild(iconSvg("upload"));
-  const manageBtn = h("button", {
-    class: "left-icon-btn",
-    title: t("管理"),
-    onclick: () => showFileActions(),
-  });
-  manageBtn.appendChild(iconSvg("more"));
   const exportBtn = h("button", {
     class: "left-icon-btn",
     title: t("导出 Zip"),
@@ -8609,7 +8566,6 @@ function renderProject() {
     newFileBtn,
     uploadBtn,
     exportBtn,
-    manageBtn,
   ]);
   const headerActions = h("div", { class: "left-header-actions" }, [shareWrap, settingsWrap]);
   const headerChildren = [

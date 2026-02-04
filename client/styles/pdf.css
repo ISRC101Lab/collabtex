@@ -80,9 +80,8 @@
   background: #181818;
   position: relative;
   overflow: auto;
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
+  display: block;
+  height: 100%;
   contain: layout paint;
   overscroll-behavior: contain;
   scrollbar-color: #2b2b2b transparent;
@@ -101,6 +100,7 @@
   padding: 10px 0 14px;
   width: 100%;
   contain: paint;
+  margin: 0 auto;
 }
 
 
@@ -172,13 +172,17 @@
   gap: 6px;
   align-items: center;
   justify-content: space-between;
+  pointer-events: none;
 }
 .pdf-action-left,
 .pdf-action-right {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  pointer-events: auto;
 }
+.pdf-action-bar .btn,
+.pdf-action-bar .pdf-page-badge { pointer-events: auto; }
 
 
 .pdf-action-bar .btn {
