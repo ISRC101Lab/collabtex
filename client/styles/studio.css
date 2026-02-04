@@ -34,7 +34,12 @@
   background: #1d1d1d;
   color: #bdbdbd;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
+.rail-btn .icon { display: inline-flex; }
 .rail-btn.rail-action {
   background: transparent;
   border-color: #2a2a2a;
@@ -50,6 +55,10 @@
   border-color: rgba(90, 90, 255, 0.45);
   color: #ffffff;
   box-shadow: 0 8px 18px rgba(90, 90, 255, 0.25);
+}
+.rail-btn:focus-visible {
+  outline: 2px solid rgba(90, 90, 255, 0.45);
+  outline-offset: 2px;
 }
 .studio-rail-footer {
   margin-top: auto;

@@ -55,6 +55,12 @@ const ICONS = {
   more: '<circle cx="6" cy="12" r="1.4" fill="currentColor" /><circle cx="12" cy="12" r="1.4" fill="currentColor" /><circle cx="18" cy="12" r="1.4" fill="currentColor" />',
   clear: '<path d="M6 6l12 12M18 6l-12 12" />',
   compile: '<path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" />',
+  back: '<path d="M15 6l-6 6 6 6" /><path d="M9 12h10" />',
+  panel: '<rect x="4" y="5" width="16" height="14" rx="2" /><path d="M9 5v14" />',
+  files: '<path d="M4 7h6l2 2h8v8H4z" /><path d="M4 7v10" />',
+  chat: '<path d="M4 6h16v9H8l-4 4z" />',
+  list: '<path d="M6 7h12M6 12h12M6 17h12" />',
+  grid: '<rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" />',
 };
 
 function h(tag, attrs = {}, children = []) {
@@ -7977,7 +7983,7 @@ function renderProjects() {
   const list = h("div", { class: "project-rows", id: "projectList" });
 
   const drawList = () => {
-    list.innerHTML = "";
+    const frag = document.createDocumentFragment();
     list.classList.toggle("grid", app.ui.projectView === "grid");
     const filtered = app.projects.filter((p) =>
       projectMatchesScope(p, app.ui.projectScope, app.me) &&
@@ -7985,7 +7991,8 @@ function renderProjects() {
     );
     if (!filtered.length) {
       const emptyLabel = app.ui.guestMode ? t("临时用户暂无项目") : t("(无匹配文件)");
-      list.appendChild(h("div", { class: "hint", html: emptyLabel }));
+      frag.appendChild(h("div", { class: "hint", html: emptyLabel }));
+      list.replaceChildren(frag);
       return;
     }
     const sorted = filtered.slice().sort((a, b) => {
@@ -7999,8 +8006,8 @@ function renderProjects() {
       const actionsBtn = h("button", {
         class: "project-item-more",
         onclick: (ev) => toggleDropdown(menuId, ev),
-        html: "⋯",
       });
+      actionsBtn.appendChild(iconSvg("more", { size: 14 }));
       const actionsWrap = h("div", {
         class: "dropdown dropdown-right",
         "data-dropdown-id": menuId,
@@ -8013,6 +8020,7 @@ function renderProjects() {
       const row = h("div", {
         class: "project-item",
         role: "button",
+        tabindex: "0",
         onclick: (ev) => {
           if (
             ev.target.closest(".project-item-actions") ||
@@ -8022,6 +8030,12 @@ function renderProjects() {
             return;
           }
           openProject(p);
+        },
+        onkeydown: (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            ev.preventDefault();
+            openProject(p);
+          }
         },
         title: p.name || p.id,
       }, [
@@ -8040,8 +8054,9 @@ function renderProjects() {
           actionsWrap,
         ]),
       ]);
-      list.appendChild(row);
+      frag.appendChild(row);
     }
+    list.replaceChildren(frag);
   };
   drawList();
   app.ui.refreshProjectList = drawList;
@@ -8078,14 +8093,14 @@ function renderProjects() {
     class: `view-toggle ${app.ui.projectView !== "grid" ? "active" : ""}`.trim(),
     title: t("列表视图"),
     onclick: () => setProjectView("list"),
-    html: "☰",
   });
+  listBtn.appendChild(iconSvg("list", { size: 14 }));
   const gridBtn = h("button", {
     class: `view-toggle ${app.ui.projectView === "grid" ? "active" : ""}`.trim(),
     title: t("网格视图"),
     onclick: () => setProjectView("grid"),
-    html: "▦",
   });
+  gridBtn.appendChild(iconSvg("grid", { size: 14 }));
 
   const titleEl = h("div", { class: "projects-title", html: scopeLabel(app.ui.projectScope) });
 
@@ -9276,38 +9291,26 @@ function renderProject() {
   const railColor = pickColor(railUser.username || "U");
   const railAvatar = h("div", { class: "rail-avatar", html: (railUser.username || "U").charAt(0).toUpperCase() });
   railAvatar.style.setProperty("--user-accent", railColor.color);
-  const railBtn = (_mode, label, title) => h("button", {
-    class: `rail-btn ${app.ui.leftRailMode === "files" ? "active" : ""}`.trim(),
-    title,
-    onclick: () => setLeftRailMode("files"),
-    html: label,
-  });
-  const railActionBtn = (label, title, onClick) => h("button", {
-    class: "rail-btn rail-action",
-    title,
-    onclick: onClick,
-    html: label,
-  });
-  const railActionLink = (label, title, href, onClick) => h("a", {
-    class: "rail-btn rail-action",
-    title,
-    href,
-    onclick: onClick,
-    html: label,
-  });
+  const railIconBtn = (icon, title, onClick, { active = false, kind = "" } = {}) => {
+    const cls = `rail-btn ${kind} ${active ? "active" : ""}`.trim();
+    const btnEl = h("button", { class: cls, title, onclick: onClick });
+    btnEl.appendChild(iconSvg(icon, { size: 16 }));
+    return btnEl;
+  };
+  const railActionBtn = (icon, title, onClick) => railIconBtn(icon, title, onClick, { kind: "rail-action" });
+  const railActionLink = (icon, title, href, onClick) => {
+    const linkEl = h("a", { class: "rail-btn rail-action", title, href, onclick: onClick });
+    linkEl.appendChild(iconSvg(icon, { size: 16 }));
+    return linkEl;
+  };
   const railChatBtn = app.ui.assistantEnabled
-    ? h("button", {
-        class: `rail-btn ${app.ui.leftPaneTab === "chats" ? "active" : ""}`.trim(),
-        title: t("聊天"),
-        onclick: () => openChatPane(),
-        html: "💬",
-      })
+    ? railIconBtn("chat", t("聊天"), () => openChatPane(), { active: app.ui.leftPaneTab === "chats" })
     : null;
   const rail = h("div", { class: "studio-rail" }, [
     h("div", { class: "studio-rail-group" }, [
-      railActionLink("⟵", t("返回项目列表"), "#projects", () => goProjects()),
-      railActionBtn("▤", app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), () => toggleLeftPane()),
-      railBtn("files", "☰", t("文件")),
+      railActionLink("back", t("返回项目列表"), "#projects", () => goProjects()),
+      railActionBtn("panel", app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), () => toggleLeftPane()),
+      railIconBtn("files", t("文件"), () => setLeftRailMode("files"), { active: app.ui.leftRailMode === "files" }),
       railChatBtn,
     ]),
     h("div", { class: "studio-rail-footer" }, [

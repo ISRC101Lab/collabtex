@@ -275,10 +275,18 @@
   background: transparent;
   color: #9a9a9a;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .view-toggle.active {
   background: #2b2b2b;
   color: #ffffff;
+}
+.view-toggle:focus-visible,
+.project-item-more:focus-visible {
+  outline: 2px solid rgba(90, 90, 255, 0.45);
+  outline-offset: 2px;
 }
 .btn.pill {
   border-radius: 999px;
@@ -311,6 +319,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  contain: layout paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 520px;
 }
 .project-rows.grid {
   display: grid;
@@ -327,6 +338,10 @@
   border-radius: 8px;
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease;
+}
+.project-item:focus-visible {
+  outline: 2px solid rgba(90, 90, 255, 0.45);
+  outline-offset: 2px;
 }
 .project-rows.grid .project-item {
   flex-direction: column;
@@ -398,5 +413,8 @@
   width: 26px;
   height: 24px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .project-item-more:hover { background: #2a2a2a; color: #fff; }
