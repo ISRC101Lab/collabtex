@@ -2454,6 +2454,7 @@ async function openProjectById(projectId, { pushHash = true, resetTab = true, se
   mount(render());
   try {
     await loadProject(projectId, { resetTab });
+    app.view = "project";
     if (pushHash) history.pushState({}, "", `#project/${projectId}`);
     mount(render());
     return true;
@@ -2465,6 +2466,33 @@ async function openProjectById(projectId, { pushHash = true, resetTab = true, se
     mount(render());
     return false;
   }
+}
+
+async function handleRoute() {
+  const hash = location.hash || "";
+  if (hash && hash.startsWith("#project/")) {
+    const projectId = hash.slice("#project/".length).trim();
+    if (!projectId) return false;
+    if (app && app.ui && app.ui.guestMode) {
+      app.view = "projects";
+      history.replaceState({}, "", "#projects");
+      mount(render());
+      return true;
+    }
+    if (app.view === "project" && app.current.project && app.current.project.id === projectId) {
+      return true;
+    }
+    await openProjectById(projectId, { pushHash: false, resetTab: true });
+    return true;
+  }
+  if (!hash || hash === "#" || hash === "#projects") {
+    if (app.view !== "projects") {
+      app.view = "projects";
+      mount(render());
+    }
+    return true;
+  }
+  return false;
 }
 
 function topbar(title, rightEls) {
@@ -7910,7 +7938,12 @@ function renderProjects() {
     return t("你的项目");
   };
 
-  const openProject = async (p) => openProjectById(p && p.id ? p.id : "", { resetTab: true, seedProject: p });
+  const openProject = async (p) => {
+    if (!p || !p.id) return;
+    const hash = `#project/${p.id}`;
+    if (location.hash !== hash) history.pushState({}, "", hash);
+    await openProjectById(p.id, { pushHash: false, resetTab: true, seedProject: p });
+  };
 
   const createProject = async () => {
     if (app.ui.guestMode) {
@@ -7972,8 +8005,9 @@ function renderProjects() {
         actionsMenu,
       ]);
 
-      const row = h("div", {
+      const row = h("a", {
         class: "project-item",
+        href: `#project/${p.id}`,
         onclick: () => openProject(p),
         title: p.name || p.id,
       }, [
@@ -9318,16 +9352,11 @@ async function bootstrap() {
   }
 
   await loadProjects();
-  const hash = location.hash || "";
-  if (hash && hash.startsWith("#project/")) {
-    const projectId = hash.slice("#project/".length).trim();
-    if (projectId) {
-      await openProjectById(projectId, { pushHash: false, resetTab: true });
-      return;
-    }
+  const routed = await handleRoute();
+  if (!routed) {
+    app.view = "projects";
+    mount(render());
   }
-  app.view = "projects";
-  mount(render());
 }
 
 window.addEventListener("beforeunload", () => cleanupEditor());
@@ -9384,6 +9413,9 @@ window.addEventListener("keydown", (ev) => {
       showGoToLine();
     }
   }
+});
+window.addEventListener("hashchange", () => {
+  handleRoute().catch(() => {});
 });
 
 function reportUiError(err) {
