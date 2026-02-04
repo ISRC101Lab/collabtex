@@ -484,6 +484,7 @@ body::after {
 .pane.left {
   background: var(--panel);
   box-shadow: var(--shadow-soft);
+  overflow: visible;
 }
 .pane.left.drop-ready {
   border-color: rgba(13, 114, 122, 0.4);
@@ -697,7 +698,7 @@ html.tree-compact .recent-item {
   gap: 6px;
   padding: 2px 6px;
   padding-left: calc(8px + clamp(0, var(--indent, 0), 6) * 10px);
-  padding-right: 66px;
+  padding-right: 42px;
   border-radius: 4px;
   border: 1px solid transparent;
   margin-left: 0;
@@ -916,6 +917,47 @@ html.tree-compact .tree-count {
   top: 6px;
   opacity: 0;
   transition: opacity 120ms ease;
+}
+.tree-action-wrap {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  display: flex;
+  align-items: center;
+}
+.tree-menu-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+  background: #1f1f1f;
+  color: #b5b5b5;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tree-menu-btn:hover {
+  background: #242424;
+  border-color: #3a3a3a;
+  color: #ffffff;
+}
+.tree-action-panel .btn.menu-item {
+  width: 100%;
+}
+.tree-action-wrap .dropdown-menu {
+  min-width: 160px;
+}
+
+.share-panel .input {
+  height: 30px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #1a1a1a;
+  border-color: #2a2a2a;
+  font-size: 12px;
 }
 .tree-actions .btn.tiny {
   padding: 2px 5px;

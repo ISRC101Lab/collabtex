@@ -8215,92 +8215,112 @@ function renderFileTree() {
           const fileCount = countFiles(child);
           const countEl = fileCount > 0 ? h("span", { class: "tree-count", html: String(fileCount) }) : null;
           const actions = !isGroup
-            ? h("div", { class: "tree-actions" }, [
-                btn(t("新文件夹"), {
-                  kind: "tiny",
-                  onClick: async (ev) => {
-                    ev.stopPropagation();
-                    const rel = prompt(t("文件夹路径"), full ? `${full}/assets` : "assets");
-                    const clean = String(rel || "").trim().replace(/\/+$/, "");
-                    if (!clean) return;
-                    await api(`/api/projects/${app.current.project.id}/file`, {
-                      method: "POST",
-                      body: JSON.stringify({ path: `${clean}/${FOLDER_PLACEHOLDER}`, content: "" }),
-                    });
-                    await loadProject(app.current.project.id);
-                    cleanupEditor();
-                    mount(render());
-                  },
-                }),
-                btn(t("重命名"), {
-                  kind: "tiny",
-                  onClick: async (ev) => {
-                    ev.stopPropagation();
-                    const np = prompt(t("重命名为"), full);
-                    if (!np || np === full) return;
-                    const projectId = app.current.project && app.current.project.id;
-                    const nextOpenFiles = remapPathList(app.ui.openFiles, full, np);
-                    const nextSelected = remapPathSet(app.ui.selectedFiles, full, np);
-                    const nextPinned = remapPathList(app.ui.pinnedFiles, full, np);
-                    const nextOpenFile = app.current.openFile ? remapPathPrefix(app.current.openFile, full, np) : null;
-                    await api(`/api/projects/${app.current.project.id}/rename`, {
-                      method: "POST",
-                      body: JSON.stringify({ oldPath: full, newPath: np }),
-                    });
-                    if (projectId) {
-                      setOpenFiles(nextOpenFiles);
-                      setPinnedFiles(nextPinned);
-                      if (nextOpenFile) localStorage.setItem(lastOpenFileKey(projectId), nextOpenFile);
-                    }
-                    await loadProject(app.current.project.id);
-                    app.ui.selectedFiles = nextSelected;
-                    const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
-                    if (filtered.length) setOpenFiles(filtered);
-                    if (nextOpenFile && app.current.tree.includes(nextOpenFile)) {
-                      await openFile(nextOpenFile);
-                      return;
-                    }
-                    cleanupEditor();
-                    mount(render());
-                  },
-                }),
-                btn(t("删除"), {
-                  kind: "tiny danger",
-                  onClick: async (ev) => {
-                    ev.stopPropagation();
-                    if (!confirm(t("确认删除 {name} ?", { name: full }))) return;
-                    const projectId = app.current.project && app.current.project.id;
-                    const nextOpenFiles = filterPathList(app.ui.openFiles, full);
-                    const nextSelected = filterPathSet(app.ui.selectedFiles, full);
-                    const nextPinned = filterPathList(app.ui.pinnedFiles, full);
-                    const wasOpen = app.current.openFile && isPathUnderPrefix(app.current.openFile, full);
-                    await api(`/api/projects/${app.current.project.id}/file`, {
-                      method: "DELETE",
-                      body: JSON.stringify({ path: full }),
-                    });
-                    if (projectId) {
-                      setOpenFiles(nextOpenFiles);
-                      setPinnedFiles(nextPinned);
-                      const last = localStorage.getItem(lastOpenFileKey(projectId)) || "";
-                      if (last && isPathUnderPrefix(last, full)) localStorage.removeItem(lastOpenFileKey(projectId));
-                    }
-                    await loadProject(app.current.project.id);
-                    app.ui.selectedFiles = nextSelected;
-                    if (nextOpenFiles.length) {
-                      const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
-                      if (filtered.length) setOpenFiles(filtered);
-                    }
-                    if (wasOpen) {
-                      app.current.openFile = null;
-                      cleanupEditor();
-                      mount(render());
-                      return;
-                    }
-                    cleanupEditor();
-                    mount(render());
-                  },
-                }),
-              ])
+            ? (() => {
+                const menuId = `tree:${encodeURIComponent(full)}`;
+                const menuBtn = h("button", {
+                  class: "tree-menu-btn",
+                  title: t("操作"),
+                  onclick: (ev) => toggleDropdown(menuId, ev),
+                  html: "▸",
+                });
+                const menu = dropdownMenu(
+                  menuId,
+                  h("div", { class: "dropdown-panel tree-action-panel" }, [
+                    btn(t("新文件夹"), {
+                      kind: "menu-item",
+                      onClick: async (ev) => {
+                        ev.stopPropagation();
+                        const rel = prompt(t("文件夹路径"), full ? `${full}/assets` : "assets");
+                        const clean = String(rel || "").trim().replace(/\/+$/, "");
+                        if (!clean) return;
+                        await api(`/api/projects/${app.current.project.id}/file`, {
+                          method: "POST",
+                          body: JSON.stringify({ path: `${clean}/${FOLDER_PLACEHOLDER}`, content: "" }),
+                        });
+                        await loadProject(app.current.project.id);
+                        cleanupEditor();
+                        clearDropdowns();
+                        mount(render());
+                      },
+                    }),
+                    btn(t("重命名"), {
+                      kind: "menu-item",
+                      onClick: async (ev) => {
+                        ev.stopPropagation();
+                        const np = prompt(t("重命名为"), full);
+                        if (!np || np === full) return;
+                        const projectId = app.current.project && app.current.project.id;
+                        const nextOpenFiles = remapPathList(app.ui.openFiles, full, np);
+                        const nextSelected = remapPathSet(app.ui.selectedFiles, full, np);
+                        const nextPinned = remapPathList(app.ui.pinnedFiles, full, np);
+                        const nextOpenFile = app.current.openFile ? remapPathPrefix(app.current.openFile, full, np) : null;
+                        await api(`/api/projects/${app.current.project.id}/rename`, {
+                          method: "POST",
+                          body: JSON.stringify({ oldPath: full, newPath: np }),
+                        });
+                        if (projectId) {
+                          setOpenFiles(nextOpenFiles);
+                          setPinnedFiles(nextPinned);
+                          if (nextOpenFile) localStorage.setItem(lastOpenFileKey(projectId), nextOpenFile);
+                        }
+                        await loadProject(app.current.project.id);
+                        app.ui.selectedFiles = nextSelected;
+                        const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
+                        if (filtered.length) setOpenFiles(filtered);
+                        clearDropdowns();
+                        if (nextOpenFile && app.current.tree.includes(nextOpenFile)) {
+                          await openFile(nextOpenFile);
+                          return;
+                        }
+                        cleanupEditor();
+                        mount(render());
+                      },
+                    }),
+                    btn(t("删除"), {
+                      kind: "menu-item danger",
+                      onClick: async (ev) => {
+                        ev.stopPropagation();
+                        if (!confirm(t("确认删除 {name} ?", { name: full }))) return;
+                        const projectId = app.current.project && app.current.project.id;
+                        const nextOpenFiles = filterPathList(app.ui.openFiles, full);
+                        const nextSelected = filterPathSet(app.ui.selectedFiles, full);
+                        const nextPinned = filterPathList(app.ui.pinnedFiles, full);
+                        const wasOpen = app.current.openFile && isPathUnderPrefix(app.current.openFile, full);
+                        await api(`/api/projects/${app.current.project.id}/file`, {
+                          method: "DELETE",
+                          body: JSON.stringify({ path: full }),
+                        });
+                        if (projectId) {
+                          setOpenFiles(nextOpenFiles);
+                          setPinnedFiles(nextPinned);
+                          const last = localStorage.getItem(lastOpenFileKey(projectId)) || "";
+                          if (last && isPathUnderPrefix(last, full)) localStorage.removeItem(lastOpenFileKey(projectId));
+                        }
+                        await loadProject(app.current.project.id);
+                        app.ui.selectedFiles = nextSelected;
+                        if (nextOpenFiles.length) {
+                          const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
+                          if (filtered.length) setOpenFiles(filtered);
+                        }
+                        clearDropdowns();
+                        if (wasOpen) {
+                          app.current.openFile = null;
+                          cleanupEditor();
+                          mount(render());
+                          return;
+                        }
+                        cleanupEditor();
+                        mount(render());
+                      },
+                    }),
+                  ])
+                );
+                return h(
+                  "div",
+                  { class: "dropdown dropdown-right tree-action-wrap", "data-dropdown-id": menuId },
+                  [menuBtn, menu]
+                );
+              })()
             : null;
           const metaChildren = [];
           if (countEl) metaChildren.push(countEl);
@@ -8369,6 +8389,77 @@ function renderFileTree() {
             if (sub) textChildren.push(h("div", { class: "tree-subpath", html: sub, title: sub }));
           }
 
+          const menuId = `tree:${encodeURIComponent(full)}`;
+          const menuBtn = h("button", {
+            class: "tree-menu-btn",
+            title: t("操作"),
+            onclick: (ev) => toggleDropdown(menuId, ev),
+            html: "▸",
+          });
+          const fileMenu = dropdownMenu(
+            menuId,
+            h("div", { class: "dropdown-panel tree-action-panel" }, [
+              btn(pinned ? t("取消置顶") : t("置顶"), {
+                kind: "menu-item",
+                onClick: async (ev) => {
+                  ev.stopPropagation();
+                  togglePinnedFile(full);
+                  clearDropdowns();
+                },
+              }),
+              btn(t("重命名"), {
+                kind: "menu-item",
+                onClick: async (ev) => {
+                  ev.stopPropagation();
+                  const np = prompt(t("重命名为"), full);
+                  if (!np || np === full) return;
+                  const wasOpen = app.current.openFile === full;
+                  const nextPinned = remapPathList(app.ui.pinnedFiles, full, np);
+                  await api(`/api/projects/${app.current.project.id}/rename`, {
+                    method: "POST",
+                    body: JSON.stringify({ oldPath: full, newPath: np }),
+                  });
+                  await loadProject(app.current.project.id);
+                  if (wasOpen) app.current.openFile = np;
+                  setOpenFiles(app.ui.openFiles.map((p) => (p === full ? np : p)));
+                  setPinnedFiles(nextPinned);
+                  clearDropdowns();
+                  if (wasOpen) {
+                    await openFile(np);
+                    return;
+                  }
+                  cleanupEditor();
+                  mount(render());
+                },
+              }),
+              btn(t("删除"), {
+                kind: "menu-item danger",
+                onClick: async (ev) => {
+                  ev.stopPropagation();
+                  if (!confirm(t("确认删除 {name} ?", { name: full }))) return;
+                  await api(`/api/projects/${app.current.project.id}/file`, {
+                    method: "DELETE",
+                    body: JSON.stringify({ path: full }),
+                  });
+                  if (app.current.openFile === full) {
+                    app.current.openFile = null;
+                    cleanupEditor();
+                  }
+                  setOpenFiles(app.ui.openFiles.filter((p) => p !== full));
+                  setPinnedFiles(app.ui.pinnedFiles.filter((p) => p !== full));
+                  await loadProject(app.current.project.id);
+                  clearDropdowns();
+                  cleanupEditor();
+                  mount(render());
+                },
+              }),
+            ])
+          );
+          const actionWrap = h(
+            "div",
+            { class: "dropdown dropdown-right tree-action-wrap", "data-dropdown-id": menuId },
+            [menuBtn, fileMenu]
+          );
           const row = h(
             "div",
             {
@@ -8407,59 +8498,7 @@ function renderFileTree() {
               : []),
             h("span", { class: "tree-icon", "data-ext": extLabel, "data-kind": extLower }),
             h("div", { class: "tree-text" }, textChildren),
-            h("div", { class: "tree-actions" }, [
-              btn(pinned ? t("取消置顶") : t("置顶"), {
-                kind: "tiny",
-                onClick: async (ev) => {
-                  ev.stopPropagation();
-                  togglePinnedFile(full);
-                },
-              }),
-              btn(t("重命名"), {
-                kind: "tiny",
-                onClick: async (ev) => {
-                  ev.stopPropagation();
-                  const np = prompt(t("重命名为"), full);
-                  if (!np || np === full) return;
-                  const wasOpen = app.current.openFile === full;
-                  const nextPinned = remapPathList(app.ui.pinnedFiles, full, np);
-                  await api(`/api/projects/${app.current.project.id}/rename`, {
-                    method: "POST",
-                    body: JSON.stringify({ oldPath: full, newPath: np }),
-                  });
-                  await loadProject(app.current.project.id);
-                  if (wasOpen) app.current.openFile = np;
-                  setOpenFiles(app.ui.openFiles.map((p) => (p === full ? np : p)));
-                  setPinnedFiles(nextPinned);
-                  if (wasOpen) {
-                    await openFile(np);
-                    return;
-                  }
-                  cleanupEditor();
-                  mount(render());
-                },
-              }),
-              btn(t("删除"), {
-                kind: "tiny danger",
-                onClick: async (ev) => {
-                  ev.stopPropagation();
-                  if (!confirm(t("确认删除 {name} ?", { name: full }))) return;
-                  await api(`/api/projects/${app.current.project.id}/file`, {
-                    method: "DELETE",
-                    body: JSON.stringify({ path: full }),
-                  });
-                  if (app.current.openFile === full) {
-                    app.current.openFile = null;
-                    cleanupEditor();
-                  }
-                  setOpenFiles(app.ui.openFiles.filter((p) => p !== full));
-                  setPinnedFiles(app.ui.pinnedFiles.filter((p) => p !== full));
-                  await loadProject(app.current.project.id);
-                  cleanupEditor();
-                  mount(render());
-                },
-              }),
-            ]),
+            actionWrap,
           ]
         );
         container.appendChild(row);
@@ -9329,7 +9368,27 @@ function renderProject() {
     class: "dropdown dropdown-left",
     "data-dropdown-id": "project-settings",
   }, [projectBtn, projectSettingsMenu]);
-  const shareBtn = h("button", { class: "share-btn", onclick: openShareModal, html: t("分享") });
+  const shareInput = input({ placeholder: t("分享给 (如 user01)") });
+  const shareMenu = dropdownMenu("share", h("div", { class: "dropdown-panel share-panel" }, [
+    h("div", { class: "label", html: t("分享给") }),
+    shareInput,
+    btn(t("分享"), {
+      kind: "primary",
+      onClick: async (ev) => {
+        ev.stopPropagation();
+        const username = shareInput.value.trim();
+        if (!username) return;
+        await api(`/api/projects/${p.id}/share`, {
+          method: "POST",
+          body: JSON.stringify({ username }),
+        });
+        shareInput.value = "";
+        clearDropdowns();
+      },
+    }),
+  ]));
+  const shareBtn = h("button", { class: "share-btn dropdown-trigger", onclick: (ev) => toggleDropdown("share", ev), html: t("分享") });
+  const shareWrap = h("div", { class: "dropdown dropdown-right", "data-dropdown-id": "share" }, [shareBtn, shareMenu]);
 
   const newFileBtn = h("button", {
     class: "left-icon-btn",
@@ -9376,7 +9435,7 @@ function renderProject() {
   ]);
   const viewControls = h("div", { class: "left-view-row" }, [viewFocusBtn, viewAllBtn]);
 
-  const headerActions = h("div", { class: "left-header-actions" }, [shareBtn, settingsWrap]);
+  const headerActions = h("div", { class: "left-header-actions" }, [shareWrap, settingsWrap]);
   const headerChildren = [
     h("div", { class: "left-header-top" }, [projectBtnWrap, headerActions]),
   ];
@@ -9391,8 +9450,6 @@ function renderProject() {
   if (app.ui.leftPaneTab === "chats" && app.ui.assistantEnabled) {
     leftBody.appendChild(renderChatPanel());
   } else {
-    if (pinnedFilesEl) leftBody.appendChild(pinnedFilesEl);
-    if (recentFilesEl) leftBody.appendChild(recentFilesEl);
     leftBody.appendChild(renderFileTree());
   }
 
@@ -9582,7 +9639,6 @@ function renderProject() {
       }),
     ]),
     editorToolbar,
-    renderFileTabs(),
     h("div", { class: "editor", id: "editorHost" }),
     h("div", { class: "editor-status", id: "editorStatus" }, [
       h("span", { class: "hint", html: t("打开文件开始编辑。") }),
