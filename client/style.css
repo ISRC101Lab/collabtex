@@ -697,12 +697,14 @@ html.tree-compact .recent-item {
   gap: 6px;
   padding: 2px 6px;
   padding-left: calc(8px + clamp(0, var(--indent, 0), 6) * 10px);
+  padding-right: 66px;
   border-radius: 4px;
   border: 1px solid transparent;
   margin-left: 0;
   box-sizing: border-box;
   background: transparent;
   min-height: 24px;
+  position: relative;
 }
 .tree-row.multi {
   grid-template-columns: 18px 14px minmax(0, 1fr) auto;
@@ -905,8 +907,16 @@ html.tree-compact .tree-count {
 }
 .tree-filebtn:hover { background: rgba(13, 114, 122, 0.08); }
 .tree-dirname { font-weight: 600; }
-.tree-actions { display: flex; gap: 6px; justify-self: end; }
-.tree-actions { opacity: 0; transition: opacity 120ms ease; }
+.tree-actions {
+  display: flex;
+  gap: 6px;
+  justify-self: end;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
 .tree-actions .btn.tiny {
   padding: 2px 5px;
   font-size: 10px;

@@ -9109,15 +9109,15 @@ function renderProject() {
     mount(render());
   };
 
-  if (app.ui.leftRailMode !== "files" && app.ui.leftRailMode !== "view") app.ui.leftRailMode = "files";
+  if (app.ui.leftRailMode !== "files") app.ui.leftRailMode = "files";
   if (app.ui.leftPaneTab !== "files" && app.ui.leftPaneTab !== "chats") app.ui.leftPaneTab = "files";
   if (!app.ui.assistantEnabled && app.ui.leftPaneTab === "chats") app.ui.leftPaneTab = "files";
 
   const setLeftRailMode = (mode) => {
-    const next = mode === "view" ? "view" : "files";
+    const next = "files";
     app.ui.leftRailMode = next;
     localStorage.setItem("ct_left_rail_mode", next);
-    if (next === "files" && app.ui.leftPaneTab !== "files") {
+    if (app.ui.leftPaneTab !== "files") {
       app.ui.leftPaneTab = "files";
       localStorage.setItem("ct_left_pane_tab", "files");
     }
@@ -9155,52 +9155,6 @@ function renderProject() {
     if (app.ui.leftCollapsed) setLeftCollapsed(false);
     mount(render());
   };
-
-  const layoutFlags = () => ({
-    code: app.ui.layoutMode !== "pdf",
-    pdf: app.ui.layoutMode !== "editor",
-  });
-  const resolveLayoutMode = (codeOn, pdfOn) => {
-    if (!codeOn && !pdfOn) return "balanced";
-    if (codeOn && pdfOn) return "balanced";
-    return codeOn ? "editor" : "pdf";
-  };
-  const viewToggleRow = (label, checked, onToggle) => {
-    const inputEl = h("input", {
-      type: "checkbox",
-      checked,
-      onchange: (ev) => onToggle(!!ev.target.checked, ev),
-    });
-    return h("label", { class: "view-toggle" }, [
-      h("span", { class: "view-label", html: label }),
-      h("span", { class: "view-switch-wrap" }, [
-        inputEl,
-        h("span", { class: "view-switch" }),
-      ]),
-    ]);
-  };
-
-  const viewPanel = h("div", { class: "view-panel" }, [
-    h("div", { class: "view-panel-title", html: t("视图设置") }),
-    viewToggleRow(t("代码"), layoutFlags().code, (checked, ev) => {
-      const flags = layoutFlags();
-      if (!checked && !flags.pdf) {
-        ev.target.checked = true;
-        return;
-      }
-      setLayoutMode(resolveLayoutMode(checked, flags.pdf));
-    }),
-    viewToggleRow("PDF", layoutFlags().pdf, (checked, ev) => {
-      const flags = layoutFlags();
-      if (!checked && !flags.code) {
-        ev.target.checked = true;
-        return;
-      }
-      setLayoutMode(resolveLayoutMode(flags.code, checked));
-    }),
-    viewToggleRow(t("侧栏"), !app.ui.leftCollapsed, (checked) => setLeftCollapsed(!checked ? true : false)),
-    viewToggleRow(t("助手"), app.ui.assistantEnabled, (checked) => setAssistantEnabled(checked)),
-  ]);
 
   const texFiles = Array.isArray(app.current.tree) ? app.current.tree.filter((f) => f.endsWith(".tex")) : [];
   const mainSelect = h("select", { class: "input", id: "mainSelect" }, []);
@@ -9429,16 +9383,12 @@ function renderProject() {
   if (app.ui.leftRailMode === "files") {
     if (app.ui.leftPaneTab === "files") headerChildren.push(toolsRow, viewControls);
     else headerChildren.push(h("div", { class: "left-header-sub", html: t("聊天") }));
-  } else {
-    headerChildren.push(h("div", { class: "left-header-sub", html: t("视图设置") }));
   }
 
   const leftHeader = h("div", { class: "left-pane-header" }, headerChildren);
 
   const leftBody = h("div", { class: "left-pane-body" }, []);
-  if (app.ui.leftRailMode === "view") {
-    leftBody.appendChild(viewPanel);
-  } else if (app.ui.leftPaneTab === "chats" && app.ui.assistantEnabled) {
+  if (app.ui.leftPaneTab === "chats" && app.ui.assistantEnabled) {
     leftBody.appendChild(renderChatPanel());
   } else {
     if (pinnedFilesEl) leftBody.appendChild(pinnedFilesEl);
@@ -10049,10 +9999,10 @@ function renderProject() {
   const railColor = pickColor(railUser.username || "U");
   const railAvatar = h("div", { class: "rail-avatar", html: (railUser.username || "U").charAt(0).toUpperCase() });
   railAvatar.style.setProperty("--user-accent", railColor.color);
-  const railBtn = (mode, label, title) => h("button", {
-    class: `rail-btn ${app.ui.leftRailMode === mode ? "active" : ""}`.trim(),
+  const railBtn = (_mode, label, title) => h("button", {
+    class: `rail-btn ${app.ui.leftRailMode === "files" ? "active" : ""}`.trim(),
     title,
-    onclick: () => setLeftRailMode(mode),
+    onclick: () => setLeftRailMode("files"),
     html: label,
   });
   const railActionBtn = (label, title, onClick) => h("button", {
@@ -10075,7 +10025,6 @@ function renderProject() {
       railActionBtn("▤", app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), () => toggleLeftPane()),
       railBtn("files", "☰", t("文件")),
       railChatBtn,
-      railBtn("view", "⚙", t("视图设置")),
     ]),
     h("div", { class: "studio-rail-footer" }, [
       railAvatar,
