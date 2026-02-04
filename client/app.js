@@ -8001,15 +8001,28 @@ function renderProjects() {
         onclick: (ev) => toggleDropdown(menuId, ev),
         html: "⋯",
       });
-      const actionsWrap = h("div", { class: "dropdown dropdown-right", "data-dropdown-id": menuId }, [
+      const actionsWrap = h("div", {
+        class: "dropdown dropdown-right",
+        "data-dropdown-id": menuId,
+        onclick: (ev) => ev.stopPropagation(),
+      }, [
         actionsBtn,
         actionsMenu,
       ]);
 
-      const row = h("a", {
+      const row = h("div", {
         class: "project-item",
-        href: `#project/${p.id}`,
-        onclick: () => openProject(p),
+        role: "button",
+        onclick: (ev) => {
+          if (
+            ev.target.closest(".project-item-actions") ||
+            ev.target.closest(".project-item-more") ||
+            ev.target.closest(".dropdown-menu")
+          ) {
+            return;
+          }
+          openProject(p);
+        },
         title: p.name || p.id,
       }, [
         h("div", { class: "project-item-icon" }, [
