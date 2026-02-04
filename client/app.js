@@ -8554,6 +8554,7 @@ function renderProject() {
   const projectBtnWrap = h("div", {
     class: "dropdown dropdown-left",
     "data-dropdown-id": "project-settings",
+    onclick: (ev) => toggleDropdown("project-settings", ev),
   }, [projectBtn, projectSettingsMenu]);
   const shareInput = input({ placeholder: t("分享给 (如 user01)") });
   const shareMenu = dropdownMenu("share", h("div", { class: "dropdown-panel share-panel" }, [

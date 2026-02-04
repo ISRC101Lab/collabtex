@@ -116,6 +116,8 @@
   gap: 6px;
   border-bottom: 1px solid #2b2b2b;
   background: #1f1f1f;
+  position: relative;
+  z-index: 3;
 }
 .left-header-top {
   display: flex;
