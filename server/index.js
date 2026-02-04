@@ -40,8 +40,8 @@ import Busboy from "busboy";
 import unzipper from "unzipper";
 import archiver from "archiver";
 
-const WEB_PORT = Number(process.env.WEB_PORT || 3080);
-const WS_PORT = Number(process.env.WS_PORT || (Number.isFinite(WEB_PORT) ? WEB_PORT + 1 : 3081));
+const WEB_PORT = Number(process.env.WEB_PORT || 4090);
+const WS_PORT = Number(process.env.WS_PORT || (Number.isFinite(WEB_PORT) ? WEB_PORT + 1 : 4091));
 const WEB_HOST = process.env.WEB_HOST || "0.0.0.0";
 const WS_HOST = process.env.WS_HOST || "0.0.0.0";
 

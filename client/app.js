@@ -2,643 +2,60 @@ import * as Y from "yjs";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 
 import { EditorView, basicSetup } from "codemirror";
-import { EditorState, StateEffect, StateField } from "@codemirror/state";
+import { EditorState } from "@codemirror/state";
 import { StreamLanguage, foldService } from "@codemirror/language";
 import { autocompletion, snippetCompletion } from "@codemirror/autocomplete";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
-import { Decoration, WidgetType, keymap } from "@codemirror/view";
+import { keymap } from "@codemirror/view";
 // @ts-ignore
 import { yCollab } from "y-codemirror.next";
 
+import { api } from "./services/api.js";
+import { t, getLang, setLang as setI18nLang } from "./i18n.js";
+import { clampNumber } from "./utils/numbers.js";
+import { escapeRegExp } from "./utils/strings.js";
+import { fileExt } from "./utils/paths.js";
+import {
+  extractIncludePaths,
+  extractBibPaths,
+  extractLabels,
+  extractBibKeys,
+  computeDocStats,
+  latexFoldService,
+} from "./utils/latex.js";
+import {
+  flashLineEffect,
+  clearFlashLineEffect,
+  flashLineField,
+  ghostSuggestField,
+  getGhostSuggestion,
+  setGhostSuggestion,
+  clearGhostSuggestion,
+  clearGhostSuggestEffect,
+} from "./editor/effects.js";
+import {
+  aiDefaults,
+  AI_ACTIVE_PROFILE_KEY,
+  AI_PROFILE_POLISH_KEY,
+  AI_PROFILE_CHAT_KEY,
+  AI_PROFILE_DIAG_KEY,
+  mkAiProfileId,
+  normalizeAiProfile,
+  loadAiProfilesFromStorage,
+  saveAiProfilesToStorage,
+} from "./ai/profiles.js";
+
 const root = document.getElementById("app");
 
-const flashLineEffect = StateEffect.define();
-const clearFlashLineEffect = StateEffect.define();
-const flashLineField = StateField.define({
-  create() {
-    return Decoration.none;
-  },
-  update(value, tr) {
-    value = value.map(tr.changes);
-    for (const e of tr.effects) {
-      if (e.is(flashLineEffect)) {
-        value = Decoration.set([Decoration.line({ class: "cm-flashLine" }).range(e.value)]);
-      } else if (e.is(clearFlashLineEffect)) {
-        value = Decoration.none;
-      }
-    }
-    return value;
-  },
-  provide: (f) => EditorView.decorations.from(f),
-});
-
-const ghostSuggestEffect = StateEffect.define();
-const clearGhostSuggestEffect = StateEffect.define();
-
-class GhostTextWidget extends WidgetType {
-  constructor(text) {
-    super();
-    this.text = text;
-  }
-  toDOM() {
-    const span = document.createElement("span");
-    span.className = "cm-ghostText";
-    span.textContent = this.text;
-    return span;
-  }
-  ignoreEvent() {
-    return true;
-  }
-}
-
-const ghostSuggestField = StateField.define({
-  create() {
-    return { text: "", deco: Decoration.none };
-  },
-  update(value, tr) {
-    let text = value.text;
-    let deco = value.deco.map(tr.changes);
-    for (const e of tr.effects) {
-      if (e.is(ghostSuggestEffect)) {
-        text = String(e.value || "");
-        if (!text) {
-          deco = Decoration.none;
-        } else {
-          const pos = tr.state.selection.main.head;
-          const widget = new GhostTextWidget(text);
-          deco = Decoration.set([Decoration.widget({ widget, side: 1 }).range(pos)]);
-        }
-      } else if (e.is(clearGhostSuggestEffect)) {
-        text = "";
-        deco = Decoration.none;
-      }
-    }
-    if (text && (tr.docChanged || tr.selection)) {
-      text = "";
-      deco = Decoration.none;
-    }
-    return { text, deco };
-  },
-  provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
-});
-
-function getGhostSuggestion(view) {
-  try {
-    return view.state.field(ghostSuggestField).text || "";
-  } catch {
-    return "";
-  }
-}
-
-function setGhostSuggestion(view, text) {
-  if (!view) return;
-  view.dispatch({ effects: ghostSuggestEffect.of(String(text || "")) });
-}
-
-function clearGhostSuggestion(view) {
-  if (!view) return;
-  view.dispatch({ effects: clearGhostSuggestEffect.of(null) });
-}
-
-async function api(path, opts = {}) {
-  const headers = new Headers(
-    opts.headers || (opts.body instanceof FormData ? {} : { "Content-Type": "application/json" })
-  );
-  const token = localStorage.getItem("ct_session_token") || "";
-  if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(path, {
-    ...opts,
-    headers,
-    credentials: "same-origin",
-  });
-  const ct = res.headers.get("content-type") || "";
-  const data = ct.includes("application/json") ? await res.json() : await res.text();
-  if (!res.ok) {
-    if (res.status === 401) localStorage.removeItem("ct_session_token");
-    const err = new Error(data && data.error ? data.error : `HTTP ${res.status}`);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-  return data;
-}
-
-const aiDefaults = {
-  apiKey: localStorage.getItem("ct_ai_key") || "",
-  baseUrl: localStorage.getItem("ct_ai_base") || "",
-  model: localStorage.getItem("ct_ai_model") || "",
-  apiStyle: localStorage.getItem("ct_ai_style") || "responses",
-};
-
-const AI_PROFILE_KEY = "ct_ai_profiles";
-const AI_ACTIVE_PROFILE_KEY = "ct_ai_profile_active";
-const AI_PROFILE_POLISH_KEY = "ct_ai_profile_polish";
-const AI_PROFILE_CHAT_KEY = "ct_ai_profile_chat";
-const AI_PROFILE_DIAG_KEY = "ct_ai_profile_diag";
-
-const LANG_KEY = "ct_lang";
 const PROJECT_THUMB_URL = "/assets/project-thumb.svg";
-const I18N = {
-  en: {
-    "内网协作 LaTeX": "Intranet LaTeX Collaboration",
-    "加载中...": "Loading...",
-    "登录": "Log in",
-    "不开放注册，账号由服务器本地创建。": "Registration is closed. Accounts are created on the server.",
-    "用户名": "Username",
-    "密码": "Password",
-    "用户名 (admin / user01..user09)": "Username (admin / user01..user09)",
-    "项目": "Projects",
-    "你的项目": "Your projects",
-    "所有项目": "All projects",
-    "与你共享": "Shared with you",
-    "搜索项目...": "Search projects...",
-    "新建": "New",
-    "分享": "Share",
-    "视图设置": "View settings",
-    "代码": "Code",
-    "侧栏": "Sidebar",
-    "刚刚": "Just now",
-    "{n}分钟": "{n} min",
-    "{n}小时": "{n} h",
-    "{n}天": "{n} d",
-    "{n}月": "{n} mo",
-    "{n}年": "{n} y",
-    "用户": "User",
-    "列表视图": "List view",
-    "网格视图": "Grid view",
-    "切换用户": "Switch user",
-    "切换": "Switch",
-    "请输入用户名和密码": "Enter username and password",
-    "重试": "Retry",
-    "管理员密码": "Admin password",
-    "进入": "Enter",
-    "临时用户": "Guest",
-    "切换账号后可用": "Available after switching account",
-    "临时用户暂无项目": "No projects for guest user",
-    "自动登录失败": "Auto login failed",
-    "退出": "Log out",
-    "返回": "Back",
-    "创建": "Create",
-    "导入 Zip": "Import Zip",
-    "导出 Zip": "Export Zip",
-    "导入": "Import",
-    "我的项目": "My Projects",
-    "项目管理": "Project Manager",
-    "新项目名称": "New project name",
-    "名称": "Name",
-    "模板": "Template",
-    "空白模板": "Blank template",
-    "ACM SIGCONF 模板": "ACM SIGCONF template",
-    "AI 会议模板": "AI conference template",
-    "导入项目名称 (可选)": "Import name (optional)",
-    "主文件 (例如 main.tex 或 ICS/main.tex)": "Main file (e.g. main.tex or ICS/main.tex)",
-    "视图": "View",
-    "仅文稿": "Focus",
-    "全部": "All",
-    "{id} · 所有者: {owner}": "{id} · Owner: {owner}",
-    "打开": "Open",
-    "文件": "Files",
-    "+ 新文件": "+ New File",
-    "上传": "Upload",
-    "上传到路径": "Upload to path",
-    "上传到文件夹 (可选)": "Upload to folder (optional)",
-    "新文件路径": "New file path",
-    "分享给 (如 user01)": "Share with (e.g. user01)",
-    "筛选文件...": "Filter files...",
-    "清空": "Clear",
-    "(无匹配文件)": "(No matches)",
-    "重命名": "Rename",
-    "删除": "Delete",
-    "重命名为": "Rename to",
-    "取消": "Cancel",
-    "确认删除": "Confirm delete",
-    "确认删除 {name} ?": "Delete {name}?",
-    "结构": "Structure",
-    "章节": "Section",
-    "小节": "Subsection",
-    "小小节": "Subsubsection",
-    "文字": "Text",
-    "加粗": "Bold",
-    "斜体": "Italic",
-    "行内公式": "Inline Math",
-    "块": "Block",
-    "项目符号": "Bullets",
-    "编号列表": "Numbered List",
-    "公式": "Equation",
-    "插入": "Insert",
-    "图": "Figure",
-    "表": "Table",
-    "引用": "Cite",
-    "引用号": "Ref",
-    "标签": "Label",
-    "快捷": "Shortcuts",
-    "快速打开": "Quick Open",
-    "快速打开 (Ctrl/Cmd+P)": "Quick Open (Ctrl/Cmd+P)",
-    "项目搜索": "Project Search",
-    "项目搜索 (Ctrl/Cmd+Shift+F)": "Project Search (Ctrl/Cmd+Shift+F)",
-    "跳转到行": "Go to Line",
-    "跳转到行 (Ctrl/Cmd+G)": "Go to Line (Ctrl/Cmd+G)",
-    "大纲跳转": "Outline Jump",
-    "大纲跳转 (Ctrl/Cmd+Shift+O)": "Outline Jump (Ctrl/Cmd+Shift+O)",
-    "展开全部": "Expand all",
-    "收起全部": "Collapse all",
-    "定位当前文件": "Reveal current file",
-    "显示侧栏": "Show sidebar",
-    "隐藏侧栏": "Hide sidebar",
-    "项目操作": "Project actions",
-    "重置布局": "Reset layout",
-    "返回项目列表": "Back to projects",
-    "退出登录": "Sign out",
-    "搜索项目/标签/分类...": "Search projects/tags/categories...",
-    "全部分类": "All categories",
-    "分类": "Category",
-    "标签(逗号分隔)": "Tags (comma separated)",
-    "项目设置": "Project settings",
-    "保存": "Save",
-    "删除项目": "Delete project",
-    "确认删除项目 {name} ?": "Delete project {name}?",
-    "管理": "Manage",
-    "文件管理": "File manager",
-    "已选择 {n} 个文件": "{n} files selected",
-    "置顶": "Pin",
-    "取消置顶": "Unpin",
-    "置顶文件": "Pinned files",
-    "置顶所选": "Pin selected",
-    "取消置顶所选": "Unpin selected",
-    "新文件夹": "New folder",
-    "文件夹路径": "Folder path",
-    "开启多选": "Enable multi-select",
-    "退出多选": "Disable multi-select",
-    "专注写作": "Focus writing",
-    "退出专注": "Exit focus",
-    "最近文件": "Recent files",
-    "控制台": "Console",
-    "终端": "Terminal",
-    "输入命令，回车执行": "Type a command and press Enter",
-    "执行": "Run",
-    "点击展开控制台": "Click to open console",
-    "跳转到首个错误": "Jump to first error",
-    "自动跳转首错": "Auto-jump first error",
-    "绘图": "Chart",
-    "图表生成": "Chart Builder",
-    "图表类型": "Chart type",
-    "图表风格": "Chart style",
-    "样式": "Style",
-    "折线图": "Line",
-    "柱状图": "Bar",
-    "散点图": "Scatter",
-    "平滑曲线": "Smooth lines",
-    "堆叠柱": "Stacked bars",
-    "灰度": "Monochrome",
-    "鲜明": "Vivid",
-    "数据": "Data",
-    "首行标题": "Header row",
-    "X 轴": "X Axis",
-    "Y 轴": "Y Axis",
-    "图标题": "Chart title",
-    "图注": "Caption",
-    "生成": "Generate",
-    "复制代码": "Copy code",
-    "需要在导言区引入 pgfplots": "Add \\usepackage{pgfplots} in the preamble.",
-    "同步 PDF": "Sync PDF",
-    "定位同步": "Focus Sync",
-    "同步到 PDF": "Sync to PDF",
-    "定位并聚焦到 PDF": "Focus and highlight in PDF",
-    "放大": "Zoom in",
-    "缩小": "Zoom out",
-    "重置缩放": "Reset zoom",
-    "自动同步 PDF": "Auto Sync PDF",
-    "AI 自动修复": "AI auto-fix",
-    "AI 修复(可选)": "AI fixes (optional)",
-    "AI 自动修复结果": "AI auto-fix result",
-    "一键修复": "One-click fix",
-    "AI 修复中...": "AI fixing...",
-    "AI 修复准备中...": "AI fix: preparing...",
-    "AI 生成修改...": "AI fix: generating edits...",
-    "AI 应用修改...": "AI fix: applying edits...",
-    "AI 重新编译...": "AI fix: recompiling...",
-    "AI 修复完成": "AI fix completed",
-    "AI 修复失败": "AI fix failed",
-    "AI 未返回修改": "AI returned no edits",
-    "主文件未找到，正在重新选择...": "Main file not found. Re-selecting...",
-    "已切换主文件": "Main file switched",
-    "AI 切换编译器...": "AI fix: switching compiler...",
-    "已切换编译器": "Compiler switched",
-    "已补充宏包": "Added packages",
-    "已补全文档结构": "Inserted document skeleton",
-    "完整编译": "Full compile",
-    "修复中": "Fixing",
-    "编译超时": "Compile timeout",
-    "已自动修复并重新编译": "Auto-fixed and recompiled",
-    "自动 AI 修复": "Auto AI fix",
-    "[AI] 自动修复中...": "[AI] auto-fixing...",
-    "应用并重新编译": "Apply & recompile",
-    "应用全部": "Apply all",
-    "应用此文件": "Apply this file",
-    "未返回可应用的修改": "No applicable edits returned",
-    "应用完成": "Edits applied",
-    "应用失败": "Failed to apply edits",
-    "处理中...": "Processing...",
-    "AI 润色": "AI Polish",
-    "AI 诊断": "AI Diagnose",
-    "AI 聊天": "AI Chat",
-    "AI": "AI",
-    "AI 模式": "AI Mode",
-    "AI 续写": "AI Continue",
-    "自动续写提示": "Auto inline suggestions",
-    "自动建议": "Auto suggestions",
-    "AI 提示": "AI hints",
-    "生成建议": "Generate hints",
-    "生成中...": "Generating...",
-    "生成失败": "Failed to generate",
-    "显示工具栏": "Show toolbar",
-    "聊天": "Chat",
-    "代理": "Agent",
-    "更多操作": "More actions",
-    "底部控制台": "Bottom console",
-    "关闭底部控制台": "Hide console",
-    "停靠底部": "Dock bottom",
-    "停靠右侧": "Dock right",
-    "插入图片": "Insert image",
-    "选择图片": "Choose image",
-    "插入设置": "Insert options",
-    "暂无图片文件": "No image files",
-    "上下文预览": "Context preview",
-    "替换全文": "Replace all",
-    "运行代理": "Run agent",
-    "接受建议": "Accept suggestion",
-    "清除建议": "Clear suggestion",
-    "助手": "Assistant",
-    "发送": "Send",
-    "清空对话": "Clear chat",
-    "输入你的问题...": "Type your question...",
-    "暂无对话": "No messages yet",
-    "提示：上下文过长，已截断为最后 12000 字符。": "Context is long; truncated to the last 12000 characters.",
-    "提示：仅使用当前 TeX 内容作为上下文。": "Only the current TeX content is used as context.",
-    "当前文件": "Current file",
-    "使用当前文稿": "Use current document",
-    "更新上下文": "Refresh context",
-    "上下文未设置": "Context not set",
-    "快速任务": "Quick tasks",
-    "审稿意见": "Reviewer notes",
-    "结构建议": "Structure advice",
-    "改写当前段落": "Rewrite paragraph",
-    "摘要改写": "Rewrite abstract",
-    "应用改写": "Apply rewrite",
-    "插入改写": "Insert rewrite",
-    "未找到可用的 LaTeX 片段": "No usable LaTeX snippet found",
-    "清理重复段落": "Remove duplicate paragraphs",
-    "未发现重复段落": "No duplicate paragraphs found",
-    "已清理重复段落 {n} 处": "Removed {n} duplicate blocks",
-    "多选": "Multi-select",
-    "删除所选": "Delete selected",
-    "移动所选": "Move selected",
-    "移动到": "Move to",
-    "布局": "Layout",
-    "写作视图": "Writing view",
-    "预览视图": "Preview view",
-    "三栏视图": "Three-pane view",
-    "会话列表": "Sessions",
-    "浮动预览": "Float preview",
-    "固定预览": "Dock preview",
-    "TeX 文稿": "TeX",
-    "图片/图表": "Figures",
-    "参考文献": "Bib",
-    "样式文件": "Styles",
-    "其他": "Other",
-    "上下文来源": "Context Source",
-    "选中段落": "Selection",
-    "全部 TeX": "All TeX",
-    "API 类型": "API Type",
-    "responses (兼容)": "responses (compatible)",
-    "chat (兼容)": "chat (compatible)",
-    "上下文": "Context",
-    "文件数": "Files",
-    "长度": "Length",
-    "已截断": "Truncated",
-    "历史": "History",
-    "暂无历史记录": "No history yet",
-    "对比": "Compare",
-    "历史版本": "History version",
-    "当前版本": "Current version",
-    "差异过大，暂不展示。": "Diff too large to display.",
-    "历史记录加载失败": "Failed to load history",
-    "暂无文稿文件": "No source files",
-    "查看": "View",
-    "恢复": "Restore",
-    "恢复此版本？": "Restore this version?",
-    "诊断摘要": "Diagnostic Summary",
-    "关键行号": "Key Lines",
-    "复制错误": "Copy Error",
-    "复制诊断摘要": "Copy Summary",
-    "已复制错误原因": "Error details copied",
-    "已复制诊断摘要": "Summary copied",
-    "没有可复制的错误原因": "No error details to copy",
-    "没有可跳转的错误": "No error to jump",
-    "没有可复制的诊断摘要": "No summary available",
-    "复制失败，请手动复制：": "Copy failed, please copy manually:",
-    "自动编译": "Auto Compile",
-    "自动 AI 诊断": "Auto AI diagnose",
-    "打开文件开始编辑。": "Open a file to start editing.",
-    "搜索": "Search",
-    "搜索关键词...": "Search query...",
-    "正则": "Regex",
-    "大小写敏感": "Case sensitive",
-    "范围": "Scope",
-    "仅 TeX": "TeX only",
-    "TeX + 参考文献": "TeX + Bib",
-    "TeX + Bib + 样式": "TeX + Bib + Styles",
-    "全部文件": "All files",
-    "搜索结果": "Results",
-    "正在搜索...": "Searching...",
-    "未找到结果": "No results",
-    "搜索完成：{n} 条结果 / 扫描 {m} 个文件": "Done: {n} results / {m} files scanned",
-    "搜索被截断": "Results truncated",
-    "输入行号": "Enter line number",
-    "行号": "Line",
-    "跳转": "Go",
-    "预设": "Presets",
-    "更学术": "More academic",
-    "更简洁": "More concise",
-    "扩写": "Expand",
-    "摘要润色": "Polish abstract",
-    "方法清晰": "Clarify method",
-    "术语统一": "Unify terminology",
-    "翻译成英文": "Translate to English",
-    "翻译成中文": "Translate to Chinese",
-    "改为要点": "Convert to bullet points",
-    "包含参考文献": "Include bibliography",
-    "包含样式文件": "Include styles",
-    "点击跳转到协作者光标": "Click to jump to collaborator cursor",
-    "AI 模型": "AI Models",
-    "使用服务器 AI": "Use server AI",
-    "启用后使用服务器密钥，无需本地配置。": "When enabled, uses server credentials; no local config needed.",
-    "模型配置": "Model profiles",
-    "当前模型": "Active model",
-    "新增模型": "Add model",
-    "删除模型": "Delete model",
-    "模型名称": "Model name",
-    "用于": "Used for",
-    "诊断": "Diagnose",
-    "跟随当前模型": "Follow active model",
-    "AI 修复建议": "AI Fix Suggestions",
-    "诊断中...": "Diagnosing...",
-    "诊断失败": "Diagnose failed",
-    "阅读模式": "Readable width",
-    "打字机模式": "Typewriter mode",
-    "编辑器排版": "Editor typography",
-    "字号": "Font size",
-    "行距": "Line height",
-    "上下边距": "Vertical padding",
-    "左右边距": "Horizontal padding",
-    "目录树密度": "Tree density",
-    "舒适": "Comfortable",
-    "紧凑": "Compact",
-    "AI 代理": "AI Agent",
-    "论文代理": "Paper Agent",
-    "审稿人模式": "Reviewer mode",
-    "结构优化": "Structure tuning",
-    "摘要优化": "Abstract polishing",
-    "术语一致性": "Terminology consistency",
-    "建议": "Suggestions",
-    "编辑器": "Editor",
-    "主文件": "Main file",
-    "主": "MAIN",
-    "预览文件": "Preview file",
-    "设置": "Set",
-    "编译器": "Compiler",
-    "编译": "Compile",
-    "编译 (Ctrl/Cmd+S)": "Compile (Ctrl/Cmd+S)",
-    "编译中": "Compiling",
-    "重建": "Rebuild",
-    "清理后重建": "Clean rebuild",
-    "快速编译": "Quick Compile",
-    "单次编译，不跑 BibTeX": "Single pass, no BibTeX",
-    "打开 PDF": "Open PDF",
-    "暂无 PDF，请点击编译生成。": "No PDF yet. Compile to generate.",
-    "输出": "Output",
-    "PDF 预览": "PDF Preview",
-    "日志": "Log",
-    "错误": "Errors",
-    "大纲": "Outline",
-    "设置页": "Settings",
-    "主题": "Theme",
-    "默认": "Default",
-    "VSCode 深色": "VSCode Dark",
-    "VSCode 浅色": "VSCode Light",
-    "AI (Qwen3-VL)": "AI (Qwen3-VL)",
-    "Qwen3-VL API 密钥": "Qwen3-VL API Key",
-    "显示": "Show",
-    "隐藏": "Hide",
-    "Base URL (OpenAI 兼容)": "Base URL (OpenAI compatible)",
-    "模型 (例如 qwen3-vl)": "Model (e.g. qwen3-vl)",
-    "密钥保存在本浏览器本地。Qwen3-VL 请将模型设置为 qwen3-vl，并填写兼容端点的 Base URL。":
-      "The key is stored locally in this browser. For Qwen3-VL, set model to qwen3-vl and provide the compatible Base URL.",
-    "若使用 Responses API（如 codex.usezyla.com），请将 API 类型设为 responses。":
-      "If using a Responses API (e.g. codex.usezyla.com), set API Type to responses.",
-    "SSH 端口转发": "SSH Forwarding",
-    "WS 端口": "WS Port",
-    "应用": "Apply",
-    "修复 (zip 符号链接)": "Fix (zip symlinks)",
-    "修复": "Fix",
-    "用于修复含 Linux 符号链接的 zip (zip -y)。": "Fix zips that contain Linux symlinks (zip -y).",
-    "共享": "Share",
-    "已共享": "Shared",
-    "在线": "Online",
-    "(无人)": "(none)",
-    "监控": "Monitor",
-    "编译资源": "Compile Resources",
-    "CPU 核心": "CPU Cores",
-    "最大并行": "Max parallel",
-    "内存": "Memory",
-    "空闲内存": "Free memory",
-    "队列": "Queue",
-    "等待中": "Queued",
-    "负载": "Load",
-    "运行时长": "Uptime",
-    "运行中": "Running",
-    "最近任务": "Recent Jobs",
-    "更新时间": "Updated",
-    "管理员可见": "Admin only",
-    "暂无监控数据": "No monitor data",
-    "打开文件查看大纲。": "Open a file to view outline.",
-    "(未找到章节)": "(No sections found)",
-    "(无结果)": "(No results)",
-    "已打开": "Open",
-    "输入过滤文件...": "Type to filter files...",
-    "回车打开，Esc 关闭": "Enter to open, Esc to close",
-    "(无)": "(none)",
-    "行": "Ln",
-    "列": "Col",
-    "词": "Words",
-    "字": "Chars",
-    "选": "Sel",
-    "协作": "Collab",
-    "连接中": "Connecting",
-    "已连接": "Connected",
-    "已断开": "Disconnected",
-    "请先打开文件。": "Open a file first.",
-    "同步失败": "Sync failed",
-    "[开始] 编译中...": "[start] compiling...",
-    "编译中...": "Compiling...",
-    "[提示] EventSource 不可用，改用轮询。": "[note] EventSource unavailable, using polling.",
-    "编译超时(轮询)": "Compile timed out (polling)",
-    "[提示] 流连接断开，改用轮询...": "[note] stream disconnected, switching to polling...",
-    "未选择内容，发送整个文件给 AI？": "No selection. Send the whole file to AI?",
-    "可选指令（例如：更学术、更简洁、保留术语）...": "Optional instruction (e.g., more academic, concise, preserve terms)...",
-    "AI 输出将显示在这里...": "AI output will appear here...",
-    "提示：先选中一段文字效果更好。": "Tip: select a passage for better results.",
-    "指令": "Instruction",
-    "结果": "Result",
-    "运行 AI": "Run AI",
-    "没有可用的编译日志": "No compile log available",
-    "未找到可修复的文件": "No fixable files found",
-    "AI 诊断结果": "AI Diagnose Result",
-    "将使用最近的编译日志进行诊断。": "The latest compile log will be used for diagnosis.",
-    "替换选中": "Replace selection",
-    "插入到下方": "Insert below",
-    "[js 错误] {msg}": "[js error] {msg}",
-    "排队": "Queued",
-    "[排队] 等待编译资源...": "[queue] waiting for compiler slot...",
-    "[耗时] {sec}s": "[time] {sec}s",
-    "[排队耗时] {sec}s": "[queue] {sec}s",
-    "就绪": "Idle",
-    "成功": "Success",
-    "失败": "Failed",
-    "[错误] {msg}": "[error] {msg}",
-    "[错误] 还有 {n} 条": "[error] +{n} more",
-    "上传 PDF": "Upload PDF",
-    "本地编译后上传 PDF": "Upload a locally compiled PDF",
-    "上一页": "Prev",
-    "下一页": "Next",
-    "页码": "Page",
-    "缩放": "Zoom",
-    "适合宽度": "Fit width",
-    "适合页面": "Fit page",
-    "刷新": "Refresh",
-    "关闭": "Close",
-    "收起": "Collapse",
-    "展开": "Expand",
-    "润色": "Polish",
-    "已修复 {n} 个文件": "Fixed {n} file(s)",
-    "无需修复": "Nothing to fix",
-    "协作连接": "Collaboration",
-    "WebSocket 地址 (可选)": "WebSocket URL (optional)",
-    "用于 SSH 端口转发，例如 ws://127.0.0.1:3081 或在地址后加 ?wsPort=3081":
-      "For SSH port forwarding, e.g. ws://127.0.0.1:3081 or add ?wsPort=3081",
-    "清除": "Clear",
-  },
+const ICONS = {
+  plus: '<path d="M12 5v14M5 12h14" />',
+  upload: '<path d="M12 16V6M8 10l4-4 4 4M5 18h14" />',
+  download: '<path d="M12 8v10M8 14l4 4 4-4M5 6h14" />',
+  more: '<circle cx="6" cy="12" r="1.4" fill="currentColor" /><circle cx="12" cy="12" r="1.4" fill="currentColor" /><circle cx="18" cy="12" r="1.4" fill="currentColor" />',
+  clear: '<path d="M6 6l12 12M18 6l-12 12" />',
+  compile: '<path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" />',
 };
-let currentLang = localStorage.getItem(LANG_KEY) || "zh";
-
-function t(key, vars = {}) {
-  const dict = currentLang === "en" ? I18N.en : null;
-  let str = dict && dict[key] ? dict[key] : key;
-  if (vars && typeof vars === "object") {
-    str = str.replace(/\{(\w+)\}/g, (_, k) => (vars[k] === undefined || vars[k] === null ? "" : String(vars[k])));
-  }
-  return str;
-}
 
 function h(tag, attrs = {}, children = []) {
   const el = document.createElement(tag);
@@ -662,94 +79,12 @@ function h(tag, attrs = {}, children = []) {
   return el;
 }
 
-function escapeRegExp(s) {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function clampNumber(value, min, max, fallback) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return fallback;
-  if (num < min) return min;
-  if (num > max) return max;
-  return num;
-}
-
-function joinPath(base, rel) {
-  if (!base) return rel;
-  const b = String(base).replace(/\/+$/, "");
-  const r = String(rel).replace(/^\/+/, "");
-  return b ? `${b}/${r}` : r;
-}
-
-function normalizeTexPath(raw, baseDir) {
-  let p = String(raw || "").trim();
-  if (!p) return "";
-  if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
-    p = p.slice(1, -1);
-  }
-  p = p.replace(/\\\\/g, "/").replace(/^\.\/+/, "");
-  if (!fileExt(p)) p += ".tex";
-  if (baseDir && !p.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(p)) {
-    p = joinPath(baseDir, p);
-  }
-  return p.replace(/\/+/g, "/");
-}
-
-function normalizeBibPath(raw, baseDir) {
-  let p = String(raw || "").trim();
-  if (!p) return "";
-  if ((p.startsWith('"') && p.endsWith('"')) || (p.startsWith("'") && p.endsWith("'"))) {
-    p = p.slice(1, -1);
-  }
-  p = p.replace(/\\\\/g, "/").replace(/^\.\/+/, "");
-  if (!fileExt(p)) p += ".bib";
-  if (baseDir && !p.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(p)) {
-    p = joinPath(baseDir, p);
-  }
-  return p.replace(/\/+/g, "/");
-}
-
-function extractIncludePaths(text, baseDir) {
-  const lines = String(text || "").split(/\r?\n/);
-  const out = [];
-  const includeRe = /\\(input|include|subfile)\*?\s*(?:\[[^\]]*\\])?\s*\{([^}]+)\}/g;
-  for (const line of lines) {
-    const clean = stripLatexComment(line);
-    if (!clean) continue;
-    let m;
-    while ((m = includeRe.exec(clean))) {
-      const raw = m[2] || "";
-      const norm = normalizeTexPath(raw, baseDir);
-      if (norm) out.push(norm);
-    }
-  }
-  return out;
-}
-
-function extractBibPaths(text, baseDir) {
-  const lines = String(text || "").split(/\r?\n/);
-  const out = [];
-  const bibRe = /\\bibliography\s*\{([^}]+)\}/g;
-  const addBibRe = /\\addbibresource\s*\{([^}]+)\}/g;
-  for (const line of lines) {
-    const clean = stripLatexComment(line);
-    if (!clean) continue;
-    let m;
-    while ((m = bibRe.exec(clean))) {
-      const raw = m[1] || "";
-      const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
-      for (const part of parts) {
-        const norm = normalizeBibPath(part, baseDir);
-        if (norm) out.push(norm);
-      }
-    }
-    while ((m = addBibRe.exec(clean))) {
-      const raw = m[1] || "";
-      const norm = normalizeBibPath(raw, baseDir);
-      if (norm) out.push(norm);
-    }
-  }
-  return out;
+function iconSvg(name, { size = 14, className = "" } = {}) {
+  const icon = ICONS[name] || "";
+  return h("span", {
+    class: `icon ${className}`.trim(),
+    html: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`,
+  });
 }
 
 async function buildSuggestedOpenFiles(projectId, tree, mainFile) {
@@ -775,137 +110,6 @@ async function buildSuggestedOpenFiles(projectId, tree, mainFile) {
     }
   }
   return uniq.slice(0, 12);
-}
-
-function mkAiProfileId() {
-  return `ai_${Math.random().toString(36).slice(2)}_${Date.now()}`;
-}
-
-function normalizeAiProfile(p, fallbackName) {
-  const obj = p && typeof p === "object" ? p : {};
-  return {
-    id: String(obj.id || mkAiProfileId()),
-    name: String(obj.name || fallbackName || "Model"),
-    apiKey: String(obj.apiKey || ""),
-    baseUrl: String(obj.baseUrl || ""),
-    model: String(obj.model || ""),
-    apiStyle: String(obj.apiStyle || ""),
-  };
-}
-
-function loadAiProfilesFromStorage() {
-  try {
-    const raw = localStorage.getItem(AI_PROFILE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length) {
-        return parsed.map((p, i) => normalizeAiProfile(p, `Model ${i + 1}`));
-      }
-    }
-  } catch {
-    // ignore parse errors
-  }
-  const legacy = normalizeAiProfile(
-    {
-      id: "default",
-      name: "Default",
-      apiKey: aiDefaults.apiKey,
-      baseUrl: aiDefaults.baseUrl,
-      model: aiDefaults.model,
-      apiStyle: aiDefaults.apiStyle,
-    },
-    "Default"
-  );
-  return [legacy];
-}
-
-function saveAiProfilesToStorage(list) {
-  try {
-    localStorage.setItem(AI_PROFILE_KEY, JSON.stringify(list || []));
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function stripLatexComment(line) {
-  let out = "";
-  let escaped = false;
-  for (let i = 0; i < line.length; i += 1) {
-    const ch = line[i];
-    if (ch === "%" && !escaped) break;
-    if (ch === "\\" && !escaped) {
-      escaped = true;
-      out += ch;
-      continue;
-    }
-    escaped = false;
-    out += ch;
-  }
-  return out;
-}
-
-function stripLatexForCount(text) {
-  let s = String(text || "");
-  if (!s.trim()) return "";
-  // Remove comments line by line.
-  const lines = s.split(/\r?\n/).map((line) => stripLatexComment(line));
-  s = lines.join("\n");
-  // Remove common reference commands entirely.
-  s = s.replace(/\\(cite|citep|citet|ref|eqref|label)\*?(?:\[[^\]]*\])?\{[^}]*\}/g, " ");
-  // Remove math environments.
-  s = s.replace(/\\\[[\s\S]*?\\\]/g, " ");
-  s = s.replace(/\\\([\s\S]*?\\\)/g, " ");
-  s = s.replace(/\$\$[\s\S]*?\$\$/g, " ");
-  s = s.replace(/\$[^$]*\$/g, " ");
-  // Remove LaTeX commands but keep their arguments.
-  s = s.replace(/\\[a-zA-Z@]+\*?/g, "");
-  // Remove line breaks and non-breaking spaces.
-  s = s.replace(/\\\\/g, " ");
-  s = s.replace(/~/g, " ");
-  // Drop optional args.
-  s = s.replace(/\[[^\]]*\]/g, " ");
-  // Remove braces but keep content spacing.
-  s = s.replace(/[{}]/g, " ");
-  return s;
-}
-
-function extractLabels(text) {
-  const lines = String(text || "").split(/\r?\n/);
-  const labels = [];
-  const re = /\\label\*?\s*\{([^}]+)\}/g;
-  for (const line of lines) {
-    const clean = stripLatexComment(line);
-    if (!clean) continue;
-    let m;
-    while ((m = re.exec(clean))) {
-      const key = String(m[1] || "").trim();
-      if (key) labels.push(key);
-    }
-  }
-  return Array.from(new Set(labels));
-}
-
-function extractBibKeys(text) {
-  const raw = String(text || "");
-  if (!raw.trim()) return [];
-  const lines = raw.split(/\r?\n/);
-  const cleaned = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    if (trimmed.startsWith("%")) continue;
-    if (/^@comment/i.test(trimmed)) continue;
-    cleaned.push(trimmed);
-  }
-  const joined = cleaned.join("\n");
-  const keys = [];
-  const re = /@\w+\s*\{\s*([^,\s]+)\s*,/g;
-  let m;
-  while ((m = re.exec(joined))) {
-    const key = String(m[1] || "").trim();
-    if (key) keys.push(key);
-  }
-  return Array.from(new Set(keys));
 }
 
 function updateDocCaches(filePath, text) {
@@ -941,58 +145,6 @@ function getAllLabels() {
 function getBibKeys() {
   const keys = app && app.ui && app.ui.bibKeyCache && Array.isArray(app.ui.bibKeyCache.keys) ? app.ui.bibKeyCache.keys : [];
   return keys.slice();
-}
-
-function computeDocStats(text) {
-  const plain = stripLatexForCount(text);
-  if (!plain.trim()) return { words: 0, chars: 0, cjk: 0 };
-  const cjkMatches = plain.match(/[\u4e00-\u9fff]/g) || [];
-  const cjk = cjkMatches.length;
-  const noCjk = plain.replace(/[\u4e00-\u9fff]/g, " ");
-  const words = noCjk.trim() ? noCjk.trim().split(/\s+/).filter(Boolean).length : 0;
-  const chars = plain.replace(/\s+/g, "").length;
-  return { words, chars, cjk };
-}
-
-function latexFoldService(state, lineStart) {
-  const line = state.doc.lineAt(lineStart);
-  const text = stripLatexComment(line.text);
-  const m = text.match(/\\begin\s*\{([^}]+)\}/);
-  if (!m) return null;
-
-  const env = String(m[1] || "").trim();
-  if (!env) return null;
-
-  const beginRe = new RegExp(`\\\\begin\\s*\\{${escapeRegExp(env)}\\}`, "g");
-  const endRe = new RegExp(`\\\\end\\s*\\{${escapeRegExp(env)}\\}`, "g");
-
-  const countMatches = (re, s) => {
-    re.lastIndex = 0;
-    let count = 0;
-    let mm;
-    while ((mm = re.exec(s))) count += 1;
-    return count;
-  };
-
-  let depth = 0;
-  depth += countMatches(beginRe, text);
-  depth -= countMatches(endRe, text);
-  if (depth <= 0) return null;
-
-  let pos = line.to + 1;
-  while (pos <= state.doc.length) {
-    const l = state.doc.lineAt(pos);
-    const t = stripLatexComment(l.text);
-    depth += countMatches(beginRe, t);
-    depth -= countMatches(endRe, t);
-    if (depth <= 0) {
-      if (l.from <= line.to) return null;
-      return { from: line.to, to: l.from };
-    }
-    pos = l.to + 1;
-  }
-
-  return null;
 }
 
 function clear() {
@@ -1524,6 +676,9 @@ async function renderPdfPages({ projectId, refresh = false } = {}) {
     pulsePdfMarker();
     app.ui.pdfMarkerPulse = false;
   }
+
+  updatePdfPageOffsets();
+  handlePdfScroll();
 }
 
 function computePdfMarkerPosition() {
@@ -1766,6 +921,36 @@ function formatPdfPageInfo(page, total) {
 function updatePdfPageInfo(page, total) {
   const infoEl = document.getElementById("pdfPageInfo");
   if (infoEl) infoEl.textContent = formatPdfPageInfo(page, total);
+}
+
+function updatePdfPageOffsets() {
+  const viewer = document.getElementById("pdfViewer");
+  const pagesHost = document.getElementById("pdfPages");
+  if (!viewer || !pagesHost) return;
+  const wraps = Array.from(pagesHost.querySelectorAll(".pdf-page-wrap"));
+  const offsets = [];
+  for (const el of wraps) {
+    const page = Number(el.getAttribute("data-page") || el.dataset.page || offsets.length + 1);
+    offsets.push({ page, top: el.offsetTop, height: el.offsetHeight });
+  }
+  app.ui.pdfPageOffsets = offsets;
+}
+
+let pdfScrollRaf = null;
+function handlePdfScroll() {
+  const viewer = document.getElementById("pdfViewer");
+  const offsets = app.ui.pdfPageOffsets || [];
+  if (!viewer || !offsets.length) return;
+  const anchor = viewer.scrollTop + viewer.clientHeight * 0.35;
+  let page = offsets[0].page || 1;
+  for (const item of offsets) {
+    if (anchor >= item.top) page = item.page;
+    else break;
+  }
+  if (page !== app.ui.pdfPage) {
+    app.ui.pdfPage = page;
+    updatePdfPageInfo(page, app.ui.pdfPageCount || 1);
+  }
 }
 
 function zoomStep(direction) {
@@ -2066,7 +1251,7 @@ const app = {
     selectedFiles: new Set(),
     openFiles: [],
     pinnedFiles: [],
-    fileView: localStorage.getItem("ct_fileView") || "focus",
+    fileView: "all",
     pendingOpenFile: null,
     pdfTargetFile: null,
     pdfPage: null,
@@ -2083,13 +1268,14 @@ const app = {
     pdfViewports: {},
     pdfRenderTasks: [],
     pdfRenderToken: 0,
+    pdfPageOffsets: [],
     pdfWorkerReady: false,
     pdfMarker: null,
     pdfMarkerFocus: false,
     pdfMarkerPulse: false,
     refreshFileTree: null,
     refreshFileTabs: null,
-    lang: currentLang,
+    lang: getLang(),
     wsUrlOverride: localStorage.getItem("ct_ws_url") || "",
     compileOverview: null,
     monitorTimer: null,
@@ -2587,14 +1773,13 @@ function setAiSetting(key, value) {
 }
 
 function setLang(next) {
-  currentLang = next === "en" ? "en" : "zh";
-  localStorage.setItem(LANG_KEY, currentLang);
-  if (app.ui) app.ui.lang = currentLang;
+  const lang = setI18nLang(next);
+  if (app.ui) app.ui.lang = lang;
   mount(render());
 }
 
 function toggleLang() {
-  setLang(currentLang === "zh" ? "en" : "zh");
+  setLang(getLang() === "zh" ? "en" : "zh");
 }
 
 function applyTheme(theme) {
@@ -2739,10 +1924,9 @@ function setAiPanelCollapsed(next) {
 }
 
 function setFileView(view) {
-  const v = view === "all" ? "all" : "focus";
+  const v = "all";
   app.ui.fileView = v;
   localStorage.setItem("ct_fileView", v);
-  if (v === "focus") app.ui.groupTreeInit = false;
   if (app.ui.refreshFileTree) app.ui.refreshFileTree();
 }
 
@@ -3271,7 +2455,7 @@ function btn(label, { kind = "", onClick, disabled = false, id = null } = {}) {
 }
 
 function langToggleBtn() {
-  const label = currentLang === "zh" ? "EN" : "中文";
+  const label = getLang() === "zh" ? "EN" : "中文";
   return btn(label, { onClick: toggleLang, id: "langToggle" });
 }
 
@@ -6787,12 +5971,6 @@ async function getCurrentFileText(file) {
   return await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(file)}`);
 }
 
-function fileExt(filePath) {
-  const raw = String(filePath || "").toLowerCase();
-  const idx = raw.lastIndexOf(".");
-  return idx === -1 ? "" : raw.slice(idx);
-}
-
 function listFilesByExts(exts) {
   if (!Array.isArray(app.current.tree)) return [];
   const set = new Set(exts.map((x) => String(x || "").toLowerCase()));
@@ -8150,7 +7328,12 @@ function renderFileTree() {
     container.innerHTML = "";
     const filter = app.ui.fileFilter.trim().toLowerCase();
     const baseList = app.current.tree || [];
-    const list = filter ? baseList.filter((p) => p.toLowerCase().includes(filter)) : baseList;
+    const viewList = app.ui.fileView === "all" ? baseList : baseList.filter((p) => isFocusFile(p));
+    const list = filter ? viewList.filter((p) => p.toLowerCase().includes(filter)) : viewList;
+    if (viewList.length === 0 && app.ui.fileView !== "all") {
+      container.appendChild(h("div", { class: "hint", html: t("暂无文稿文件") }));
+      return;
+    }
     if (list.length === 0) {
       container.appendChild(h("div", { class: "hint", html: t("(无匹配文件)") }));
       return;
@@ -8160,14 +7343,40 @@ function renderFileTree() {
       const idx = lower.lastIndexOf(".");
       return idx === -1 ? "" : lower.slice(idx);
     };
-    const tree = buildTree(list);
-    const rootNode = {
-      type: "dir",
-      name: t("主文件夹"),
-      path: "",
-      root: true,
-      children: tree.children,
+    const groupDefs = [
+      { key: "tex", label: t("TeX 文稿"), order: 1, match: (p) => getExt(p) === ".tex" },
+      { key: "fig", label: t("图片/图表"), order: 2, match: (p) => isAssetFile(p) },
+      { key: "bib", label: t("参考文献"), order: 3, match: (p) => getExt(p) === ".bib" },
+      { key: "style", label: t("样式文件"), order: 4, match: (p) => STYLE_EXTS.has(getExt(p)) },
+      { key: "other", label: t("其他"), order: 5, match: (_p) => true },
+    ];
+
+    const buildGroupedTree = (paths) => {
+      const buckets = new Map();
+      for (const def of groupDefs) buckets.set(def.key, []);
+      for (const p of paths) {
+        const def = groupDefs.find((d) => d.match(p)) || groupDefs[groupDefs.length - 1];
+        buckets.get(def.key).push(p);
+      }
+      const root = { type: "dir", name: "", path: "", children: new Map() };
+      for (const def of groupDefs) {
+        const items = buckets.get(def.key) || [];
+        if (!items.length) continue;
+        const groupTree = buildTree(items);
+        const node = {
+          type: "dir",
+          name: def.label,
+          path: `@group/${def.key}`,
+          group: true,
+          order: def.order,
+          children: groupTree.children,
+        };
+        root.children.set(def.key, node);
+      }
+      return root;
     };
+
+    const tree = app.ui.fileView === "all" ? buildTree(list) : buildGroupedTree(list);
     const countCache = new Map();
     const countFiles = (node) => {
       if (!node) return 0;
@@ -8186,10 +7395,9 @@ function renderFileTree() {
 
         if (child.type === "dir") {
           const isGroup = !!child.group;
-          const isRoot = !!child.root;
-          const open = isRoot ? true : (filter ? true : app.ui.openFolders.has(full));
+          const open =
+            filter ? true : app.ui.openFolders.has(full) || (isGroup && !app.ui.groupTreeInit && !app.ui.openFolders.has(full));
           const toggleDir = () => {
-            if (isRoot) return;
             if (app.ui.openFolders.has(full)) app.ui.openFolders.delete(full);
             else app.ui.openFolders.add(full);
             draw();
@@ -8198,35 +7406,16 @@ function renderFileTree() {
           const countEl = fileCount > 0 ? h("span", { class: "tree-count", html: String(fileCount) }) : null;
           const actions = !isGroup
             ? (() => {
-                const menuKey = full || "__root__";
-                const menuId = `tree:${encodeURIComponent(menuKey)}`;
+                const menuId = `tree:${encodeURIComponent(full)}`;
                 const menuBtn = h("button", {
                   class: "tree-menu-btn",
                   title: t("操作"),
                   onclick: (ev) => toggleDropdown(menuId, ev),
-                  html: "⋯",
-                });
-                const newFileBtn = btn(t("新文件"), {
-                  kind: "menu-item",
-                  onClick: async (ev) => {
-                    ev.stopPropagation();
-                    const base = full ? `${full}/main.tex` : "main.tex";
-                    const rel = prompt(t("新文件路径"), base);
-                    if (!rel) return;
-                    await api(`/api/projects/${app.current.project.id}/file`, {
-                      method: "POST",
-                      body: JSON.stringify({ path: rel, content: "" }),
-                    });
-                    await loadProject(app.current.project.id);
-                    cleanupEditor();
-                    clearDropdowns();
-                    mount(render());
-                  },
+                  html: "▸",
                 });
                 const menu = dropdownMenu(
                   menuId,
                   h("div", { class: "dropdown-panel tree-action-panel" }, [
-                    newFileBtn,
                     btn(t("新文件夹"), {
                       kind: "menu-item",
                       onClick: async (ev) => {
@@ -8244,81 +7433,77 @@ function renderFileTree() {
                         mount(render());
                       },
                     }),
-                    !isRoot
-                      ? btn(t("重命名"), {
-                          kind: "menu-item",
-                          onClick: async (ev) => {
-                            ev.stopPropagation();
-                            const np = prompt(t("重命名为"), full);
-                            if (!np || np === full) return;
-                            const projectId = app.current.project && app.current.project.id;
-                            const nextOpenFiles = remapPathList(app.ui.openFiles, full, np);
-                            const nextSelected = remapPathSet(app.ui.selectedFiles, full, np);
-                            const nextPinned = remapPathList(app.ui.pinnedFiles, full, np);
-                            const nextOpenFile = app.current.openFile ? remapPathPrefix(app.current.openFile, full, np) : null;
-                            await api(`/api/projects/${app.current.project.id}/rename`, {
-                              method: "POST",
-                              body: JSON.stringify({ oldPath: full, newPath: np }),
-                            });
-                            if (projectId) {
-                              setOpenFiles(nextOpenFiles);
-                              setPinnedFiles(nextPinned);
-                              if (nextOpenFile) localStorage.setItem(lastOpenFileKey(projectId), nextOpenFile);
-                            }
-                            await loadProject(app.current.project.id);
-                            app.ui.selectedFiles = nextSelected;
-                            const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
-                            if (filtered.length) setOpenFiles(filtered);
-                            clearDropdowns();
-                            if (nextOpenFile && app.current.tree.includes(nextOpenFile)) {
-                              await openFile(nextOpenFile);
-                              return;
-                            }
-                            cleanupEditor();
-                            mount(render());
-                          },
-                        })
-                      : null,
-                    !isRoot
-                      ? btn(t("删除"), {
-                          kind: "menu-item danger",
-                          onClick: async (ev) => {
-                            ev.stopPropagation();
-                            if (!confirm(t("确认删除 {name} ?", { name: full }))) return;
-                            const projectId = app.current.project && app.current.project.id;
-                            const nextOpenFiles = filterPathList(app.ui.openFiles, full);
-                            const nextSelected = filterPathSet(app.ui.selectedFiles, full);
-                            const nextPinned = filterPathList(app.ui.pinnedFiles, full);
-                            const wasOpen = app.current.openFile && isPathUnderPrefix(app.current.openFile, full);
-                            await api(`/api/projects/${app.current.project.id}/file`, {
-                              method: "DELETE",
-                              body: JSON.stringify({ path: full }),
-                            });
-                            if (projectId) {
-                              setOpenFiles(nextOpenFiles);
-                              setPinnedFiles(nextPinned);
-                              const last = localStorage.getItem(lastOpenFileKey(projectId)) || "";
-                              if (last && isPathUnderPrefix(last, full)) localStorage.removeItem(lastOpenFileKey(projectId));
-                            }
-                            await loadProject(app.current.project.id);
-                            app.ui.selectedFiles = nextSelected;
-                            if (nextOpenFiles.length) {
-                              const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
-                              if (filtered.length) setOpenFiles(filtered);
-                            }
-                            clearDropdowns();
-                            if (wasOpen) {
-                              app.current.openFile = null;
-                              cleanupEditor();
-                              mount(render());
-                              return;
-                            }
-                            cleanupEditor();
-                            mount(render());
-                          },
-                        })
-                      : null,
-                  ].filter(Boolean))
+                    btn(t("重命名"), {
+                      kind: "menu-item",
+                      onClick: async (ev) => {
+                        ev.stopPropagation();
+                        const np = prompt(t("重命名为"), full);
+                        if (!np || np === full) return;
+                        const projectId = app.current.project && app.current.project.id;
+                        const nextOpenFiles = remapPathList(app.ui.openFiles, full, np);
+                        const nextSelected = remapPathSet(app.ui.selectedFiles, full, np);
+                        const nextPinned = remapPathList(app.ui.pinnedFiles, full, np);
+                        const nextOpenFile = app.current.openFile ? remapPathPrefix(app.current.openFile, full, np) : null;
+                        await api(`/api/projects/${app.current.project.id}/rename`, {
+                          method: "POST",
+                          body: JSON.stringify({ oldPath: full, newPath: np }),
+                        });
+                        if (projectId) {
+                          setOpenFiles(nextOpenFiles);
+                          setPinnedFiles(nextPinned);
+                          if (nextOpenFile) localStorage.setItem(lastOpenFileKey(projectId), nextOpenFile);
+                        }
+                        await loadProject(app.current.project.id);
+                        app.ui.selectedFiles = nextSelected;
+                        const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
+                        if (filtered.length) setOpenFiles(filtered);
+                        clearDropdowns();
+                        if (nextOpenFile && app.current.tree.includes(nextOpenFile)) {
+                          await openFile(nextOpenFile);
+                          return;
+                        }
+                        cleanupEditor();
+                        mount(render());
+                      },
+                    }),
+                    btn(t("删除"), {
+                      kind: "menu-item danger",
+                      onClick: async (ev) => {
+                        ev.stopPropagation();
+                        if (!confirm(t("确认删除 {name} ?", { name: full }))) return;
+                        const projectId = app.current.project && app.current.project.id;
+                        const nextOpenFiles = filterPathList(app.ui.openFiles, full);
+                        const nextSelected = filterPathSet(app.ui.selectedFiles, full);
+                        const nextPinned = filterPathList(app.ui.pinnedFiles, full);
+                        const wasOpen = app.current.openFile && isPathUnderPrefix(app.current.openFile, full);
+                        await api(`/api/projects/${app.current.project.id}/file`, {
+                          method: "DELETE",
+                          body: JSON.stringify({ path: full }),
+                        });
+                        if (projectId) {
+                          setOpenFiles(nextOpenFiles);
+                          setPinnedFiles(nextPinned);
+                          const last = localStorage.getItem(lastOpenFileKey(projectId)) || "";
+                          if (last && isPathUnderPrefix(last, full)) localStorage.removeItem(lastOpenFileKey(projectId));
+                        }
+                        await loadProject(app.current.project.id);
+                        app.ui.selectedFiles = nextSelected;
+                        if (nextOpenFiles.length) {
+                          const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
+                          if (filtered.length) setOpenFiles(filtered);
+                        }
+                        clearDropdowns();
+                        if (wasOpen) {
+                          app.current.openFile = null;
+                          cleanupEditor();
+                          mount(render());
+                          return;
+                        }
+                        cleanupEditor();
+                        mount(render());
+                      },
+                    }),
+                  ])
                 );
                 return h(
                   "div",
@@ -8335,28 +7520,28 @@ function renderFileTree() {
             "div",
             { class: `tree-row dir ${isGroup ? "group" : ""}`.trim(), style: rowStyle, onclick: toggleDir, title: full },
             [
+            h("button", {
+              class: `tree-toggle ${open ? "open" : ""}`.trim(),
+              title: open ? t("收起") : t("展开"),
+              html: "",
+              onclick: (ev) => {
+                ev.stopPropagation();
+                toggleDir();
+              },
+            }),
+            h("div", { class: "tree-text" }, [
               h("button", {
-                class: `tree-toggle ${open ? "open" : ""} ${isRoot ? "root" : ""}`.trim(),
-                title: open ? t("收起") : t("展开"),
-                html: "",
+                class: "tree-filebtn tree-dirname",
+                html: child.name,
+                title: full,
                 onclick: (ev) => {
                   ev.stopPropagation();
                   toggleDir();
                 },
               }),
-              h("div", { class: "tree-text" }, [
-                h("button", {
-                  class: `tree-filebtn tree-dirname ${isRoot ? "root" : ""}`.trim(),
-                  html: child.name,
-                  title: full,
-                  onclick: (ev) => {
-                    ev.stopPropagation();
-                    toggleDir();
-                  },
-                }),
-              ]),
-              meta,
-            ]);
+            ]),
+            meta,
+          ]);
           container.appendChild(row);
           if (open) renderNode(child, full, depth + 1);
           continue;
@@ -8399,7 +7584,7 @@ function renderFileTree() {
             class: "tree-menu-btn",
             title: t("操作"),
             onclick: (ev) => toggleDropdown(menuId, ev),
-            html: "⋯",
+            html: "▸",
           });
           const fileMenu = dropdownMenu(
             menuId,
@@ -8510,7 +7695,10 @@ function renderFileTree() {
       }
     };
 
-    renderNode(rootNode, "", 0);
+    renderNode(tree, "", 0);
+    if (app.ui.fileView !== "all" && !app.ui.groupTreeInit) {
+      app.ui.groupTreeInit = true;
+    }
   };
 
   draw();
@@ -9058,10 +8246,6 @@ function renderProject() {
       }, 120);
     },
   });
-  if (app.ui.fileView !== "all") {
-    app.ui.fileView = "all";
-    localStorage.setItem("ct_fileView", "all");
-  }
   const clearFilterBtn = h("button", {
     class: "left-icon-btn",
     title: t("清空"),
@@ -9071,7 +8255,7 @@ function renderProject() {
       if (app.ui.refreshFileTree) app.ui.refreshFileTree();
     },
   });
-  clearFilterBtn.textContent = "×";
+  clearFilterBtn.appendChild(iconSvg("clear", { size: 12 }));
   const showFileActions = () => {
     const selectedCount = app.ui.selectedFiles ? app.ui.selectedFiles.size : 0;
     const body = h("div", { class: "file-actions-modal" }, [
@@ -9399,25 +8583,25 @@ function renderProject() {
       mount(render());
     },
   });
-  newFileBtn.textContent = "+";
+  newFileBtn.appendChild(iconSvg("plus"));
   const uploadBtn = h("button", {
     class: "left-icon-btn",
     title: t("上传"),
     onclick: () => uploadInput.click(),
   });
-  uploadBtn.textContent = "↑";
+  uploadBtn.appendChild(iconSvg("upload"));
   const manageBtn = h("button", {
     class: "left-icon-btn",
     title: t("管理"),
     onclick: () => showFileActions(),
   });
-  manageBtn.textContent = "⋯";
+  manageBtn.appendChild(iconSvg("more"));
   const exportBtn = h("button", {
     class: "left-icon-btn",
     title: t("导出 Zip"),
     onclick: () => exportProjectZip(),
   });
-  exportBtn.textContent = "Z";
+  exportBtn.appendChild(iconSvg("download"));
 
   const toolsRow = h("div", { class: "left-tools" }, [
     filterInput,
@@ -9427,8 +8611,6 @@ function renderProject() {
     exportBtn,
     manageBtn,
   ]);
-  const viewControls = null;
-
   const headerActions = h("div", { class: "left-header-actions" }, [shareWrap, settingsWrap]);
   const headerChildren = [
     h("div", { class: "left-header-top" }, [projectBtnWrap, headerActions]),
@@ -9698,7 +8880,7 @@ function renderProject() {
   const compileBtn = btn("", { kind: "", onClick: () => compileProject({ mode: "full" }), id: "compileBtn" });
   compileBtn.title = t("编译 (Ctrl/Cmd+S)");
   compileBtn.classList.add("compile-btn");
-  const compileIcon = h("span", { class: "compile-icon", html: "⟳" });
+  const compileIcon = iconSvg("compile", { size: 14, className: "compile-icon" });
   const compileLabel = h("span", { class: "compile-label", html: t("编译") });
   compileBtn.appendChild(compileIcon);
   compileBtn.appendChild(compileLabel);
@@ -9946,6 +9128,13 @@ function renderProject() {
     },
     { passive: false }
   );
+  pdfViewer.addEventListener("scroll", () => {
+    if (pdfScrollRaf) cancelAnimationFrame(pdfScrollRaf);
+    pdfScrollRaf = requestAnimationFrame(() => {
+      pdfScrollRaf = null;
+      handlePdfScroll();
+    });
+  });
   if (hasPdf) {
     const ts = Date.now();
     app.ui.pdfTs = ts;

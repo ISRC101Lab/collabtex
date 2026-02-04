@@ -1,0 +1,13 @@
+.card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 12px;
+  animation: liftIn 440ms ease-out;
+}
+
+
+
+
+.card.auth { width: 420px; }

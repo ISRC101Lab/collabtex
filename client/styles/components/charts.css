@@ -1,0 +1,32 @@
+.chart-body {
+  display: grid;
+  gap: 10px;
+}
+
+
+
+
+.chart-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+
+
+
+.chart-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+
+
+
+.chart-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

@@ -1,0 +1,90 @@
+.quick-body {
+  display: grid;
+  gap: 12px;
+}
+
+
+
+
+.quick-list {
+  max-height: 380px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+
+
+
+.quick-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+
+
+
+.quick-item:hover {
+  border-color: rgba(13, 114, 122, 0.2);
+  background: rgba(13, 114, 122, 0.08);
+}
+
+
+
+
+.quick-item.active {
+  border-color: rgba(13, 114, 122, 0.35);
+  background: rgba(13, 114, 122, 0.14);
+}
+
+
+
+
+.quick-meta { display: grid; gap: 2px; }
+
+
+
+.quick-name { font-weight: 700; }
+
+
+
+.quick-path { color: var(--muted); font-size: 12px; }
+
+
+
+
+.quick-mark {
+  background: rgba(214, 122, 31, 0.25);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+
+
+
+.quick-tag {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: rgba(13, 114, 122, 0.12);
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+
+
+
+.quick-hint {
+  color: var(--muted);
+  font-size: 12px;
+}

@@ -1,0 +1,76 @@
+.status-item { display: inline-flex; gap: 4px; align-items: center; }
+
+
+.status-label { text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
+
+
+.status-value { font-weight: 600; color: var(--text); }
+
+
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+  background: #f2f2ed;
+}
+
+
+
+.status-pill[data-status="connected"] {
+  border-color: rgba(13, 114, 122, 0.35);
+  background: var(--accent-weak);
+  color: var(--accent-strong);
+}
+
+
+
+.status-pill[data-status="disconnected"] {
+  border-color: rgba(180, 35, 24, 0.35);
+  background: var(--danger-weak);
+  color: #7a0b11;
+}
+
+
+
+/* Make the CodeMirror editor fill the available height in the pane. */
+.cm-editor { height: 100%; background: var(--editor-bg); color: var(--editor-text); }
+
+
+.cm-scroller { overflow: auto; font-family: var(--font-mono); color: var(--editor-text); }
+
+.cm-content { color: var(--editor-text); }
+.cm-comment { color: #8d94a1; }
+.cm-keyword,
+.cm-atom,
+.cm-def { color: #a8d8ff; }
+.cm-string { color: #bfe3a1; }
+.cm-number { color: #f0c674; }
+.cm-operator,
+.cm-meta { color: #c9c9c9; }
+.cm-variableName { color: #e6e6e6; }
+
+
+.cm-flashLine {
+  background: rgba(255, 180, 122, 0.22);
+  animation: lineFlash 900ms ease-out;
+}
+
+
+.cm-ghostText {
+  color: rgba(120, 132, 148, 0.75);
+  font-style: italic;
+  white-space: pre;
+}
+
+@keyframes lineFlash {
+  0% { background: rgba(255, 180, 122, 0.55); }
+  100% { background: rgba(255, 180, 122, 0); }
+}

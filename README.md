@@ -25,14 +25,12 @@ npm run build
 ./run.sh
 ```
 
-Open: `http://localhost:3080`
+Open: `http://localhost:4090`
 
-Default users:
-- `admin`
-- `user01` .. `user09`
-
-Default password (change in production):
-- `ChangeMe!2026`
+Auth:
+- This build auto-signs in as `admin` (no dedicated login page).
+- Click the account header in the left sidebar to switch users (username + password).
+- Local accounts still exist on the server (`admin`, `user01`..`user09`); initial password defaults to `admin` (override with `INIT_PASSWORD`).
 
 ## Requirements
 
@@ -53,11 +51,11 @@ SyncTeX only works for lines included in the compiled document.
 
 ## Ports
 
-- Web: `3080`
-- WS: `3081` (defaults to `WEB_PORT + 1`)
+- Web: `4090`
+- WS: `4091` (defaults to `WEB_PORT + 1`)
 
-For VSCode Remote or SSH port forwarding, forward both ports. If only 3080 is
-forwarded, open with `?wsPort=3081`.
+For VSCode Remote or SSH port forwarding, forward both ports. If only 4090 is
+forwarded, open with `?wsPort=4091`.
 
 ## Docs
 

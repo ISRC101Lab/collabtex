@@ -1,0 +1,21 @@
+/* ===== 02-TYPOGRAPHY ===== */
+/* Fonts and Text Styling */
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:wght@600;700&display=swap");
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+code {
+  font-family: var(--font-mono);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  margin: 0;
+}
+
+strong {
+  font-weight: 600;
+}

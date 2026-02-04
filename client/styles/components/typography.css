@@ -1,0 +1,12 @@
+.mono { font-family: var(--font-mono); }
+
+
+
+
+.section-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin: 2px 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}

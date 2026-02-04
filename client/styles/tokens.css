@@ -1,0 +1,78 @@
+:root {
+  --bg: #1a1a1a;
+  --panel: #252525;
+  --panel-strong: #2a2a2a;
+  --text: #e3e3e3;
+  --muted: #a0a0a0;
+  --border: rgba(255, 255, 255, 0.1);
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.3);
+  --ring: 0 0 0 3px rgba(100, 100, 255, 0.4);
+  --accent: #5a5aff;
+  --accent-strong: #7070ff;
+  --accent-weak: rgba(90, 90, 255, 0.2);
+  --accent-warm: #ffb347;
+  --danger: #ff5555;
+  --danger-weak: rgba(255, 85, 85, 0.25);
+  --leftW: 200px;
+  --rightW: 600px;
+  --gutterW: 8px;
+  --dockGutterH: 8px;
+  --bottomH: 180px;
+  --topbarH: 42px;
+  --editor-font-size: 14.5px;
+  --editor-line-height: 1.7;
+  --editor-pad-y: 14px;
+  --editor-pad-x: 14px;
+  --font-ui: "Sora", "Noto Sans SC", "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --font-display: "Newsreader", "IBM Plex Sans", "Noto Sans SC", "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+  --editor-bg: #151515;
+  --editor-text: #e8e8e8;
+  --editor-gutter: #141414;
+  --editor-gutter-text: #7a7a7a;
+}
+
+html.theme-vscode-dark {
+  --bg: #1e1e1e;
+  --panel: #252526;
+  --panel-strong: #2d2d2d;
+  --text: #d4d4d4;
+  --muted: #9da1a6;
+  --border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.25);
+  --ring: 0 0 0 3px rgba(14, 99, 156, 0.35);
+  --accent: #0e639c;
+  --accent-strong: #1177bb;
+  --accent-weak: rgba(14, 99, 156, 0.2);
+  --accent-warm: #d7ba7d;
+  --danger: #f14c4c;
+  --danger-weak: rgba(241, 76, 76, 0.22);
+  --editor-bg: #1e1e1e;
+  --editor-text: #d4d4d4;
+  --editor-gutter: #1e1e1e;
+  --editor-gutter-text: #858585;
+}
+
+html.theme-vscode-light {
+  --bg: #f3f3f3;
+  --panel: #ffffff;
+  --panel-strong: #f8f8f8;
+  --text: #1e1e1e;
+  --muted: #5a5a5a;
+  --border: rgba(0, 0, 0, 0.1);
+  --shadow: 0 10px 26px rgba(0, 0, 0, 0.12);
+  --shadow-soft: 0 2px 6px rgba(0, 0, 0, 0.08);
+  --ring: 0 0 0 3px rgba(14, 99, 156, 0.18);
+  --accent: #0e639c;
+  --accent-strong: #0b4f7a;
+  --accent-weak: rgba(14, 99, 156, 0.12);
+  --accent-warm: #b36b00;
+  --danger: #b42318;
+  --danger-weak: rgba(180, 35, 24, 0.16);
+  --editor-bg: #ffffff;
+  --editor-text: #1e1e1e;
+  --editor-gutter: #f3f3f3;
+  --editor-gutter-text: #6b6b6b;
+}

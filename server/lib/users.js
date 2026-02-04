@@ -27,7 +27,7 @@ export async function saveUsers(dataDir, obj) {
 }
 
 export async function ensureDefaultUsers(dataDir) {
-  const initPassword = process.env.INIT_PASSWORD || 'ChangeMe!2026'
+  const initPassword = process.env.INIT_PASSWORD || 'admin'
   const existing = await loadUsers(dataDir)
   if (existing.users.length > 0) return existing
 

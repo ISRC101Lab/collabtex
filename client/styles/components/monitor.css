@@ -1,0 +1,149 @@
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+
+
+.metric-row .input {
+  text-align: right;
+}
+
+
+
+
+.metric-unit {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+
+
+
+.monitor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 242, 232, 0.94));
+}
+
+
+
+.monitor-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+
+
+.monitor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+
+
+.monitor-body {
+  padding: 12px;
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+}
+
+
+
+.monitor-body-inner { display: grid; gap: 14px; }
+
+
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+
+
+.metric-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+}
+
+
+
+.metric-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+
+
+.metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+
+
+.metric-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+
+
+.job-table { display: grid; gap: 6px; }
+
+
+
+.job-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) 0.6fr 0.6fr 0.6fr 0.7fr;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+}
+
+
+
+.job-status {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+
+
+.job-row[data-status="running"] .job-status { color: #0d727a; }
+
+
+
+.job-row[data-status="queued"] .job-status { color: #b4571d; }
+
+
+
+.job-row[data-status="success"] .job-status { color: #116329; }
+
+
+
+.job-row[data-status="error"] .job-status { color: #7a0b11; }

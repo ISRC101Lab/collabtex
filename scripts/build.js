@@ -21,6 +21,14 @@ try {
 } catch {
   // ignore if assets not present yet
 }
+// Copy modular styles (if present)
+try {
+  const stylesSrc = path.join(clientDir, "styles");
+  const stylesDst = path.join(publicDir, "styles");
+  await fs.cp(stylesSrc, stylesDst, { recursive: true });
+} catch {
+  // ignore if styles not present
+}
 // PDF.js worker
 try {
   const workerSrc = path.join(root, "node_modules", "pdfjs-dist", "build", "pdf.worker.min.mjs");
