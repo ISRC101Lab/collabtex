@@ -2442,6 +2442,31 @@ async function loadProject(projectId, { resetTab = false } = {}) {
   }
 }
 
+async function openProjectById(projectId, { pushHash = true, resetTab = true, seedProject = null } = {}) {
+  if (!projectId) return false;
+  cleanupEditor();
+  app.view = "project";
+  app.current.openFile = null;
+  app.ui.openFiles = [];
+  app.ui.fileFilter = "";
+  app.ui.openFolders = new Set([""]);
+  app.current.project = seedProject || app.projects.find((p) => p.id === projectId) || { id: projectId, name: projectId };
+  mount(render());
+  try {
+    await loadProject(projectId, { resetTab });
+    if (pushHash) history.pushState({}, "", `#project/${projectId}`);
+    mount(render());
+    return true;
+  } catch (e) {
+    app.view = "projects";
+    const msg = e && e.message ? e.message : String(e);
+    alert(`无法打开项目：${msg}`);
+    await loadProjects();
+    mount(render());
+    return false;
+  }
+}
+
 function topbar(title, rightEls) {
   const left = h("div", { class: "topbar-left" }, [
     h("div", { class: "brand", html: "CollabTeX Studio" }),
@@ -4564,7 +4589,7 @@ function renderChatPanel() {
   );
 
   const draw = () => {
-    container.innerHTML = "";
+    const frag = document.createDocumentFragment();
     const sessions = app.ui.aiSessions || [];
     if (!sessions.length) createAiSession();
     const activeSession = getActiveAiSession();
@@ -7341,11 +7366,13 @@ function renderFileTree() {
     const viewList = app.ui.fileView === "all" ? baseList : baseList.filter((p) => isFocusFile(p));
     const list = filter ? viewList.filter((p) => p.toLowerCase().includes(filter)) : viewList;
     if (viewList.length === 0 && app.ui.fileView !== "all") {
-      container.appendChild(h("div", { class: "hint", html: t("暂无文稿文件") }));
+      frag.appendChild(h("div", { class: "hint", html: t("暂无文稿文件") }));
+      container.replaceChildren(frag);
       return;
     }
     if (list.length === 0) {
-      container.appendChild(h("div", { class: "hint", html: t("(无匹配文件)") }));
+      frag.appendChild(h("div", { class: "hint", html: t("(无匹配文件)") }));
+      container.replaceChildren(frag);
       return;
     }
     const getExt = (p) => {
@@ -7552,7 +7579,7 @@ function renderFileTree() {
             ]),
             meta,
           ]);
-          container.appendChild(row);
+          frag.appendChild(row);
           if (open) renderNode(child, full, depth + 1);
           continue;
         }
@@ -7701,11 +7728,12 @@ function renderFileTree() {
             actionWrap,
           ]
         );
-        container.appendChild(row);
+        frag.appendChild(row);
       }
     };
 
     renderNode(tree, "", 0);
+    container.replaceChildren(frag);
     if (app.ui.fileView !== "all" && !app.ui.groupTreeInit) {
       app.ui.groupTreeInit = true;
     }
@@ -7882,17 +7910,7 @@ function renderProjects() {
     return t("你的项目");
   };
 
-  const openProject = async (p) => {
-    cleanupEditor();
-    app.view = "project";
-    app.current.openFile = null;
-    app.ui.openFiles = [];
-    app.ui.fileFilter = "";
-    app.ui.openFolders = new Set([""]);
-    await loadProject(p.id, { resetTab: true });
-    history.pushState({}, "", `#project/${p.id}`);
-    mount(render());
-  };
+  const openProject = async (p) => openProjectById(p && p.id ? p.id : "", { resetTab: true, seedProject: p });
 
   const createProject = async () => {
     if (app.ui.guestMode) {
@@ -8145,6 +8163,7 @@ function renderProjects() {
 
 function renderProject() {
   const p = app.current.project;
+  if (!p || !p.id) return renderLoading();
   const me = app.me || { username: "", isAdmin: false };
   applySplitVars();
   const isOwnerOrAdmin = me.isAdmin || p.owner === me.username;
@@ -9301,10 +9320,13 @@ async function bootstrap() {
   await loadProjects();
   const hash = location.hash || "";
   if (hash && hash.startsWith("#project/")) {
-    history.replaceState({}, "", "#projects");
+    const projectId = hash.slice("#project/".length).trim();
+    if (projectId) {
+      await openProjectById(projectId, { pushHash: false, resetTab: true });
+      return;
+    }
   }
   app.view = "projects";
-
   mount(render());
 }
 
