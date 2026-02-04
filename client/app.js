@@ -923,7 +923,7 @@ function getZoomNumber(val) {
 
 function formatPdfPageInfo(page, total) {
   const pad = (n) => String(Math.max(1, Number(n) || 1)).padStart(2, "0");
-  return `${pad(page)} 共 ${pad(total)} 页`;
+  return `${pad(page)}/${pad(total)} 页`;
 }
 
 function updatePdfPageInfo(page, total) {
@@ -2964,7 +2964,7 @@ async function openFile(filePath) {
     .catch(console.error);
 }
 
-async function openFileAt(filePath, line) {
+async function openFileAt(filePath, line, { skipPdfSync = false } = {}) {
   if (filePath === app.current.openFile && app.editor.view) {
     const view = app.editor.view;
     const ln = Math.max(1, Number(line || 1));
@@ -2972,7 +2972,7 @@ async function openFileAt(filePath, line) {
     view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
     view.focus();
     flashEditorLine(view, ln);
-    if (app.ui.autoSyncPdf) schedulePdfSync();
+    if (app.ui.autoSyncPdf && !skipPdfSync) schedulePdfSync();
     return;
   }
   await openFile(filePath);
@@ -2985,7 +2985,7 @@ async function openFileAt(filePath, line) {
     view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
     view.focus();
     flashEditorLine(view, ln);
-    if (app.ui.autoSyncPdf) schedulePdfSync();
+    if (app.ui.autoSyncPdf && !skipPdfSync) schedulePdfSync();
   }, 0);
 }
 
@@ -3030,7 +3030,9 @@ async function syncPdfToCursor({ silent = false } = {}) {
       app.ui.pdfMarkerFocus = false;
       app.ui.pdfMarkerPulse = false;
     }
-    setPdfView({ projectId: app.current.project.id, page, refresh: true });
+    const hasCanvas = !!document.getElementById(`pdfCanvas_${page}`);
+    const needsRefresh = !app.ui.pdfDoc || !hasCanvas;
+    setPdfView({ projectId: app.current.project.id, page, refresh: needsRefresh });
     if (!silent && app.ui.selectRightTab) app.ui.selectRightTab("pdf");
   } catch (e) {
     if (!silent) alert(e && e.message ? `${t("同步失败")}: ${e.message}` : t("同步失败"));
@@ -8254,16 +8256,6 @@ function renderProject() {
       }, 120);
     },
   });
-  const clearFilterBtn = h("button", {
-    class: "left-icon-btn",
-    title: t("清空"),
-    onclick: () => {
-      app.ui.fileFilter = "";
-      filterInput.value = "";
-      if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-    },
-  });
-  clearFilterBtn.appendChild(iconSvg("clear", { size: 12 }));
   const onDrop = async (ev) => {
     ev.preventDefault();
     ev.currentTarget.classList.remove("drop-ready");
@@ -8562,7 +8554,6 @@ function renderProject() {
 
   const toolsRow = h("div", { class: "left-tools" }, [
     filterInput,
-    clearFilterBtn,
     newFileBtn,
     uploadBtn,
     exportBtn,
@@ -9033,8 +9024,12 @@ function renderProject() {
   const pdfPages = h("div", { class: "pdf-pages", id: "pdfPages" });
   const pdfMarker = h("div", { class: "pdf-marker", id: "pdfMarker" });
   const pdfViewer = h("div", { class: "pdf-viewer", id: "pdfViewer" }, [pdfPages, pdfMarker, pdfHint]);
+  let lastPdfClickAt = 0;
   pdfViewer.onclick = async (ev) => {
     if (!app.current.project) return;
+    const now = Date.now();
+    if (now - lastPdfClickAt < 250) return;
+    lastPdfClickAt = now;
     const target = ev.target;
     const canvas = target && target.closest ? target.closest("canvas.pdf-canvas") : null;
     if (!canvas) return;
@@ -9068,7 +9063,7 @@ function renderProject() {
         }),
       });
       if (res && res.file && res.line) {
-        await openFileAt(res.file, res.line);
+        await openFileAt(res.file, res.line, { skipPdfSync: true });
       }
     } catch {
       // ignore failed click mapping

@@ -57,7 +57,7 @@ body::after {
 }
 
 
-.page { min-height: 100%; animation: pageIn 420ms ease-out; }
+.page { min-height: 100%; animation: none; }
 
 .center {
   display: flex;
@@ -246,7 +246,7 @@ body::after {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  animation: liftIn 420ms ease-out;
+  animation: none;
   position: relative;
 }
 

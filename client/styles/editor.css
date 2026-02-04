@@ -53,15 +53,26 @@
 }
 
 .cm-content { color: var(--editor-text); }
-.cm-comment { color: #9aa3af; }
+.cm-comment { color: #efe2d4; }
 .cm-keyword,
 .cm-atom,
-.cm-def { color: #b7d0ee; }
-.cm-string { color: #c3e6b6; }
-.cm-number { color: #f2c787; }
+.cm-def { color: #fff1db; }
+.cm-string,
+.cm-string-2 { color: #fff6e3; }
+.cm-number { color: #ffe9cf; }
 .cm-operator,
-.cm-meta { color: #d1d7e0; }
-.cm-variableName { color: #f0f2f6; }
+.cm-meta { color: #f9efe3; }
+.cm-variableName,
+.cm-variableName2,
+.cm-variableName3 { color: #fffaf2; }
+.cm-typeName,
+.cm-className { color: #fff2dd; }
+.cm-tag { color: #ffe6cf; }
+.cm-attribute { color: #fff1dd; }
+.cm-builtin { color: #ffe9d6; }
+.cm-qualifier { color: #fff5e6; }
+.cm-link,
+.cm-url { color: #fff0dc; }
 
 
 .cm-flashLine {
