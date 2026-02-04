@@ -1,12 +1,18 @@
 .filetree {
-  padding: 6px 6px 10px;
+  padding: 4px 6px 10px;
   overflow: auto;
   display: grid;
-  gap: 2px;
-  background: var(--panel);
+  gap: 4px;
+  background: transparent;
   font-size: 12.5px;
   line-height: 1.35;
+  contain: layout paint;
+  overscroll-behavior: contain;
+  scrollbar-color: #2b2b2b transparent;
 }
+.filetree::-webkit-scrollbar { width: 8px; }
+.filetree::-webkit-scrollbar-thumb { background: #2b2b2b; border-radius: 10px; }
+.filetree::-webkit-scrollbar-track { background: transparent; }
 
 
 
@@ -46,12 +52,13 @@
   gap: 6px;
   padding: 2px 6px;
   padding-left: calc(8px + clamp(0, var(--indent, 0), 6) * 10px);
-  border-radius: 4px;
+  border-radius: 6px;
   border: 1px solid transparent;
   margin-left: 0;
   box-sizing: border-box;
   background: transparent;
   min-height: 24px;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 
@@ -74,7 +81,7 @@
 
 
 .tree-row.dir {
-  color: var(--text);
+  color: #cfd3da;
   background: transparent;
   grid-template-columns: 14px minmax(0, 1fr) auto;
   cursor: pointer;
@@ -82,7 +89,7 @@
 
 
 .tree-row.dir.group {
-  color: var(--muted);
+  color: #7f8793;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -103,13 +110,13 @@
 }
 
 
-.tree-row.file:hover { background: rgba(13, 114, 122, 0.08); border-color: transparent; }
+.tree-row.file:hover { background: rgba(255, 255, 255, 0.04); border-color: transparent; }
 
 
 .tree-row.file.active {
-  background: rgba(14, 99, 156, 0.18);
+  background: rgba(58, 131, 190, 0.18);
   border-color: transparent;
-  box-shadow: inset 2px 0 0 rgba(14, 99, 156, 0.9);
+  box-shadow: inset 2px 0 0 rgba(58, 131, 190, 0.95);
 }
 
 
@@ -120,7 +127,7 @@
 }
 
 
-.tree-name { color: var(--muted); font-size: 13px; }
+.tree-name { color: #d9dde3; font-size: 13px; }
 
 
 .tree-indent { width: 18px; }
@@ -284,8 +291,8 @@
 
 .tree-subpath {
   font-size: 10px;
-  color: var(--muted);
-  opacity: 0.75;
+  color: #8a929d;
+  opacity: 0.8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -295,12 +302,12 @@
 
 
 .tree-count {
-  font-size: 11px;
-  color: var(--muted);
-  padding: 2px 6px;
+  font-size: 10px;
+  color: #9aa3ad;
+  padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(31, 106, 112, 0.07);
-  border: 1px solid rgba(31, 106, 112, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 
@@ -328,11 +335,13 @@
   background: transparent;
   color: #9a9a9a;
   cursor: pointer;
-  font-size: 10px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease;
 }
 
 
@@ -362,6 +371,8 @@
 .tree-meta { display: flex; align-items: center; gap: 6px; justify-self: end; }
 
 
+.tree-row:hover .tree-menu-btn,
+.tree-row.file.active .tree-menu-btn { opacity: 1; pointer-events: auto; }
 .tree-row:hover .tree-actions { opacity: 1; }
 
 

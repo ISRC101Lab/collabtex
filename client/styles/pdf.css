@@ -83,7 +83,14 @@
   display: flex;
   align-items: stretch;
   justify-content: center;
+  contain: layout paint;
+  overscroll-behavior: contain;
+  scrollbar-color: #2b2b2b transparent;
+  transform: translateZ(0);
 }
+.pdf-viewer::-webkit-scrollbar { width: 8px; }
+.pdf-viewer::-webkit-scrollbar-thumb { background: #2b2b2b; border-radius: 10px; }
+.pdf-viewer::-webkit-scrollbar-track { background: transparent; }
 
 
 .pdf-pages {
@@ -93,6 +100,7 @@
   gap: 8px;
   padding: 10px 0 14px;
   width: 100%;
+  contain: paint;
 }
 
 
@@ -157,11 +165,19 @@
 .pdf-action-bar {
   position: absolute;
   top: 10px;
+  left: 12px;
   right: 12px;
   z-index: 3;
   display: flex;
   gap: 6px;
   align-items: center;
+  justify-content: space-between;
+}
+.pdf-action-left,
+.pdf-action-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 

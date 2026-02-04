@@ -7411,8 +7411,8 @@ function renderFileTree() {
                   class: "tree-menu-btn",
                   title: t("操作"),
                   onclick: (ev) => toggleDropdown(menuId, ev),
-                  html: "▸",
                 });
+                menuBtn.appendChild(iconSvg("more", { size: 12 }));
                 const menu = dropdownMenu(
                   menuId,
                   h("div", { class: "dropdown-panel tree-action-panel" }, [
@@ -7584,8 +7584,8 @@ function renderFileTree() {
             class: "tree-menu-btn",
             title: t("操作"),
             onclick: (ev) => toggleDropdown(menuId, ev),
-            html: "▸",
           });
+          menuBtn.appendChild(iconSvg("more", { size: 12 }));
           const fileMenu = dropdownMenu(
             menuId,
             h("div", { class: "dropdown-panel tree-action-panel" }, [
@@ -9148,7 +9148,10 @@ function renderProject() {
     id: "pdfPageInfo",
     html: formatPdfPageInfo(app.ui.pdfPage || 1, app.ui.pdfPageCount || 1),
   });
-  const pdfActions = h("div", { class: "pdf-action-bar" }, [compileBtn, pageInfo]);
+  const pdfActions = h("div", { class: "pdf-action-bar" }, [
+    h("div", { class: "pdf-action-left" }, [compileBtn]),
+    h("div", { class: "pdf-action-right" }, [pageInfo]),
+  ]);
 
   const logDiv = h("div", { class: "log", id: "compileLog" });
   logDiv.textContent = app.current.lastLog || "";

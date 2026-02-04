@@ -44,7 +44,13 @@
 .cm-editor { height: 100%; background: var(--editor-bg); color: var(--editor-text); }
 
 
-.cm-scroller { overflow: auto; font-family: var(--font-mono); color: var(--editor-text); }
+.cm-scroller {
+  overflow: auto;
+  font-family: var(--font-mono);
+  color: var(--editor-text);
+  contain: layout paint;
+  overscroll-behavior: contain;
+}
 
 .cm-content { color: var(--editor-text); }
 .cm-comment { color: #8d94a1; }
