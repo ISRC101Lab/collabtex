@@ -1449,8 +1449,7 @@ async function renderPdfPages({ projectId, refresh = false } = {}) {
 
   const pageInput = document.getElementById("pdfPageInput");
   if (pageInput) pageInput.value = String(pageNum);
-  const pageInfo = document.getElementById("pdfPageInfo");
-  if (pageInfo) pageInfo.textContent = `/${total}`;
+  updatePdfPageInfo(pageNum, total);
 
   const firstPage = await doc.getPage(1);
   const baseViewport = firstPage.getViewport({ scale: 1 });
@@ -1732,6 +1731,7 @@ function setPdfView({ projectId, page, zoom, refresh = false } = {}) {
     app.ui.pdfPage = Number.isFinite(num) && num > 0 ? Math.floor(num) : 1;
     const pageInput = document.getElementById("pdfPageInput");
     if (pageInput) pageInput.value = String(app.ui.pdfPage);
+    updatePdfPageInfo(app.ui.pdfPage, app.ui.pdfPageCount || 1);
   }
   const zoomChanged = !!zoom;
   if (zoom) {
@@ -1756,6 +1756,16 @@ function getZoomNumber(val) {
   if (!val || val === "page-width" || val === "page-fit") return 100;
   const n = Number(val);
   return Number.isFinite(n) && n > 0 ? n : 100;
+}
+
+function formatPdfPageInfo(page, total) {
+  const pad = (n) => String(Math.max(1, Number(n) || 1)).padStart(2, "0");
+  return `${pad(page)} 共 ${pad(total)} 页`;
+}
+
+function updatePdfPageInfo(page, total) {
+  const infoEl = document.getElementById("pdfPageInfo");
+  if (infoEl) infoEl.textContent = formatPdfPageInfo(page, total);
 }
 
 function zoomStep(direction) {
@@ -4272,7 +4282,9 @@ async function compileProject({ clean = false, mode = "full", origin = "manual" 
   const setBtnRunning = (running) => {
     if (!btnEl) return;
     btnEl.disabled = !!running;
-    btnEl.textContent = running ? t("编译中...") : t("编译");
+    btnEl.classList.toggle("running", !!running);
+    const labelEl = btnEl.querySelector(".compile-label");
+    if (labelEl) labelEl.textContent = running ? t("编译中") : t("编译");
   };
 
   const appendLog = (s) => {
@@ -9701,9 +9713,13 @@ function renderProject() {
   );
   treeDensitySelect.classList.add("compact");
 
-  const compileBtn = btn(t("编译"), { kind: "primary", onClick: () => compileProject({ mode: "full" }), id: "compileBtn" });
+  const compileBtn = btn("", { kind: "", onClick: () => compileProject({ mode: "full" }), id: "compileBtn" });
   compileBtn.title = t("编译 (Ctrl/Cmd+S)");
   compileBtn.classList.add("compile-btn");
+  const compileIcon = h("span", { class: "compile-icon", html: "⟳" });
+  const compileLabel = h("span", { class: "compile-label", html: t("编译") });
+  compileBtn.appendChild(compileIcon);
+  compileBtn.appendChild(compileLabel);
 
   const aiProfiles = app.ui.aiProfiles || [];
 
@@ -9956,7 +9972,12 @@ function renderProject() {
     }, 0);
   }
   compileBtn.classList.add("pdf-action");
-  const pdfActions = h("div", { class: "pdf-action-bar" }, [compileBtn]);
+  const pageInfo = h("div", {
+    class: "pdf-page-badge",
+    id: "pdfPageInfo",
+    html: formatPdfPageInfo(app.ui.pdfPage || 1, app.ui.pdfPageCount || 1),
+  });
+  const pdfActions = h("div", { class: "pdf-action-bar" }, [compileBtn, pageInfo]);
 
   const logDiv = h("div", { class: "log", id: "compileLog" });
   logDiv.textContent = app.current.lastLog || "";

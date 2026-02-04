@@ -693,22 +693,20 @@ html.tree-compact .recent-item {
 }
 .tree-row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) auto;
+  grid-template-columns: 14px minmax(0, 1fr) 18px;
   align-items: flex-start;
   gap: 6px;
   padding: 2px 6px;
   padding-left: calc(8px + clamp(0, var(--indent, 0), 6) * 10px);
-  padding-right: 42px;
   border-radius: 4px;
   border: 1px solid transparent;
   margin-left: 0;
   box-sizing: border-box;
   background: transparent;
   min-height: 24px;
-  position: relative;
 }
 .tree-row.multi {
-  grid-template-columns: 18px 14px minmax(0, 1fr) auto;
+  grid-template-columns: 18px 14px minmax(0, 1fr) 18px;
 }
 .tree-row.file.selected {
   background: rgba(14, 99, 156, 0.12);
@@ -908,40 +906,29 @@ html.tree-compact .tree-count {
 }
 .tree-filebtn:hover { background: rgba(13, 114, 122, 0.08); }
 .tree-dirname { font-weight: 600; }
-.tree-actions {
-  display: flex;
-  gap: 6px;
-  justify-self: end;
-  position: absolute;
-  right: 6px;
-  top: 6px;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
+.tree-actions { display: none; }
 .tree-action-wrap {
-  position: absolute;
-  right: 6px;
-  top: 6px;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
 }
 .tree-menu-btn {
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
   border: 1px solid #2a2a2a;
-  background: #1f1f1f;
-  color: #b5b5b5;
+  background: transparent;
+  color: #9a9a9a;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 .tree-menu-btn:hover {
-  background: #242424;
-  border-color: #3a3a3a;
+  background: #1f1f1f;
+  border-color: #343434;
   color: #ffffff;
 }
 .tree-action-panel .btn.menu-item {
@@ -1773,13 +1760,37 @@ html.tree-compact .tree-count {
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.35);
 }
 .compile-btn {
-  border-color: transparent;
-  background: #22c55e;
-  color: #ffffff;
-  box-shadow: 0 10px 20px rgba(34, 197, 94, 0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #2d2d2d;
+  background: #1c1c1c;
+  color: #e6e6e6;
+  box-shadow: none;
+  border-radius: 999px;
+  padding: 6px 12px;
 }
 .compile-btn:hover {
-  background: #1fb455;
+  background: #222222;
+}
+.compile-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+.compile-label { font-size: 12px; letter-spacing: 0.02em; }
+.compile-btn.running .compile-icon {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.pdf-page-badge {
+  font-size: 12px;
+  color: #bdbdbd;
+  padding: 4px 6px;
 }
 .pdf-toolbar {
   display: grid;
@@ -2617,7 +2628,7 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   padding: 8px;
   min-width: 200px;
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.35);
-  z-index: 20;
+  z-index: 80;
   opacity: 0;
   transform: translateY(4px) scale(0.98);
   pointer-events: none;
@@ -2709,8 +2720,8 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   height: 30px;
   padding: 4px 8px;
   border-radius: 8px;
-  background: #1a1a1a;
-  border-color: #2a2a2a;
+  background: #202020;
+  border-color: #333333;
   font-size: 12px;
 }
 .dropdown[data-dropdown-id="panel-settings"] .dropdown-menu {
