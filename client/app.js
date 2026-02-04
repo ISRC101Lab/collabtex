@@ -8225,8 +8225,15 @@ function renderProject() {
     app.ui.openFiles = [];
     app.ui.fileFilter = "";
     app.view = "projects";
-    history.pushState({}, "", "#projects");
-    await loadProjects();
+    app.ui.dropdownOpen = "";
+    app.ui.projectRenameId = "";
+    app.ui.projectDeleteArmed = "";
+    if (location.hash !== "#projects") location.hash = "#projects";
+    try {
+      await loadProjects();
+    } catch (e) {
+      console.error(e);
+    }
     mount(render());
   };
 
@@ -9281,6 +9288,13 @@ function renderProject() {
     onclick: onClick,
     html: label,
   });
+  const railActionLink = (label, title, href, onClick) => h("a", {
+    class: "rail-btn rail-action",
+    title,
+    href,
+    onclick: onClick,
+    html: label,
+  });
   const railChatBtn = app.ui.assistantEnabled
     ? h("button", {
         class: `rail-btn ${app.ui.leftPaneTab === "chats" ? "active" : ""}`.trim(),
@@ -9291,7 +9305,7 @@ function renderProject() {
     : null;
   const rail = h("div", { class: "studio-rail" }, [
     h("div", { class: "studio-rail-group" }, [
-      railActionBtn("⟵", t("返回项目列表"), () => goProjects()),
+      railActionLink("⟵", t("返回项目列表"), "#projects", () => goProjects()),
       railActionBtn("▤", app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), () => toggleLeftPane()),
       railBtn("files", "☰", t("文件")),
       railChatBtn,
