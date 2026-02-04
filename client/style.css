@@ -693,7 +693,7 @@ html.tree-compact .recent-item {
 }
 .tree-row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) 18px;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
   align-items: flex-start;
   gap: 6px;
   padding: 2px 6px;
@@ -706,7 +706,7 @@ html.tree-compact .recent-item {
   min-height: 24px;
 }
 .tree-row.multi {
-  grid-template-columns: 18px 14px minmax(0, 1fr) 18px;
+  grid-template-columns: 18px 14px minmax(0, 1fr) auto;
 }
 .tree-row.file.selected {
   background: rgba(14, 99, 156, 0.12);
@@ -784,6 +784,7 @@ html.tree-compact .tree-row {
 }
 .tree-toggle.open::before { transform: rotate(45deg); }
 .tree-toggle:hover { color: var(--accent-strong); }
+.tree-toggle.root { opacity: 0; pointer-events: none; }
 .tree-icon {
   width: 12px;
   height: 12px;
@@ -906,6 +907,7 @@ html.tree-compact .tree-count {
 }
 .tree-filebtn:hover { background: rgba(13, 114, 122, 0.08); }
 .tree-dirname { font-weight: 600; }
+.tree-dirname.root { font-weight: 600; letter-spacing: 0.02em; }
 .tree-actions { display: none; }
 .tree-action-wrap {
   display: flex;
@@ -2851,7 +2853,9 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
 .projects-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .view-toggle-group {
   display: flex;
@@ -3168,6 +3172,7 @@ html.theme-vscode-light .cm-gutters { background: #f3f3f3; color: #6b6b6b; borde
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 .left-search-input {
   flex: 1;
