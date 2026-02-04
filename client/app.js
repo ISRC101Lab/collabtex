@@ -1304,6 +1304,7 @@ const app = {
     aiChatHistory: {},
     aiChatPanelState: null,
     refreshChatPanel: null,
+    refreshAiFloat: null,
     aiContextMode: localStorage.getItem("ct_ai_ctx_mode") || "selection",
     aiContextIncludeBib: localStorage.getItem("ct_ai_ctx_bib") === "1",
     aiContextIncludeStyle: localStorage.getItem("ct_ai_ctx_style") === "1",
@@ -1327,6 +1328,7 @@ const app = {
     editorPadX: clampNumber(localStorage.getItem("ct_editor_pad_x"), 8, 32, 14),
     treeDensity: localStorage.getItem("ct_tree_density") || "comfortable",
     aiChatMode: localStorage.getItem("ct_ai_chat_mode") || "assistant",
+    aiFloatOpen: localStorage.getItem("ct_ai_float") === "1",
     focusMode: false,
     autoJumpError: localStorage.getItem("ct_auto_jump_error") === "1",
     aiSessions: [],
@@ -1338,6 +1340,9 @@ const app = {
     aiPanelMode: localStorage.getItem("ct_ai_panel_mode") || "chat",
     layoutMode: "balanced",
     floatRightPane: false,
+    splitAuto: localStorage.getItem("ct_split_auto") !== "0",
+    leftRatio: parseFloat(localStorage.getItem("ct_left_ratio") || ""),
+    rightRatio: parseFloat(localStorage.getItem("ct_right_ratio") || ""),
     leftCollapsed: localStorage.getItem("ct_left_collapsed") === "1",
     toolbarCollapsed: localStorage.getItem("ct_toolbar_collapsed") !== "0",
     bottomConsole: localStorage.getItem("ct_bottom_console") !== "0",
@@ -1396,6 +1401,13 @@ const app = {
 app.ui.leftW = clampNumber(localStorage.getItem("ct_leftW"), 180, 520, 200);
 app.ui.rightW = clampNumber(localStorage.getItem("ct_rightW"), 360, 900, 600);
 app.ui.rightTab = localStorage.getItem("ct_rightTab") || "pdf";
+{
+  const base = Math.max(640, window.innerWidth || 0);
+  if (!Number.isFinite(app.ui.leftRatio)) app.ui.leftRatio = app.ui.leftW / base;
+  if (!Number.isFinite(app.ui.rightRatio)) app.ui.rightRatio = app.ui.rightW / base;
+  localStorage.setItem("ct_left_ratio", String(app.ui.leftRatio));
+  localStorage.setItem("ct_right_ratio", String(app.ui.rightRatio));
+}
 initAiProfiles();
 
 function initAiProfiles() {
@@ -1513,6 +1525,20 @@ function applySplitVars() {
   document.documentElement.style.setProperty("--dockH", `${app.ui.dockH}px`);
 }
 
+function updateSplitRatios() {
+  const w = Math.max(640, window.innerWidth || 0);
+  const minLeft = 180;
+  const minRight = 360;
+  const maxLeft = Math.min(520, Math.max(minLeft, Math.floor(w * 0.35)));
+  const maxRight = Math.min(900, Math.max(minRight, Math.floor(w * 0.45)));
+  const left = clampNumber(app.ui.leftW, minLeft, maxLeft, 200);
+  const right = clampNumber(app.ui.rightW, minRight, maxRight, 600);
+  app.ui.leftRatio = clampNumber(left / w, minLeft / w, maxLeft / w, app.ui.leftRatio || left / w);
+  app.ui.rightRatio = clampNumber(right / w, minRight / w, maxRight / w, app.ui.rightRatio || right / w);
+  localStorage.setItem("ct_left_ratio", String(app.ui.leftRatio));
+  localStorage.setItem("ct_right_ratio", String(app.ui.rightRatio));
+}
+
 function normalizeSplitWidths() {
   const w = Math.max(640, window.innerWidth || 0);
   const minLeft = 180;
@@ -1523,6 +1549,12 @@ function normalizeSplitWidths() {
 
   let left = clampNumber(app.ui.leftW, minLeft, maxLeft, 200);
   let right = clampNumber(app.ui.rightW, minRight, maxRight, 600);
+  if (app.ui.splitAuto) {
+    const leftRatio = Number.isFinite(app.ui.leftRatio) ? app.ui.leftRatio : left / w;
+    const rightRatio = Number.isFinite(app.ui.rightRatio) ? app.ui.rightRatio : right / w;
+    left = clampNumber(Math.round(w * leftRatio), minLeft, maxLeft, left);
+    right = clampNumber(Math.round(w * rightRatio), minRight, maxRight, right);
+  }
 
   if (app.ui.panelDock !== "bottom") {
     const available = w - minEditor;
@@ -1546,6 +1578,7 @@ function normalizeSplitWidths() {
     app.ui.rightW = right;
     localStorage.setItem("ct_leftW", String(left));
     localStorage.setItem("ct_rightW", String(right));
+    if (app.ui.splitAuto) updateSplitRatios();
   }
 }
 
@@ -1559,6 +1592,7 @@ function resetLayoutSafe() {
   app.ui.floatY = 0;
   app.ui.leftW = 200;
   app.ui.rightW = 600;
+  updateSplitRatios();
   localStorage.setItem("ct_focus_mode", "0");
   localStorage.setItem("ct_layout_mode", "balanced");
   localStorage.setItem("ct_left_collapsed", "0");
@@ -1969,6 +2003,7 @@ function startDrag(which, ev) {
   const onUp = () => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
+    if (app.ui.splitAuto) updateSplitRatios();
     if (app.current.project && app.ui.rightTab === "pdf") {
       renderPdfPages({ projectId: app.current.project.id }).catch(() => {});
     }
@@ -5076,6 +5111,191 @@ function renderChatPanel() {
   draw();
   app.ui.refreshChatPanel = draw;
   return container;
+}
+
+async function refreshAiFloatContext({ silent = false } = {}) {
+  const s = getEditorSelection();
+  if (!s) {
+    if (!silent) alert(t("请先打开文件。"));
+    return false;
+  }
+  const mode = app.ui.aiContextMode || "selection";
+  const session = getActiveAiSession();
+  const state = await buildChatStateFromMode(s, mode, session);
+  session.context = state.context;
+  session.meta = state.meta;
+  session.filePath = state.filePath;
+  session.updatedAt = Date.now();
+  app.ui.aiChatPanelState = state;
+  saveAiSessions();
+  if (app.ui.refreshAiFloat) app.ui.refreshAiFloat();
+  return true;
+}
+
+async function openAiFloat() {
+  if (!app.ui.assistantEnabled) return;
+  if (app.ui.leftPaneTab !== "files") {
+    app.ui.leftPaneTab = "files";
+    localStorage.setItem("ct_left_pane_tab", "files");
+  }
+  app.ui.aiFloatOpen = true;
+  localStorage.setItem("ct_ai_float", "1");
+  await refreshAiFloatContext({ silent: true });
+  mount(render());
+  setTimeout(() => {
+    const input = document.getElementById("aiFloatInput");
+    if (input) input.focus();
+  }, 0);
+}
+
+function closeAiFloat() {
+  app.ui.aiFloatOpen = false;
+  localStorage.setItem("ct_ai_float", "0");
+  mount(render());
+}
+
+function toggleAiFloat() {
+  if (app.ui.aiFloatOpen) closeAiFloat();
+  else openAiFloat();
+}
+
+function renderAiFloat() {
+  if (!app.ui.aiFloatOpen || !app.ui.assistantEnabled) return null;
+  const activeSession = getActiveAiSession();
+  let state = app.ui.aiChatPanelState;
+  if (!state || state.sessionId !== activeSession.id) {
+    state = buildChatStateFromSession(activeSession);
+    app.ui.aiChatPanelState = state;
+  }
+  const history = state.history || [];
+  const messagesEl = h("div", { class: "ai-chat-messages terminal", id: "aiFloatMessages" });
+  const input = h("textarea", {
+    class: "textarea ai-chat-input terminal",
+    id: "aiFloatInput",
+    placeholder: state.labels.placeholder,
+  });
+
+  const metaLine = h("div", { class: "ai-context-meta ai-float-meta", html: `${t("上下文")}: ${describeContextMeta(state.meta)}` });
+  const hintLine = h("div", { class: "hint ai-float-hint", html: state.labels.hint });
+
+  const renderMessages = () => {
+    messagesEl.innerHTML = "";
+    if (!history.length) {
+      messagesEl.appendChild(h("div", { class: "hint", html: state.labels.empty }));
+      return;
+    }
+    for (const msg of history) {
+      const role = msg.role === "assistant" ? "assistant" : "user";
+      const contentEl = h("div", { class: "ai-chat-content" });
+      contentEl.textContent = msg.content || "";
+      messagesEl.appendChild(
+        h("div", { class: `ai-chat-msg ${role}` }, [
+          h("div", { class: "ai-chat-meta", html: role === "assistant" ? "AI" : state.user }),
+          contentEl,
+        ])
+      );
+    }
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  };
+
+  const sendMessage = async () => {
+    const question = input.value.trim();
+    if (!question) return;
+    input.value = "";
+    if (!state.context) {
+      await refreshAiFloatContext({ silent: true });
+      state = app.ui.aiChatPanelState || state;
+    }
+    if (!state.context) {
+      history.push({ role: "assistant", content: t("请先打开文件以生成上下文。") });
+      renderMessages();
+      return;
+    }
+    const priorHistory = history.slice();
+    history.push({ role: "user", content: question });
+    renderMessages();
+    try {
+      const payload = {
+        context: state.context,
+        question,
+        history: priorHistory,
+        filePath: state.filePath,
+        mode: app.ui.aiChatMode === "agent" ? "agent" : "",
+      };
+      applyAiConfig(payload, "chat");
+      const { result } = await api("/api/ai/chat", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      history.push({ role: "assistant", content: result || "" });
+      activeSession.history = history;
+      activeSession.updatedAt = Date.now();
+      saveAiSessions();
+      renderMessages();
+    } catch (e) {
+      history.push({ role: "assistant", content: e && e.message ? e.message : String(e) });
+      activeSession.history = history;
+      activeSession.updatedAt = Date.now();
+      saveAiSessions();
+      renderMessages();
+    }
+  };
+
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && !ev.shiftKey) {
+      ev.preventDefault();
+      sendMessage();
+    }
+  });
+
+  const clearBtn = btn(state.labels.clear, {
+    kind: "tiny",
+    onClick: () => {
+      history.length = 0;
+      activeSession.history = history;
+      activeSession.updatedAt = Date.now();
+      saveAiSessions();
+      renderMessages();
+    },
+  });
+  const refreshBtn = btn(t("更新上下文"), { kind: "tiny", onClick: () => refreshAiFloatContext({ silent: false }) });
+  const closeBtn = btn("×", { kind: "tiny", onClick: () => closeAiFloat() });
+
+  const modeSelect = h("select", {
+    class: "input ai-float-select",
+    onchange: (ev) => {
+      const mode = ev.target.value || "selection";
+      app.ui.aiContextMode = mode;
+      localStorage.setItem("ct_ai_ctx_mode", mode);
+    },
+  });
+  modeSelect.appendChild(h("option", { value: "selection", html: t("选中段落"), selected: app.ui.aiContextMode === "selection" ? "" : null }));
+  modeSelect.appendChild(h("option", { value: "current", html: t("当前文件"), selected: app.ui.aiContextMode === "current" ? "" : null }));
+  modeSelect.appendChild(h("option", { value: "all", html: t("全部 TeX"), selected: app.ui.aiContextMode === "all" ? "" : null }));
+
+  const header = h("div", { class: "ai-float-header" }, [
+    h("div", { class: "ai-float-title", html: t("AI 终端") }),
+    h("div", { class: "ai-float-actions" }, [modeSelect, refreshBtn, clearBtn, closeBtn]),
+  ]);
+
+  const body = h("div", { class: "ai-float-body" }, [
+    hintLine,
+    metaLine,
+    messagesEl,
+    input,
+  ]);
+
+  const shell = h("div", { class: "ai-float-shell" }, [header, body]);
+  const wrap = h("div", { class: "ai-float" }, [shell]);
+
+  renderMessages();
+  app.ui.refreshAiFloat = () => {
+    state = app.ui.aiChatPanelState || state;
+    metaLine.innerHTML = `${t("上下文")}: ${describeContextMeta(state.meta)}`;
+    hintLine.innerHTML = state.labels.hint;
+    renderMessages();
+  };
+  return wrap;
 }
 
 async function runAiCompileFix() {
@@ -8402,19 +8622,16 @@ function renderProject() {
       app.ui.rightTab = "pdf";
       localStorage.setItem("ct_rightTab", "pdf");
     }
+    if (!app.ui.assistantEnabled && app.ui.aiFloatOpen) {
+      app.ui.aiFloatOpen = false;
+      localStorage.setItem("ct_ai_float", "0");
+    }
     mount(render());
   };
 
   const openChatPane = () => {
     if (!app.ui.assistantEnabled) return;
-    app.ui.leftPaneTab = "chats";
-    localStorage.setItem("ct_left_pane_tab", "chats");
-    if (app.ui.leftRailMode !== "files") {
-      app.ui.leftRailMode = "files";
-      localStorage.setItem("ct_left_rail_mode", "files");
-    }
-    if (app.ui.leftCollapsed) setLeftCollapsed(false);
-    mount(render());
+    toggleAiFloat();
   };
 
   const texFiles = Array.isArray(app.current.tree) ? app.current.tree.filter((f) => f.endsWith(".tex")) : [];
@@ -9323,7 +9540,8 @@ function renderProject() {
     h("div", { class: "studio-main" }, [layout]),
   ]);
 
-  return h("div", { class: "page studio-page" }, [shell]);
+  const aiFloat = renderAiFloat();
+  return h("div", { class: "page studio-page" }, aiFloat ? [shell, aiFloat] : [shell]);
 }
 
 function renderLoading() {
@@ -9414,6 +9632,10 @@ document.addEventListener("click", () => {
   }
 });
 window.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && app && app.ui && app.ui.aiFloatOpen) {
+    closeAiFloat();
+    return;
+  }
   if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s" && ev.shiftKey) {
     if (app.view === "project") {
       ev.preventDefault();
