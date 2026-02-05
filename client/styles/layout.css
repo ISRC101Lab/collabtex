@@ -98,8 +98,8 @@ body::after {
   grid-template-columns: minmax(180px, var(--leftW)) var(--gutterW) minmax(0, 1fr) var(--gutterW) minmax(360px, var(--rightW));
   grid-template-rows: minmax(0, 1fr);
   grid-template-areas: "left gutter-left editor gutter-right right";
-  gap: 8px;
-  padding: 8px;
+  gap: 6px;
+  padding: 6px;
   height: calc(100vh - var(--topbarH));
 }
 

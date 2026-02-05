@@ -32,6 +32,9 @@ import {
   setGhostSuggestion,
   clearGhostSuggestion,
   clearGhostSuggestEffect,
+  aiDiffField,
+  setAiDiff,
+  clearAiDiff,
 } from "./editor/effects.js";
 import {
   aiDefaults,
@@ -1308,6 +1311,15 @@ const app = {
     aiFloatNeedsConfig: false,
     aiFloatConfigOpen: false,
     aiFloatMode: localStorage.getItem("ct_ai_float_mode") || "chat",
+    aiFloatPos: (() => {
+      try {
+        const raw = localStorage.getItem("ct_ai_float_pos");
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    })(),
+    aiPendingRewrite: null,
     aiFloatAgentDraft: { instruction: "", output: "", meta: null, fileLabel: "" },
     refreshAiFloat: null,
     aiContextMode: localStorage.getItem("ct_ai_ctx_mode") || "selection",
@@ -2816,6 +2828,24 @@ async function openFile(filePath) {
   const historyListener = EditorView.updateListener.of((u) => {
     if (u.docChanged) scheduleHistorySnapshot(u.view);
   });
+  const aiPreviewListener = EditorView.updateListener.of((u) => {
+    if (!app.ui.aiPendingRewrite) return;
+    if (u.docChanged) {
+      clearAiDiff(u.view);
+      app.ui.aiPendingRewrite = null;
+      mount(render());
+      return;
+    }
+    if (u.selectionSet) {
+      const sel = u.state.selection.main;
+      const pending = app.ui.aiPendingRewrite;
+      if (pending && (sel.from !== pending.from || sel.to !== pending.to)) {
+        clearAiDiff(u.view);
+        app.ui.aiPendingRewrite = null;
+        mount(render());
+      }
+    }
+  });
 
   const cacheListener = EditorView.updateListener.of((u) => {
     if (!u.docChanged) return;
@@ -2897,11 +2927,13 @@ async function openFile(filePath) {
       ),
       flashLineField,
       ghostSuggestField,
+      aiDiffField,
       yCollab(ytext, provider.awareness, { undoManager }),
       autoCompileListener,
       outlineListener,
       statusListener,
       historyListener,
+      aiPreviewListener,
       cacheListener,
       syncListener,
       autoSuggestListener,
@@ -4232,6 +4264,20 @@ function extractLatexBlock(text) {
   return "";
 }
 
+function extractRewritePair(text) {
+  const raw = String(text || "");
+  const block = raw.match(/```original\s*([\s\S]*?)```[\s\S]*?```rewrite\s*([\s\S]*?)```/i);
+  if (block && block[1] && block[2]) {
+    return { original: block[1].trim(), rewrite: block[2].trim() };
+  }
+  const origMatch = raw.match(/(?:^|\n)\s*(?:ORIGINAL|Original|原文|原始)\s*[:：]\s*([\s\S]*?)(?=\n\s*(?:REWRITE|Rewrite|改写|修改后|重写)\s*[:：])/);
+  const rewMatch = raw.match(/(?:^|\n)\s*(?:REWRITE|Rewrite|改写|修改后|重写)\s*[:：]\s*([\s\S]+)/);
+  if (origMatch && rewMatch && origMatch[1] && rewMatch[1]) {
+    return { original: origMatch[1].trim(), rewrite: rewMatch[1].trim() };
+  }
+  return null;
+}
+
 function normalizeWhitespace(text) {
   return String(text || "")
     .replace(/\r/g, "")
@@ -5163,6 +5209,8 @@ function closeAiFloat() {
   app.ui.aiFloatConfigOpen = false;
   app.ui.aiFloatNeedsConfig = false;
   localStorage.setItem("ct_ai_float", "0");
+  clearAiDiff(app.editor.view);
+  app.ui.aiPendingRewrite = null;
   mount(render());
 }
 
@@ -5173,10 +5221,6 @@ function toggleAiFloat() {
 
 function renderAiFloat() {
   if (!app.ui.aiFloatOpen || !app.ui.assistantEnabled) return null;
-  if (app.ui.aiFloatMode !== "agent" && app.ui.aiFloatMode !== "chat") {
-    app.ui.aiFloatMode = "chat";
-    localStorage.setItem("ct_ai_float_mode", "chat");
-  }
   const activeSession = getActiveAiSession();
   let state = app.ui.aiChatPanelState;
   if (!state || state.sessionId !== activeSession.id) {
@@ -5188,12 +5232,73 @@ function renderAiFloat() {
   const input = h("textarea", {
     class: "textarea ai-chat-input terminal",
     id: "aiFloatInput",
-    placeholder: t("输入问题… 支持 @文件 (例如 @main.tex)"),
+    placeholder: t("输入指令或问题… @文件 用于上下文"),
   });
+  const agentHint = h("div", { class: "hint ai-float-hint", html: t("Agent：对话即可，提出修改会显示红/绿建议块。") });
+  const agentMeta = h("div", { class: "ai-context-meta ai-float-meta", html: "" });
 
-  const metaLine = h("div", { class: "ai-context-meta ai-float-meta", html: "" });
-  const hintLine = h("div", { class: "hint ai-float-hint", html: t("提示：可用 @文件 引用多份 LaTeX。未指定时默认当前文件。") });
-  metaLine.textContent = state.meta ? `${t("上下文")}: ${describeContextMeta(state.meta)}` : "";
+  const buildFileSuggestWrap = (textarea) => {
+    const wrap = h("div", { class: "ai-float-input-wrap" }, [textarea]);
+    const suggest = h("div", { class: "ai-float-suggest", style: "display:none" });
+    wrap.appendChild(suggest);
+    const list = (app.current.tree || []).filter((f) => /\.(tex|bib|cls|sty|bst|bbx|cbx|dbx)$/i.test(f));
+    const update = () => {
+      const value = textarea.value || "";
+      const caret = textarea.selectionStart != null ? textarea.selectionStart : value.length;
+      const prefix = value.slice(0, caret);
+      const match = prefix.match(/@([A-Za-z0-9._\-\/]*)$/);
+      if (!match) {
+        suggest.style.display = "none";
+        return;
+      }
+      const key = (match[1] || "").toLowerCase();
+      const matches = list.filter((f) => {
+        const base = fileBaseName(f).toLowerCase();
+        const full = f.toLowerCase();
+        return !key || base.includes(key) || full.includes(key);
+      }).slice(0, 10);
+      if (!matches.length) {
+        suggest.style.display = "none";
+        return;
+      }
+      suggest.innerHTML = "";
+      for (const f of matches) {
+        const item = h("button", {
+          class: "ai-float-suggest-item",
+          type: "button",
+          onclick: () => {
+            const cur = textarea.value || "";
+            const end = textarea.selectionStart != null ? textarea.selectionStart : cur.length;
+            const head = cur.slice(0, end);
+            const tail = cur.slice(end);
+            const m = head.match(/@([A-Za-z0-9._\-\/]*)$/);
+            if (!m) return;
+            const start = end - m[0].length;
+            const before = cur.slice(0, start);
+            const after = tail.startsWith(" ") ? tail : ` ${tail}`;
+            const next = `${before}@${f}${after}`;
+            textarea.value = next;
+            const pos = before.length + f.length + 2;
+            textarea.selectionStart = textarea.selectionEnd = pos;
+            textarea.focus();
+            suggest.style.display = "none";
+          },
+        });
+        item.textContent = f;
+        suggest.appendChild(item);
+      }
+      suggest.style.display = "";
+    };
+    textarea.addEventListener("input", update);
+    textarea.addEventListener("keyup", update);
+    textarea.addEventListener("focus", update);
+    textarea.addEventListener("blur", () => {
+      setTimeout(() => {
+        suggest.style.display = "none";
+      }, 120);
+    });
+    return wrap;
+  };
 
   const renderMessages = () => {
     messagesEl.innerHTML = "";
@@ -5215,23 +5320,19 @@ function renderAiFloat() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   };
 
+  const updateMeta = (ctx) => {
+    agentMeta.textContent = ctx.fileLabel
+      ? `${t("上下文")}: ${ctx.fileLabel} · ${describeContextMeta(ctx.meta)}`
+      : `${t("上下文")}: ${describeContextMeta(ctx.meta)}`;
+  };
+
   const sendMessage = async () => {
     const question = input.value.trim();
     if (!question) return;
     input.value = "";
     const ctx = await buildAiContextFromInput(question);
-    state.context = ctx.context;
-    state.meta = ctx.meta;
-    state.filePath = app.current.openFile || app.current.mainFile || "";
-    activeSession.context = state.context;
-    activeSession.meta = state.meta;
-    activeSession.filePath = state.filePath;
-    activeSession.updatedAt = Date.now();
-    saveAiSessions();
-    metaLine.textContent = ctx.fileLabel
-      ? `${t("上下文")}: ${ctx.fileLabel} · ${describeContextMeta(ctx.meta)}`
-      : `${t("上下文")}: ${describeContextMeta(ctx.meta)}`;
-    if (!state.context) {
+    updateMeta(ctx);
+    if (!ctx.context) {
       history.push({ role: "assistant", content: t("未找到可用上下文，请检查 @文件 或打开当前文件。") });
       renderMessages();
       return;
@@ -5240,12 +5341,14 @@ function renderAiFloat() {
     history.push({ role: "user", content: ctx.cleaned || question });
     renderMessages();
     try {
+      const assistHint =
+        "\n% AI_ASSIST:\n% 若提出修改，请使用如下格式输出：\n% ORIGINAL:\n% <原文片段>\n% REWRITE:\n% <改写后的片段>\n";
       const payload = {
-        context: state.context,
+        context: ctx.context ? `${ctx.context}${assistHint}` : ctx.context,
         question: ctx.cleaned || question,
         history: priorHistory,
-        filePath: state.filePath,
-        mode: "",
+        filePath: app.current.openFile || app.current.mainFile || "",
+        mode: "agent",
       };
       applyAiConfig(payload, "chat");
       const { result } = await api("/api/ai/chat", {
@@ -5257,6 +5360,31 @@ function renderAiFloat() {
       activeSession.updatedAt = Date.now();
       saveAiSessions();
       renderMessages();
+      const pair = extractRewritePair(result || "");
+      if (pair && pair.original && pair.rewrite) {
+        const files = ctx.files && ctx.files.length ? ctx.files : [app.current.openFile || app.current.mainFile].filter(Boolean);
+        for (const file of files) {
+          if (!file) continue;
+          const content = await getCurrentFileText(file);
+          const idx = content.indexOf(pair.original);
+          if (idx === -1) continue;
+          if (app.current.openFile !== file) {
+            await openFile(file);
+          }
+          const view = app.editor.view;
+          if (!view) break;
+          const liveText = view.state.doc.toString();
+          const liveIdx = liveText.indexOf(pair.original);
+          if (liveIdx === -1) continue;
+          const lines = buildAiDiffLines(pair.original, pair.rewrite);
+          if (!lines.length) break;
+          clearAiDiff(view);
+          app.ui.aiPendingRewrite = { from: liveIdx, to: liveIdx + pair.original.length, text: pair.rewrite, lines };
+          setAiDiff(view, liveIdx, liveIdx + pair.original.length, lines);
+          mount(render());
+          break;
+        }
+      }
     } catch (e) {
       const errMsg = e && e.message ? e.message : String(e);
       if (errMsg.includes("AI not configured")) {
@@ -5285,14 +5413,17 @@ function renderAiFloat() {
     }
   });
 
-  const clearBtn = btn(state.labels.clear, {
+  const clearBtn = btn(t("清空"), {
     kind: "tiny",
     onClick: () => {
       history.length = 0;
       activeSession.history = history;
       activeSession.updatedAt = Date.now();
       saveAiSessions();
+      app.ui.aiPendingRewrite = null;
+      clearAiDiff(app.editor.view);
       renderMessages();
+      mount(render());
     },
   });
   const configBtn = btn(t("配置"), {
@@ -5305,24 +5436,8 @@ function renderAiFloat() {
   });
   const closeBtn = btn("×", { kind: "tiny", onClick: () => closeAiFloat() });
 
-  const setFloatMode = (mode) => {
-    const next = mode === "agent" ? "agent" : "chat";
-    app.ui.aiFloatMode = next;
-    localStorage.setItem("ct_ai_float_mode", next);
-    mount(render());
-  };
-  const tabBtn = (mode, label) => {
-    const b = btn(label, { kind: "tiny", onClick: () => setFloatMode(mode) });
-    if (app.ui.aiFloatMode === mode) b.classList.add("active");
-    return b;
-  };
-  const tabs = h("div", { class: "ai-float-tabs" }, [
-    tabBtn("chat", t("对话")),
-    tabBtn("agent", t("代理")),
-  ]);
-
   const header = h("div", { class: "ai-float-header" }, [
-    h("div", { class: "ai-float-title" }, [h("span", { html: t("AI 终端") }), tabs]),
+    h("div", { class: "ai-float-title" }, [h("span", { html: t("AI Agent") })]),
     h("div", { class: "ai-float-actions" }, [configBtn, clearBtn, closeBtn]),
   ]);
 
@@ -5387,106 +5502,95 @@ function renderAiFloat() {
     ]);
   })();
 
-  const buildChatBody = () => {
-    return h("div", { class: "ai-float-body" }, [
-      hintLine,
-      metaLine,
-      configBox,
-      messagesEl,
-      input,
-    ]);
-  };
-
-  const buildAgentBody = () => {
-    const draft = app.ui.aiFloatAgentDraft || { instruction: "", output: "", meta: null, fileLabel: "" };
-    const instruction = h("textarea", {
-      class: "textarea ai-chat-input terminal",
-      placeholder: t("粘贴或描述你要改写的段落，可用 @文件 引用…"),
-      value: draft.instruction || "",
-      oninput: (ev) => {
-        app.ui.aiFloatAgentDraft.instruction = ev.target.value;
-      },
-    });
-    const output = h("textarea", {
-      class: "textarea ai-chat-input terminal",
-      placeholder: t("AI 输出…"),
-      value: draft.output || "",
-      readOnly: true,
-    });
-    const agentMeta = h("div", { class: "ai-context-meta ai-float-meta", html: draft.fileLabel || "" });
-    const runBtn = btn(t("运行代理"), {
-      kind: "primary",
-      onClick: async () => {
-        const ctx = await buildAiContextFromInput(instruction.value);
-        app.ui.aiFloatAgentDraft.meta = ctx.meta;
-        app.ui.aiFloatAgentDraft.fileLabel = ctx.fileLabel
-          ? `${t("上下文")}: ${ctx.fileLabel} · ${describeContextMeta(ctx.meta)}`
-          : `${t("上下文")}: ${describeContextMeta(ctx.meta)}`;
-        agentMeta.textContent = app.ui.aiFloatAgentDraft.fileLabel;
-        if (!ctx.context) {
-          output.value = t("未找到可用上下文，请检查 @文件 或打开当前文件。");
-          return;
-        }
-        const question = ctx.cleaned || "请作为论文修改代理，指出问题、给出修改建议，并提供改写后的 LaTeX。";
-        const payload = {
-          context: ctx.context,
-          question,
-          history: [],
-          filePath: app.current.openFile || app.current.mainFile || "",
-          mode: "agent",
-        };
-        output.value = t("处理中...");
-        try {
-          applyAiConfig(payload, "chat");
-          const { result } = await api("/api/ai/chat", { method: "POST", body: JSON.stringify(payload) });
-          output.value = result || "";
-          app.ui.aiFloatAgentDraft.output = output.value;
-        } catch (e) {
-          const errMsg = e && e.message ? e.message : String(e);
-          if (errMsg.includes("AI not configured")) {
-            app.ui.aiFloatNeedsConfig = true;
-            app.ui.aiFloatConfigOpen = true;
-            mount(render());
-          }
-          output.value = errMsg;
-        }
-      },
-    });
-    const applyRewrite = (mode) => {
+  const askBtn = btn(t("发送"), { kind: "primary tiny", onClick: () => sendMessage() });
+  const applyBtn = btn(t("保存"), {
+    kind: "tiny primary",
+    onClick: () => {
       const s = getEditorSelection();
-      if (!s) return alert(t("请先打开文件。"));
-      const src = s.empty ? s.view.state.doc.toString() : s.text;
-      const rewrite = pickBestRewrite(output.value, src);
-      if (!rewrite) return;
-      if (mode === "replace" && !s.empty) {
-        s.view.dispatch({ changes: { from: s.from, to: s.to, insert: rewrite } });
-      } else {
-        const pos = s.to;
-        s.view.dispatch({ changes: { from: pos, to: pos, insert: `\n\n${rewrite}` } });
-      }
+      const pending = app.ui.aiPendingRewrite;
+      if (!s || !pending || pending.from == null || pending.to == null) return;
+      s.view.dispatch({ changes: { from: pending.from, to: pending.to, insert: pending.text } });
       s.view.focus();
-    };
-    const replaceBtn = btn(t("替换选中"), { kind: "tiny", onClick: () => applyRewrite("replace") });
-    const insertBtn = btn(t("插入到下方"), { kind: "tiny", onClick: () => applyRewrite("insert") });
-    return h("div", { class: "ai-float-body" }, [
-      hintLine,
-      agentMeta,
-      configBox,
-      instruction,
-      h("div", { class: "ai-float-row" }, [runBtn, replaceBtn, insertBtn]),
-      output,
-    ]);
-  };
+      clearAiDiff(s.view);
+      app.ui.aiPendingRewrite = null;
+      mount(render());
+    },
+  });
+  const cancelBtn = btn(t("取消"), {
+    kind: "tiny",
+    onClick: () => {
+      clearAiDiff(app.editor.view);
+      app.ui.aiPendingRewrite = null;
+      mount(render());
+    },
+  });
+  const copyBtn = btn(t("复制结果"), {
+    kind: "tiny",
+    onClick: async () => {
+      const pending = app.ui.aiPendingRewrite;
+      const last = history.slice().reverse().find((m) => m && m.role === "assistant" && m.content);
+      const text = (pending && pending.text) || (last && last.content) || "";
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // ignore
+      }
+    },
+  });
 
-  const body = app.ui.aiFloatMode === "agent" ? buildAgentBody() : buildChatBody();
+  const body = h("div", { class: "ai-float-body" }, [
+    agentHint,
+    agentMeta,
+    configBox,
+    messagesEl,
+    buildFileSuggestWrap(input),
+    h("div", { class: "ai-float-row ai-float-chat-actions" }, [askBtn]),
+    h(
+      "div",
+      { class: "ai-float-row", style: app.ui.aiPendingRewrite ? "" : "display:none" },
+      [applyBtn, cancelBtn, copyBtn]
+    ),
+  ]);
 
   const shell = h("div", { class: "ai-float-shell" }, [header, body]);
-  const wrap = h("div", { class: "ai-float" }, [shell]);
+  const wrap = h("div", { class: "ai-float", id: "aiFloat" }, [shell]);
+
+  const savedPos = app.ui.aiFloatPos || null;
+  if (savedPos && Number.isFinite(savedPos.x) && Number.isFinite(savedPos.y)) {
+    wrap.style.left = `${savedPos.x}px`;
+    wrap.style.top = `${savedPos.y}px`;
+    wrap.style.right = "auto";
+    wrap.style.bottom = "auto";
+    wrap.style.transform = "none";
+  }
+  header.onmousedown = (ev) => {
+    if (ev.button !== 0) return;
+    if (ev.target && ev.target.closest && ev.target.closest(".ai-float-actions")) return;
+    const rect = wrap.getBoundingClientRect();
+    const offsetX = ev.clientX - rect.left;
+    const offsetY = ev.clientY - rect.top;
+    const onMove = (moveEv) => {
+      const x = Math.min(Math.max(8, moveEv.clientX - offsetX), window.innerWidth - rect.width - 8);
+      const y = Math.min(Math.max(8, moveEv.clientY - offsetY), window.innerHeight - rect.height - 8);
+      wrap.style.left = `${x}px`;
+      wrap.style.top = `${y}px`;
+      wrap.style.right = "auto";
+      wrap.style.bottom = "auto";
+      wrap.style.transform = "none";
+      app.ui.aiFloatPos = { x, y };
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (app.ui.aiFloatPos) localStorage.setItem("ct_ai_float_pos", JSON.stringify(app.ui.aiFloatPos));
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   renderMessages();
   app.ui.refreshAiFloat = () => {
     state = app.ui.aiChatPanelState || state;
-    metaLine.textContent = state.meta ? `${t("上下文")}: ${describeContextMeta(state.meta)}` : "";
     renderMessages();
   };
   return wrap;
@@ -6700,12 +6804,111 @@ async function buildAiContextFromInput(inputText) {
   const fallback = app.current.openFile || app.current.mainFile || "";
   const list = files.length ? files : (fallback ? [fallback] : []);
   if (!list.length) {
-    return { context: "", cleaned, meta: { files: 0, total: 0, truncated: false }, fileLabel: "" };
+    return { context: "", cleaned, meta: { files: 0, total: 0, truncated: false }, fileLabel: "", files: [] };
   }
   const res = await buildContextFromFiles(list, AI_CONTEXT_LIMIT);
   const meta = { files: res.files.length, total: res.total, truncated: res.truncated };
   const label = files.length ? files.join(", ") : fallback;
-  return { context: res.text || "", cleaned, meta, fileLabel: label };
+  return { context: res.text || "", cleaned, meta, fileLabel: label, files: res.files || list };
+}
+
+function buildAiDiffLines(oldText, newText) {
+  const a = String(oldText || "").split(/\r?\n/);
+  const b = String(newText || "").split(/\r?\n/);
+  const n = a.length;
+  const m = b.length;
+  const maxCost = 20000;
+  if (!n && !m) return [];
+  if (n * m > maxCost) {
+    const delLines = a.filter((line) => line.trim() !== "").map((line) => ({ type: "del", text: line }));
+    const addLines = b.filter((line) => line.trim() !== "").map((line) => ({ type: "add", text: line }));
+    return [...delLines, ...addLines].slice(0, 200);
+  }
+  const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      if (a[i] === b[j]) dp[i][j] = dp[i + 1][j + 1] + 1;
+      else dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      out.push({ type: "same", text: a[i] });
+      i += 1;
+      j += 1;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      out.push({ type: "del", text: a[i] });
+      i += 1;
+    } else {
+      out.push({ type: "add", text: b[j] });
+      j += 1;
+    }
+  }
+  while (i < n) {
+    out.push({ type: "del", text: a[i] });
+    i += 1;
+  }
+  while (j < m) {
+    out.push({ type: "add", text: b[j] });
+    j += 1;
+  }
+  const compact = out.filter((line) => line.type !== "same" || line.text.trim() !== "");
+  if (!compact.some((line) => line.type === "add" || line.type === "del")) return [];
+  const withSegments = compact.slice(0, 200).map((line) => ({ ...line }));
+  const diffWords = (oldLine, newLine) => {
+    const aTokens = String(oldLine || "").split(/(\s+)/).filter((t) => t !== "");
+    const bTokens = String(newLine || "").split(/(\s+)/).filter((t) => t !== "");
+    const na = aTokens.length;
+    const nb = bTokens.length;
+    if (!na && !nb) return { aSeg: [], bSeg: [] };
+    const dp = Array.from({ length: na + 1 }, () => Array(nb + 1).fill(0));
+    for (let i = na - 1; i >= 0; i -= 1) {
+      for (let j = nb - 1; j >= 0; j -= 1) {
+        if (aTokens[i] === bTokens[j]) dp[i][j] = dp[i + 1][j + 1] + 1;
+        else dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const aSeg = [];
+    const bSeg = [];
+    let i = 0;
+    let j = 0;
+    while (i < na && j < nb) {
+      if (aTokens[i] === bTokens[j]) {
+        aSeg.push({ type: "same", text: aTokens[i] });
+        bSeg.push({ type: "same", text: bTokens[j] });
+        i += 1;
+        j += 1;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        aSeg.push({ type: "del", text: aTokens[i] });
+        i += 1;
+      } else {
+        bSeg.push({ type: "add", text: bTokens[j] });
+        j += 1;
+      }
+    }
+    while (i < na) {
+      aSeg.push({ type: "del", text: aTokens[i] });
+      i += 1;
+    }
+    while (j < nb) {
+      bSeg.push({ type: "add", text: bTokens[j] });
+      j += 1;
+    }
+    return { aSeg, bSeg };
+  };
+  for (let i = 0; i < withSegments.length - 1; i += 1) {
+    const cur = withSegments[i];
+    const next = withSegments[i + 1];
+    if (cur.type === "del" && next.type === "add") {
+      const seg = diffWords(cur.text, next.text);
+      cur.segments = seg.aSeg;
+      next.segments = seg.bSeg;
+    }
+  }
+  return withSegments;
 }
 
 function aiSessionsKey() {
@@ -9553,12 +9756,8 @@ function renderProject() {
   const pdfPages = h("div", { class: "pdf-pages", id: "pdfPages" });
   const pdfMarker = h("div", { class: "pdf-marker", id: "pdfMarker" });
   const pdfViewer = h("div", { class: "pdf-viewer", id: "pdfViewer" }, [pdfPages, pdfMarker, pdfHint]);
-  let lastPdfClickAt = 0;
-  pdfViewer.onclick = async (ev) => {
+  pdfViewer.ondblclick = async (ev) => {
     if (!app.current.project) return;
-    const now = Date.now();
-    if (now - lastPdfClickAt < 250) return;
-    lastPdfClickAt = now;
     const target = ev.target;
     const canvas = target && target.closest ? target.closest("canvas.pdf-canvas") : null;
     if (!canvas) return;

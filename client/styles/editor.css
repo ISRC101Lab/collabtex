@@ -87,6 +87,64 @@
   white-space: pre;
 }
 
+.cm-aiDelete {
+  background: rgba(210, 80, 80, 0.25);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.cm-aiDiffBlock {
+  display: block;
+  margin: 6px 0 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(20, 20, 20, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cm-aiDiffLine {
+  white-space: pre-wrap;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.cm-aiDiffLine.add {
+  background: rgba(60, 180, 120, 0.25);
+  color: #eafff3;
+}
+
+.cm-aiDiffLine.del {
+  background: rgba(210, 80, 80, 0.24);
+  color: #ffe9e9;
+  text-decoration: line-through;
+}
+
+.cm-aiDiffLine.same {
+  color: rgba(220, 220, 220, 0.6);
+}
+
+.cm-aiDiffPrefix {
+  color: rgba(220, 220, 220, 0.6);
+}
+
+.cm-aiDiffSeg.add {
+  background: rgba(60, 180, 120, 0.3);
+  color: #eafff3;
+}
+
+.cm-aiDiffSeg.del {
+  background: rgba(210, 80, 80, 0.28);
+  color: #ffecec;
+  text-decoration: line-through;
+}
+
+.cm-aiDiffSeg.same {
+  color: rgba(220, 220, 220, 0.75);
+}
+
 @keyframes lineFlash {
   0% { background: rgba(255, 180, 122, 0.55); }
   100% { background: rgba(255, 180, 122, 0); }

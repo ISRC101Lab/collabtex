@@ -71,6 +71,93 @@ const ghostSuggestField = StateField.define({
   provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
 });
 
+const aiDiffEffect = StateEffect.define();
+const clearAiDiffEffect = StateEffect.define();
+
+class AiInsertWidget extends WidgetType {
+  constructor(lines) {
+    super();
+    this.lines = Array.isArray(lines) ? lines : [];
+  }
+  toDOM() {
+    const block = document.createElement("div");
+    block.className = "cm-aiDiffBlock";
+    for (const line of this.lines) {
+      const row = document.createElement("div");
+      const type = line && line.type ? line.type : "same";
+      row.className = `cm-aiDiffLine ${type}`;
+      const prefix = type === "add" ? "+ " : type === "del" ? "- " : "  ";
+      if (Array.isArray(line.segments) && line.segments.length) {
+        const pre = document.createElement("span");
+        pre.className = "cm-aiDiffPrefix";
+        pre.textContent = prefix;
+        row.appendChild(pre);
+        for (const seg of line.segments) {
+          const span = document.createElement("span");
+          span.className = `cm-aiDiffSeg ${seg.type || "same"}`;
+          span.textContent = seg.text || "";
+          row.appendChild(span);
+        }
+      } else {
+        row.textContent = `${prefix}${line.text || ""}`;
+      }
+      block.appendChild(row);
+    }
+    return block;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
+const aiDiffField = StateField.define({
+  create() {
+    return { from: null, to: null, lines: [], deco: Decoration.none };
+  },
+  update(value, tr) {
+    let { from, to, lines, deco } = value;
+    deco = deco.map(tr.changes);
+    if (from != null && to != null) {
+      from = tr.changes.mapPos(from);
+      to = tr.changes.mapPos(to);
+    }
+    for (const e of tr.effects) {
+      if (e.is(aiDiffEffect)) {
+        const v = e.value || {};
+        from = v.from;
+        to = v.to;
+        lines = Array.isArray(v.lines) ? v.lines : [];
+        if (from == null || to == null || !lines.length) {
+          deco = Decoration.none;
+        } else {
+          const widget = new AiInsertWidget(lines);
+          deco = Decoration.set([
+            Decoration.mark({ class: "cm-aiDelete" }).range(from, to),
+            Decoration.widget({ widget, side: 1 }).range(to),
+          ]);
+        }
+      } else if (e.is(clearAiDiffEffect)) {
+        from = null;
+        to = null;
+        lines = [];
+        deco = Decoration.none;
+      }
+    }
+    return { from, to, lines, deco };
+  },
+  provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
+});
+
+function setAiDiff(view, from, to, lines) {
+  if (!view) return;
+  view.dispatch({ effects: aiDiffEffect.of({ from, to, lines }) });
+}
+
+function clearAiDiff(view) {
+  if (!view) return;
+  view.dispatch({ effects: clearAiDiffEffect.of(null) });
+}
+
 function getGhostSuggestion(view) {
   try {
     return view.state.field(ghostSuggestField).text || "";
@@ -98,4 +185,8 @@ export {
   setGhostSuggestion,
   clearGhostSuggestion,
   clearGhostSuggestEffect,
+  aiDiffField,
+  setAiDiff,
+  clearAiDiff,
+  clearAiDiffEffect,
 };
