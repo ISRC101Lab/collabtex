@@ -16,3 +16,8 @@ docs/*.gif
 .env
 *.swp
 *.swo
+
+# Local-only docs/scripts/screenshots
+*.md
+*.sh
+*.png
