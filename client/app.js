@@ -1316,7 +1316,7 @@ const app = {
     aiProfileForPolish: localStorage.getItem(AI_PROFILE_POLISH_KEY) || "",
     aiProfileForChat: localStorage.getItem(AI_PROFILE_CHAT_KEY) || "",
     aiProfileForDiagnose: localStorage.getItem(AI_PROFILE_DIAG_KEY) || "",
-    aiUseServer: localStorage.getItem("ct_ai_use_server") !== "0",
+    aiUseServer: localStorage.getItem("ct_ai_use_server") === "1",
     aiAutoDiagnose: localStorage.getItem("ct_ai_auto_diag") === "1",
     aiAutoSuggest: localStorage.getItem("ct_ai_auto_suggest") === "1",
     aiAutoHint: localStorage.getItem("ct_ai_auto_hint") === "1",

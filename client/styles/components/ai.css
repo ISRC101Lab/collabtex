@@ -681,6 +681,7 @@
   padding: 8px 12px;
   background: #1b1b1b;
   border-bottom: 1px solid #2b2b2b;
+  flex-wrap: wrap;
 }
 .ai-float-title {
   font-size: 11px;
@@ -693,11 +694,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .ai-float-actions .btn.tiny {
   height: 24px;
   padding: 0 8px;
   font-size: 11px;
+  white-space: nowrap;
 }
 .ai-float-actions .input.ai-float-select {
   height: 24px;
@@ -707,6 +711,8 @@
   background: #1f1f1f;
   border: 1px solid #2a2a2a;
   color: #dcdcdc;
+  max-width: 160px;
+  min-width: 110px;
 }
 .ai-float-body {
   display: grid;
@@ -731,6 +737,7 @@
 .ai-float-config-row {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 @media (min-width: 720px) {
   .ai-float-config-row {
@@ -748,6 +755,9 @@
   border: 1px solid #2a2a2a;
   color: #e3e3e3;
   font-size: 12px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .ai-float-config-actions {
   display: flex;
