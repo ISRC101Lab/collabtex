@@ -1307,6 +1307,8 @@ const app = {
     refreshChatPanel: null,
     aiFloatNeedsConfig: false,
     aiFloatConfigOpen: false,
+    aiFloatMode: localStorage.getItem("ct_ai_float_mode") || "chat",
+    aiFloatAgentDraft: { instruction: "", output: "", meta: null, fileLabel: "" },
     refreshAiFloat: null,
     aiContextMode: localStorage.getItem("ct_ai_ctx_mode") || "selection",
     aiContextIncludeBib: localStorage.getItem("ct_ai_ctx_bib") === "1",
@@ -5171,6 +5173,10 @@ function toggleAiFloat() {
 
 function renderAiFloat() {
   if (!app.ui.aiFloatOpen || !app.ui.assistantEnabled) return null;
+  if (app.ui.aiFloatMode !== "agent" && app.ui.aiFloatMode !== "chat") {
+    app.ui.aiFloatMode = "chat";
+    localStorage.setItem("ct_ai_float_mode", "chat");
+  }
   const activeSession = getActiveAiSession();
   let state = app.ui.aiChatPanelState;
   if (!state || state.sessionId !== activeSession.id) {
@@ -5182,11 +5188,12 @@ function renderAiFloat() {
   const input = h("textarea", {
     class: "textarea ai-chat-input terminal",
     id: "aiFloatInput",
-    placeholder: state.labels.placeholder,
+    placeholder: t("输入问题… 支持 @文件 (例如 @main.tex)"),
   });
 
-  const metaLine = h("div", { class: "ai-context-meta ai-float-meta", html: `${t("上下文")}: ${describeContextMeta(state.meta)}` });
-  const hintLine = h("div", { class: "hint ai-float-hint", html: state.labels.hint });
+  const metaLine = h("div", { class: "ai-context-meta ai-float-meta", html: "" });
+  const hintLine = h("div", { class: "hint ai-float-hint", html: t("提示：可用 @文件 引用多份 LaTeX。未指定时默认当前文件。") });
+  metaLine.textContent = state.meta ? `${t("上下文")}: ${describeContextMeta(state.meta)}` : "";
 
   const renderMessages = () => {
     messagesEl.innerHTML = "";
@@ -5212,25 +5219,33 @@ function renderAiFloat() {
     const question = input.value.trim();
     if (!question) return;
     input.value = "";
+    const ctx = await buildAiContextFromInput(question);
+    state.context = ctx.context;
+    state.meta = ctx.meta;
+    state.filePath = app.current.openFile || app.current.mainFile || "";
+    activeSession.context = state.context;
+    activeSession.meta = state.meta;
+    activeSession.filePath = state.filePath;
+    activeSession.updatedAt = Date.now();
+    saveAiSessions();
+    metaLine.textContent = ctx.fileLabel
+      ? `${t("上下文")}: ${ctx.fileLabel} · ${describeContextMeta(ctx.meta)}`
+      : `${t("上下文")}: ${describeContextMeta(ctx.meta)}`;
     if (!state.context) {
-      await refreshAiFloatContext({ silent: true });
-      state = app.ui.aiChatPanelState || state;
-    }
-    if (!state.context) {
-      history.push({ role: "assistant", content: t("请先打开文件以生成上下文。") });
+      history.push({ role: "assistant", content: t("未找到可用上下文，请检查 @文件 或打开当前文件。") });
       renderMessages();
       return;
     }
     const priorHistory = history.slice();
-    history.push({ role: "user", content: question });
+    history.push({ role: "user", content: ctx.cleaned || question });
     renderMessages();
     try {
       const payload = {
         context: state.context,
-        question,
+        question: ctx.cleaned || question,
         history: priorHistory,
         filePath: state.filePath,
-        mode: app.ui.aiChatMode === "agent" ? "agent" : "",
+        mode: "",
       };
       applyAiConfig(payload, "chat");
       const { result } = await api("/api/ai/chat", {
@@ -5280,7 +5295,6 @@ function renderAiFloat() {
       renderMessages();
     },
   });
-  const refreshBtn = btn(t("更新上下文"), { kind: "tiny", onClick: () => refreshAiFloatContext({ silent: false }) });
   const configBtn = btn(t("配置"), {
     kind: "tiny",
     onClick: () => {
@@ -5291,21 +5305,25 @@ function renderAiFloat() {
   });
   const closeBtn = btn("×", { kind: "tiny", onClick: () => closeAiFloat() });
 
-  const modeSelect = h("select", {
-    class: "input ai-float-select",
-    onchange: (ev) => {
-      const mode = ev.target.value || "selection";
-      app.ui.aiContextMode = mode;
-      localStorage.setItem("ct_ai_ctx_mode", mode);
-    },
-  });
-  modeSelect.appendChild(h("option", { value: "selection", html: t("选中段落"), selected: app.ui.aiContextMode === "selection" ? "" : null }));
-  modeSelect.appendChild(h("option", { value: "current", html: t("当前文件"), selected: app.ui.aiContextMode === "current" ? "" : null }));
-  modeSelect.appendChild(h("option", { value: "all", html: t("全部 TeX"), selected: app.ui.aiContextMode === "all" ? "" : null }));
+  const setFloatMode = (mode) => {
+    const next = mode === "agent" ? "agent" : "chat";
+    app.ui.aiFloatMode = next;
+    localStorage.setItem("ct_ai_float_mode", next);
+    mount(render());
+  };
+  const tabBtn = (mode, label) => {
+    const b = btn(label, { kind: "tiny", onClick: () => setFloatMode(mode) });
+    if (app.ui.aiFloatMode === mode) b.classList.add("active");
+    return b;
+  };
+  const tabs = h("div", { class: "ai-float-tabs" }, [
+    tabBtn("chat", t("对话")),
+    tabBtn("agent", t("代理")),
+  ]);
 
   const header = h("div", { class: "ai-float-header" }, [
-    h("div", { class: "ai-float-title", html: t("AI 终端") }),
-    h("div", { class: "ai-float-actions" }, [modeSelect, configBtn, refreshBtn, clearBtn, closeBtn]),
+    h("div", { class: "ai-float-title" }, [h("span", { html: t("AI 终端") }), tabs]),
+    h("div", { class: "ai-float-actions" }, [configBtn, clearBtn, closeBtn]),
   ]);
 
   const profile = getAiProfileById(app.ui.aiActiveProfileId) || addAiProfile();
@@ -5369,13 +5387,98 @@ function renderAiFloat() {
     ]);
   })();
 
-  const body = h("div", { class: "ai-float-body" }, [
-    hintLine,
-    metaLine,
-    configBox,
-    messagesEl,
-    input,
-  ]);
+  const buildChatBody = () => {
+    return h("div", { class: "ai-float-body" }, [
+      hintLine,
+      metaLine,
+      configBox,
+      messagesEl,
+      input,
+    ]);
+  };
+
+  const buildAgentBody = () => {
+    const draft = app.ui.aiFloatAgentDraft || { instruction: "", output: "", meta: null, fileLabel: "" };
+    const instruction = h("textarea", {
+      class: "textarea ai-chat-input terminal",
+      placeholder: t("粘贴或描述你要改写的段落，可用 @文件 引用…"),
+      value: draft.instruction || "",
+      oninput: (ev) => {
+        app.ui.aiFloatAgentDraft.instruction = ev.target.value;
+      },
+    });
+    const output = h("textarea", {
+      class: "textarea ai-chat-input terminal",
+      placeholder: t("AI 输出…"),
+      value: draft.output || "",
+      readOnly: true,
+    });
+    const agentMeta = h("div", { class: "ai-context-meta ai-float-meta", html: draft.fileLabel || "" });
+    const runBtn = btn(t("运行代理"), {
+      kind: "primary",
+      onClick: async () => {
+        const ctx = await buildAiContextFromInput(instruction.value);
+        app.ui.aiFloatAgentDraft.meta = ctx.meta;
+        app.ui.aiFloatAgentDraft.fileLabel = ctx.fileLabel
+          ? `${t("上下文")}: ${ctx.fileLabel} · ${describeContextMeta(ctx.meta)}`
+          : `${t("上下文")}: ${describeContextMeta(ctx.meta)}`;
+        agentMeta.textContent = app.ui.aiFloatAgentDraft.fileLabel;
+        if (!ctx.context) {
+          output.value = t("未找到可用上下文，请检查 @文件 或打开当前文件。");
+          return;
+        }
+        const question = ctx.cleaned || "请作为论文修改代理，指出问题、给出修改建议，并提供改写后的 LaTeX。";
+        const payload = {
+          context: ctx.context,
+          question,
+          history: [],
+          filePath: app.current.openFile || app.current.mainFile || "",
+          mode: "agent",
+        };
+        output.value = t("处理中...");
+        try {
+          applyAiConfig(payload, "chat");
+          const { result } = await api("/api/ai/chat", { method: "POST", body: JSON.stringify(payload) });
+          output.value = result || "";
+          app.ui.aiFloatAgentDraft.output = output.value;
+        } catch (e) {
+          const errMsg = e && e.message ? e.message : String(e);
+          if (errMsg.includes("AI not configured")) {
+            app.ui.aiFloatNeedsConfig = true;
+            app.ui.aiFloatConfigOpen = true;
+            mount(render());
+          }
+          output.value = errMsg;
+        }
+      },
+    });
+    const applyRewrite = (mode) => {
+      const s = getEditorSelection();
+      if (!s) return alert(t("请先打开文件。"));
+      const src = s.empty ? s.view.state.doc.toString() : s.text;
+      const rewrite = pickBestRewrite(output.value, src);
+      if (!rewrite) return;
+      if (mode === "replace" && !s.empty) {
+        s.view.dispatch({ changes: { from: s.from, to: s.to, insert: rewrite } });
+      } else {
+        const pos = s.to;
+        s.view.dispatch({ changes: { from: pos, to: pos, insert: `\n\n${rewrite}` } });
+      }
+      s.view.focus();
+    };
+    const replaceBtn = btn(t("替换选中"), { kind: "tiny", onClick: () => applyRewrite("replace") });
+    const insertBtn = btn(t("插入到下方"), { kind: "tiny", onClick: () => applyRewrite("insert") });
+    return h("div", { class: "ai-float-body" }, [
+      hintLine,
+      agentMeta,
+      configBox,
+      instruction,
+      h("div", { class: "ai-float-row" }, [runBtn, replaceBtn, insertBtn]),
+      output,
+    ]);
+  };
+
+  const body = app.ui.aiFloatMode === "agent" ? buildAgentBody() : buildChatBody();
 
   const shell = h("div", { class: "ai-float-shell" }, [header, body]);
   const wrap = h("div", { class: "ai-float" }, [shell]);
@@ -5383,8 +5486,7 @@ function renderAiFloat() {
   renderMessages();
   app.ui.refreshAiFloat = () => {
     state = app.ui.aiChatPanelState || state;
-    metaLine.innerHTML = `${t("上下文")}: ${describeContextMeta(state.meta)}`;
-    hintLine.innerHTML = state.labels.hint;
+    metaLine.textContent = state.meta ? `${t("上下文")}: ${describeContextMeta(state.meta)}` : "";
     renderMessages();
   };
   return wrap;
@@ -6576,6 +6678,34 @@ function describeContextMeta(meta) {
   ];
   if (meta.truncated) parts.push(t("已截断"));
   return parts.join(" · ");
+}
+
+function parseAtFiles(text) {
+  const input = String(text || "");
+  const files = [];
+  const re = /@([A-Za-z0-9._\-\/]+)(?=\s|$)/g;
+  let match;
+  while ((match = re.exec(input))) {
+    const path = match[1];
+    if (app.current && Array.isArray(app.current.tree) && app.current.tree.includes(path)) {
+      files.push(path);
+    }
+  }
+  const cleaned = input.replace(re, "").replace(/\s{2,}/g, " ").trim();
+  return { files: Array.from(new Set(files)), cleaned };
+}
+
+async function buildAiContextFromInput(inputText) {
+  const { files, cleaned } = parseAtFiles(inputText);
+  const fallback = app.current.openFile || app.current.mainFile || "";
+  const list = files.length ? files : (fallback ? [fallback] : []);
+  if (!list.length) {
+    return { context: "", cleaned, meta: { files: 0, total: 0, truncated: false }, fileLabel: "" };
+  }
+  const res = await buildContextFromFiles(list, AI_CONTEXT_LIMIT);
+  const meta = { files: res.files.length, total: res.total, truncated: res.truncated };
+  const label = files.length ? files.join(", ") : fallback;
+  return { context: res.text || "", cleaned, meta, fileLabel: label };
 }
 
 function aiSessionsKey() {
