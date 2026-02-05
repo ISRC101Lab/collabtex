@@ -5309,7 +5309,10 @@ function renderAiFloat() {
   ]);
 
   const profile = getAiProfileById(app.ui.aiActiveProfileId) || addAiProfile();
-  const configOpen = app.ui.aiFloatConfigOpen || app.ui.aiFloatNeedsConfig;
+  const configOpen =
+    app.ui.aiFloatConfigOpen ||
+    app.ui.aiFloatNeedsConfig ||
+    (!app.ui.aiUseServer && !profile.apiKey);
   const configBox = (() => {
     if (!configOpen) return null;
     const keyInput = h("input", {
