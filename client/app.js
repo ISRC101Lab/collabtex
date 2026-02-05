@@ -50,17 +50,18 @@ const root = document.getElementById("app");
 const PROJECT_THUMB_URL = "/assets/project-thumb.svg";
 const ICONS = {
   plus: '<path d="M12 5v14M5 12h14" />',
-  upload: '<path d="M12 16V6M8 10l4-4 4 4M5 18h14" />',
-  download: '<path d="M12 8v10M8 14l4 4 4-4M5 6h14" />',
+  upload: '<path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" /><path d="M7 9l5-5 5 5" /><path d="M12 4v12" />',
+  download: '<path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" /><path d="M7 11l5 5 5-5" /><path d="M12 4v12" />',
   more: '<circle cx="6" cy="12" r="1.4" fill="currentColor" /><circle cx="12" cy="12" r="1.4" fill="currentColor" /><circle cx="18" cy="12" r="1.4" fill="currentColor" />',
-  clear: '<path d="M6 6l12 12M18 6l-12 12" />',
-  compile: '<path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v6h-6" />',
-  back: '<path d="M15 6l-6 6 6 6" /><path d="M9 12h10" />',
-  panel: '<rect x="4" y="5" width="16" height="14" rx="2" /><path d="M9 5v14" />',
-  files: '<path d="M4 7h6l2 2h8v8H4z" /><path d="M4 7v10" />',
-  chat: '<path d="M4 6h16v9H8l-4 4z" />',
+  clear: '<path d="M6 6l12 12M6 18L18 6" />',
+  compile: '<path d="M4 4v5h5" /><path d="M20 20v-5h-5" /><path d="M5 9a7 7 0 0 1 11-3l3 3" /><path d="M19 15a7 7 0 0 1-11 3l-3-3" />',
+  back: '<path d="M15 6l-6 6 6 6" />',
+  panel: '<path d="M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /><path d="M9 4v16" />',
+  files: '<path d="M4 7a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />',
+  chat: '<path d="M6 5h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 4v-4H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />',
   list: '<path d="M6 7h12M6 12h12M6 17h12" />',
-  grid: '<rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" />',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1" /><rect x="13" y="4" width="7" height="7" rx="1" /><rect x="4" y="13" width="7" height="7" rx="1" /><rect x="13" y="13" width="7" height="7" rx="1" />',
+  settings: '<path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5z" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.54V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1-1.54 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.54-1H3a2 2 0 0 1 0-4h.06a1.7 1.7 0 0 0 1.54-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.54V3a2 2 0 0 1 4 0v.06a1.7 1.7 0 0 0 1 1.54 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.73 0 1.4.42 1.74 1.08.14.27.22.57.22.88a2 2 0 0 1-2 2h-.06a1.7 1.7 0 0 0-1.54 1z" />',
 };
 
 function h(tag, attrs = {}, children = []) {
@@ -89,7 +90,7 @@ function iconSvg(name, { size = 14, className = "" } = {}) {
   const icon = ICONS[name] || "";
   return h("span", {
     class: `icon ${className}`.trim(),
-    html: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`,
+    html: `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${icon}</svg>`,
   });
 }
 
@@ -1304,6 +1305,8 @@ const app = {
     aiChatHistory: {},
     aiChatPanelState: null,
     refreshChatPanel: null,
+    aiFloatNeedsConfig: false,
+    aiFloatConfigOpen: false,
     refreshAiFloat: null,
     aiContextMode: localStorage.getItem("ct_ai_ctx_mode") || "selection",
     aiContextIncludeBib: localStorage.getItem("ct_ai_ctx_bib") === "1",
@@ -1963,6 +1966,11 @@ function setWsUrlOverride(value) {
   }
   localStorage.setItem("ct_ws_url", v);
   if (app.ui) app.ui.wsUrlOverride = v;
+}
+
+function setAiUseServer(next) {
+  app.ui.aiUseServer = !!next;
+  localStorage.setItem("ct_ai_use_server", app.ui.aiUseServer ? "1" : "0");
 }
 
 function setAiPanelCollapsed(next) {
@@ -5150,6 +5158,8 @@ async function openAiFloat() {
 
 function closeAiFloat() {
   app.ui.aiFloatOpen = false;
+  app.ui.aiFloatConfigOpen = false;
+  app.ui.aiFloatNeedsConfig = false;
   localStorage.setItem("ct_ai_float", "0");
   mount(render());
 }
@@ -5233,7 +5243,19 @@ function renderAiFloat() {
       saveAiSessions();
       renderMessages();
     } catch (e) {
-      history.push({ role: "assistant", content: e && e.message ? e.message : String(e) });
+      const errMsg = e && e.message ? e.message : String(e);
+      if (errMsg.includes("AI not configured")) {
+        app.ui.aiFloatNeedsConfig = true;
+        app.ui.aiFloatConfigOpen = true;
+        history.push({ role: "assistant", content: t("AI 未配置，请填写 API Key 或配置服务器环境变量。") });
+        activeSession.history = history;
+        activeSession.updatedAt = Date.now();
+        saveAiSessions();
+        renderMessages();
+        mount(render());
+        return;
+      }
+      history.push({ role: "assistant", content: errMsg });
       activeSession.history = history;
       activeSession.updatedAt = Date.now();
       saveAiSessions();
@@ -5259,6 +5281,14 @@ function renderAiFloat() {
     },
   });
   const refreshBtn = btn(t("更新上下文"), { kind: "tiny", onClick: () => refreshAiFloatContext({ silent: false }) });
+  const configBtn = btn(t("配置"), {
+    kind: "tiny",
+    onClick: () => {
+      app.ui.aiFloatConfigOpen = !app.ui.aiFloatConfigOpen;
+      app.ui.aiFloatNeedsConfig = false;
+      mount(render());
+    },
+  });
   const closeBtn = btn("×", { kind: "tiny", onClick: () => closeAiFloat() });
 
   const modeSelect = h("select", {
@@ -5275,12 +5305,71 @@ function renderAiFloat() {
 
   const header = h("div", { class: "ai-float-header" }, [
     h("div", { class: "ai-float-title", html: t("AI 终端") }),
-    h("div", { class: "ai-float-actions" }, [modeSelect, refreshBtn, clearBtn, closeBtn]),
+    h("div", { class: "ai-float-actions" }, [modeSelect, configBtn, refreshBtn, clearBtn, closeBtn]),
   ]);
+
+  const profile = getAiProfileById(app.ui.aiActiveProfileId) || addAiProfile();
+  const configOpen = app.ui.aiFloatConfigOpen || app.ui.aiFloatNeedsConfig;
+  const configBox = (() => {
+    if (!configOpen) return null;
+    const keyInput = h("input", {
+      class: "input ai-float-input",
+      type: "password",
+      placeholder: t("API Key"),
+      value: profile.apiKey || "",
+    });
+    const baseInput = h("input", {
+      class: "input ai-float-input",
+      placeholder: t("Base URL (OpenAI 兼容)"),
+      value: profile.baseUrl || "",
+    });
+    const modelInput = h("input", {
+      class: "input ai-float-input",
+      placeholder: t("模型 (例如 gpt-4o-mini)"),
+      value: profile.model || "",
+    });
+    const styleSelect = h("select", { class: "input ai-float-input" }, [
+      h("option", { value: "", html: t("API 类型"), selected: !profile.apiStyle ? "" : null }),
+      h("option", { value: "responses", html: t("responses (兼容)"), selected: profile.apiStyle === "responses" ? "" : null }),
+      h("option", { value: "chat", html: t("chat (兼容)"), selected: profile.apiStyle === "chat" ? "" : null }),
+    ]);
+    const saveBtn = btn(t("保存并使用本地 Key"), {
+      kind: "primary tiny",
+      onClick: () => {
+        profile.apiKey = keyInput.value.trim();
+        profile.baseUrl = baseInput.value.trim();
+        profile.model = modelInput.value.trim();
+        profile.apiStyle = styleSelect.value || "";
+        saveAiProfiles();
+        setAiUseServer(false);
+        app.ui.aiFloatNeedsConfig = false;
+        app.ui.aiFloatConfigOpen = false;
+        mount(render());
+      },
+    });
+    const serverBtn = btn(t("改用服务器"), {
+      kind: "tiny",
+      onClick: () => {
+        setAiUseServer(true);
+        app.ui.aiFloatNeedsConfig = false;
+        app.ui.aiFloatConfigOpen = false;
+        mount(render());
+      },
+    });
+    return h("div", { class: "ai-float-config" }, [
+      h("div", { class: "ai-float-config-title", html: t("AI 配置") }),
+      h("div", { class: "ai-float-config-row" }, [keyInput]),
+      h("div", { class: "ai-float-config-row" }, [baseInput, modelInput]),
+      h("div", { class: "ai-float-config-row" }, [styleSelect]),
+      h("div", { class: "ai-float-config-actions" }, [saveBtn, serverBtn]),
+      h("div", { class: "ai-float-config-hint", html: t("若使用服务器 Key，请在服务端设置 OPENAI_API_KEY。") }),
+    ]);
+  })();
 
   const body = h("div", { class: "ai-float-body" }, [
     hintLine,
     metaLine,
+    configBox,
     messagesEl,
     input,
   ]);
@@ -9394,10 +9483,10 @@ function renderProject() {
     });
   });
   if (hasPdf) {
-    const ts = Date.now();
-    app.ui.pdfTs = ts;
+    const shouldRefresh = !app.ui.pdfDoc;
+    if (shouldRefresh) app.ui.pdfTs = Date.now();
     setTimeout(() => {
-      renderPdfPages({ projectId: p.id, refresh: true }).catch(() => {});
+      renderPdfPages({ projectId: p.id, refresh: shouldRefresh }).catch(() => {});
     }, 0);
   }
   compileBtn.classList.add("pdf-action");

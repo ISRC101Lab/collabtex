@@ -713,6 +713,55 @@
   gap: 8px;
   padding: 10px 12px 12px;
 }
+.ai-float-config {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #2b2b2b;
+  background: #111111;
+}
+.ai-float-config-title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #cfcfcf;
+  font-weight: 600;
+}
+.ai-float-config-row {
+  display: grid;
+  gap: 8px;
+}
+@media (min-width: 720px) {
+  .ai-float-config-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ai-float-config-row:first-of-type {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ai-float-config .input.ai-float-input {
+  height: 32px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  color: #e3e3e3;
+  font-size: 12px;
+}
+.ai-float-config-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ai-float-config-actions .btn.tiny {
+  height: 28px;
+  padding: 0 10px;
+}
+.ai-float-config-hint {
+  font-size: 11px;
+  color: #8f97a1;
+}
 .ai-float-hint {
   font-size: 11px;
   color: #9aa2ad;
