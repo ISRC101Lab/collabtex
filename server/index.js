@@ -1913,6 +1913,64 @@ async function main() {
     }
   });
 
+  // AI: agent-edit - AI agent directly edits LaTeX files
+  app.post("/api/ai/agent-edit", requireAuth(session), async (req, res) => {
+    const { projectId, filePath, context, question, history, apiKey, baseUrl, model, apiStyle } = req.body || {};
+
+    if (!projectId) return jsonError(res, 400, "missing projectId");
+    if (!filePath) return jsonError(res, 400, "missing filePath");
+    if (!question) return jsonError(res, 400, "missing question");
+    if (!context) return jsonError(res, 400, "missing context");
+
+    try {
+      // Permission check
+      const db = await loadProjects(dataDir);
+      const p = db.projects.find((x) => x.id === projectId);
+      if (!p) return jsonError(res, 404, "project not found");
+      if (!canAccessProject(p, req.user.username)) return jsonError(res, 403, "forbidden");
+
+      // Call AI with agent mode
+      const aiResult = await aiChat({
+        context,
+        question,
+        history,
+        filePath,
+        apiKey,
+        baseUrl,
+        model,
+        apiStyle,
+        mode: 'agent'
+      });
+
+      // Parse LaTeX code block from AI response
+      const latexMatch = aiResult.match(/```latex\n([\s\S]*?)\n```/);
+      if (!latexMatch) {
+        return res.json({
+          success: false,
+          result: aiResult,
+          edits: [],
+          notes: "AI 未返回有效的 LaTeX 代码块"
+        });
+      }
+
+      const newContent = latexMatch[1];
+      const projDir = projectPath(dataDir, projectId);
+      const fullPath = resolveProjectFilePath(projDir, filePath);
+
+      // Atomic write
+      await fs.writeFile(fullPath, newContent, 'utf-8');
+
+      res.json({
+        success: true,
+        result: aiResult,
+        edits: [{ path: filePath, content: newContent, reason: "AI agent 修改" }],
+        notes: "文件已成功更新"
+      });
+    } catch (e) {
+      jsonError(res, 400, e && e.message ? e.message : String(e));
+    }
+  });
+
   // Frontend
   const publicDir = path.resolve(new URL("../public", import.meta.url).pathname);
   app.use(express.static(publicDir, { index: false }));
