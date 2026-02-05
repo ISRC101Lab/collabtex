@@ -145,6 +145,26 @@
   justify-content: space-between;
   gap: 8px;
 }
+.left-title-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.left-brand-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f0c38a;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.1;
+}
+.left-brand-btn:hover { color: #ffd9ad; }
 .left-header-actions {
   display: flex;
   align-items: center;
@@ -154,8 +174,8 @@
 .project-title-btn {
   border: none;
   background: transparent;
-  color: #f0f0f0;
-  font-size: 12.5px;
+  color: #f2e9dd;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   text-align: left;
@@ -237,12 +257,6 @@
   flex-direction: column;
   gap: 10px;
 }
-.left-pane-body .ai-panel {
-  grid-template-columns: 1fr;
-}
-.left-pane-body .ai-sessions {
-  display: none;
-}
 .view-panel {
   display: flex;
   flex-direction: column;
@@ -304,16 +318,6 @@
 .studio-page .input,
 .studio-page .textarea {
   background: #202020;
-  border-color: #2f2f2f;
-  color: #e6e6e6;
-}
-.studio-page .ai-sessions,
-.studio-page .ai-session {
-  background: #1f1f1f;
-  border-color: #2a2a2a;
-}
-.studio-page .ai-chat-content {
-  background: #222222;
   border-color: #2f2f2f;
   color: #e6e6e6;
 }

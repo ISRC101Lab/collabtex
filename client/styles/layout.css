@@ -65,6 +65,46 @@ body::after {
   padding: 56px 18px;
 }
 
+.boot-fallback {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.boot-title {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.boot-desc {
+  color: var(--muted);
+}
+
+.loading-panel {
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+
+.loading-detail {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.loading-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 
 .container {
   padding: 12px;

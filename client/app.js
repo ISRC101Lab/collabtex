@@ -3,12 +3,12 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 
 import { EditorView, basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
-import { StreamLanguage, foldService } from "@codemirror/language";
+import { StreamLanguage, foldService, syntaxHighlighting, HighlightStyle } from "@codemirror/language";
 import { autocompletion, snippetCompletion } from "@codemirror/autocomplete";
 import { stex } from "@codemirror/legacy-modes/mode/stex";
-import { keymap } from "@codemirror/view";
 // @ts-ignore
 import { yCollab } from "y-codemirror.next";
+import { tags as hl } from "@lezer/highlight";
 
 import { api } from "./services/api.js";
 import { t, getLang, setLang as setI18nLang } from "./i18n.js";
@@ -27,26 +27,7 @@ import {
   flashLineEffect,
   clearFlashLineEffect,
   flashLineField,
-  ghostSuggestField,
-  getGhostSuggestion,
-  setGhostSuggestion,
-  clearGhostSuggestion,
-  clearGhostSuggestEffect,
-  aiDiffField,
-  setAiDiff,
-  clearAiDiff,
 } from "./editor/effects.js";
-import {
-  aiDefaults,
-  AI_ACTIVE_PROFILE_KEY,
-  AI_PROFILE_POLISH_KEY,
-  AI_PROFILE_CHAT_KEY,
-  AI_PROFILE_DIAG_KEY,
-  mkAiProfileId,
-  normalizeAiProfile,
-  loadAiProfilesFromStorage,
-  saveAiProfilesToStorage,
-} from "./ai/profiles.js";
 
 const root = document.getElementById("app");
 
@@ -66,6 +47,36 @@ const ICONS = {
   grid: '<rect x="4" y="4" width="7" height="7" rx="1" /><rect x="13" y="4" width="7" height="7" rx="1" /><rect x="4" y="13" width="7" height="7" rx="1" /><rect x="13" y="13" width="7" height="7" rx="1" />',
   settings: '<path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5z" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.54V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1-1.54 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.54-1H3a2 2 0 0 1 0-4h.06a1.7 1.7 0 0 0 1.54-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.54V3a2 2 0 0 1 4 0v.06a1.7 1.7 0 0 0 1 1.54 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.73 0 1.4.42 1.74 1.08.14.27.22.57.22.88a2 2 0 0 1-2 2h-.06a1.7 1.7 0 0 0-1.54 1z" />',
 };
+
+const WARM_HIGHLIGHT = HighlightStyle.define([
+  { tag: hl.comment, color: "#8ec07c" },
+  { tag: hl.number, color: "#f4a261" },
+  { tag: hl.string, color: "#ffe9cc" },
+  { tag: hl.link, color: "#e76f51" },
+  { tag: hl.url, color: "#e76f51" },
+  { tag: hl.keyword, color: "#ffd166" },
+  { tag: hl.controlKeyword, color: "#ffd166" },
+  { tag: hl.definitionKeyword, color: "#ffd166" },
+  { tag: hl.modifier, color: "#ffd166" },
+  { tag: hl.operatorKeyword, color: "#ffedd4" },
+  { tag: hl.atom, color: "#ffe3be" },
+  { tag: hl.bool, color: "#ffdcb0" },
+  { tag: hl.null, color: "#ffdcb0" },
+  { tag: hl.name, color: "#fff2de" },
+  { tag: hl.typeName, color: "#ffe6c8" },
+  { tag: hl.className, color: "#ffe6c8" },
+  { tag: hl.propertyName, color: "#ffe0bf" },
+  { tag: hl.attributeName, color: "#ffe0bf" },
+  { tag: hl.tagName, color: "#ffd9b6" },
+  { tag: hl.function(hl.variableName), color: "#fff2de" },
+  { tag: hl.labelName, color: "#ffe6c8" },
+  { tag: hl.quote, color: "#e76f51" },
+  { tag: hl.heading, color: "#ffe6c8" },
+  { tag: hl.emphasis, color: "#ffe6c8", fontStyle: "italic" },
+  { tag: hl.strong, color: "#ffe6c8", fontWeight: "700" },
+  { tag: hl.literal, color: "#ffdcb0" },
+  { tag: hl.unit, color: "#ffdcb0" },
+]);
 
 function h(tag, attrs = {}, children = []) {
   const el = document.createElement(tag);
@@ -155,6 +166,55 @@ function getAllLabels() {
 function getBibKeys() {
   const keys = app && app.ui && app.ui.bibKeyCache && Array.isArray(app.ui.bibKeyCache.keys) ? app.ui.bibKeyCache.keys : [];
   return keys.slice();
+}
+
+function listTexFiles() {
+  const tree = app && app.current && Array.isArray(app.current.tree) ? app.current.tree : [];
+  return tree.filter((f) => /\.tex$/i.test(f));
+}
+
+function listBibFiles() {
+  const tree = app && app.current && Array.isArray(app.current.tree) ? app.current.tree : [];
+  return tree.filter((f) => /\.bib$/i.test(f));
+}
+
+async function refreshLabelCache() {
+  if (!app || !app.current || !app.current.project) return;
+  const projectId = app.current.project.id;
+  const texFiles = listTexFiles();
+  if (!app.ui.labelCache) app.ui.labelCache = {};
+  const maxFiles = 80;
+  for (const filePath of texFiles.slice(0, maxFiles)) {
+    try {
+      const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
+      app.ui.labelCache[filePath] = extractLabels(text);
+    } catch {
+      // ignore file read errors
+    }
+  }
+}
+
+async function refreshBibKeyCache() {
+  if (!app || !app.current || !app.current.project) return;
+  const projectId = app.current.project.id;
+  const cache = { projectId, keys: [], byFile: {}, updatedAt: 0 };
+  app.ui.bibKeyCache = cache;
+  const bibFiles = listBibFiles();
+  const maxFiles = 80;
+  for (const filePath of bibFiles.slice(0, maxFiles)) {
+    try {
+      const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
+      cache.byFile[filePath] = extractBibKeys(text);
+    } catch {
+      // ignore file read errors
+    }
+  }
+  const all = new Set();
+  for (const list of Object.values(cache.byFile)) {
+    for (const key of list || []) all.add(key);
+  }
+  cache.keys = Array.from(all).sort();
+  cache.updatedAt = Date.now();
 }
 
 function clear() {
@@ -610,6 +670,7 @@ async function renderPdfPages({ projectId, refresh = false } = {}) {
   }
 
   const doc = await ensurePdfDoc(pid, { refresh });
+  const pdfjs = await loadPdfJs();
   const total = doc.numPages || 1;
   app.ui.pdfPageCount = total;
   let pageNum = app.ui.pdfPage || 1;
@@ -653,6 +714,7 @@ async function renderPdfPages({ projectId, refresh = false } = {}) {
   for (let i = 1; i <= total; i += 1) {
     const wrap = h("div", { class: "pdf-page-wrap", "data-page": String(i) }, [
       h("canvas", { class: "pdf-canvas", id: `pdfCanvas_${i}`, "data-page": String(i) }),
+      h("div", { class: "textLayer", id: `pdfText_${i}`, "data-page": String(i) }),
     ]);
     pagesHost.appendChild(wrap);
   }
@@ -667,12 +729,17 @@ async function renderPdfPages({ projectId, refresh = false } = {}) {
     const viewport = page.getViewport({ scale });
     app.ui.pdfViewports[i] = viewport;
     const canvas = document.getElementById(`pdfCanvas_${i}`);
+    const wrap = canvas ? canvas.closest(".pdf-page-wrap") : null;
     if (!canvas) continue;
     const ctx = canvas.getContext("2d");
     canvas.width = Math.floor(viewport.width * dpr);
     canvas.height = Math.floor(viewport.height * dpr);
     canvas.style.width = `${viewport.width}px`;
     canvas.style.height = `${viewport.height}px`;
+    if (wrap) {
+      wrap.style.width = `${viewport.width}px`;
+      wrap.style.height = `${viewport.height}px`;
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const task = page.render({ canvasContext: ctx, viewport });
     app.ui.pdfRenderTasks.push(task);
@@ -680,6 +747,26 @@ async function renderPdfPages({ projectId, refresh = false } = {}) {
       await task.promise;
     } catch {
       // ignore render errors
+    }
+
+    const textLayerDiv = document.getElementById(`pdfText_${i}`);
+    if (textLayerDiv) {
+      textLayerDiv.innerHTML = "";
+      textLayerDiv.style.setProperty("--scale-factor", String(scale));
+      textLayerDiv.style.width = `${viewport.width}px`;
+      textLayerDiv.style.height = `${viewport.height}px`;
+      try {
+        const textContent = await page.getTextContent();
+        const textLayer = new pdfjs.TextLayer({
+          textContentSource: textContent,
+          container: textLayerDiv,
+          viewport,
+        });
+        await textLayer.render();
+        if (pdfjs.setLayerDimensions) pdfjs.setLayerDimensions(textLayerDiv, viewport);
+      } catch {
+        // ignore text layer errors
+      }
     }
   }
 
@@ -932,8 +1019,8 @@ function getZoomNumber(val) {
 }
 
 function formatPdfPageInfo(page, total) {
-  const pad = (n) => String(Math.max(1, Number(n) || 1)).padStart(2, "0");
-  return `${pad(page)}/${pad(total)} 页`;
+  const norm = (n) => Math.max(1, Number(n) || 1);
+  return `${norm(page)} / ${norm(total)} 页`;
 }
 
 function updatePdfPageInfo(page, total) {
@@ -1210,8 +1297,6 @@ function pickColor(name) {
   return palette[h % palette.length];
 }
 
-const autoFixStored = localStorage.getItem("ct_ai_auto_fix");
-const autoFixDefault = autoFixStored === "1";
 const autoCompileStored = localStorage.getItem("ct_autoCompile");
 const autoCompileDefault = autoCompileStored === null ? true : autoCompileStored === "1";
 const layoutStored = localStorage.getItem("ct_layout_mode");
@@ -1246,13 +1331,14 @@ const app = {
     projectView: localStorage.getItem("ct_project_view") || "list",
     leftRailMode: localStorage.getItem("ct_left_rail_mode") || "files",
     leftPaneTab: localStorage.getItem("ct_left_pane_tab") || "files",
-    assistantEnabled: localStorage.getItem("ct_assistant_enabled") !== "0",
     dropdownOpen: "",
     switchError: "",
     importError: "",
     projectRenameId: "",
     projectDeleteArmed: "",
     authError: "",
+    loadError: "",
+    loadErrorDetail: "",
     guestMode: false,
     autoCompile: autoCompileDefault,
     autoCompileDirty: false,
@@ -1305,38 +1391,6 @@ const app = {
     historyHashByFile: {},
     historyLastSnapAt: {},
     historyError: "",
-    aiChatHistory: {},
-    aiChatPanelState: null,
-    refreshChatPanel: null,
-    aiFloatNeedsConfig: false,
-    aiFloatConfigOpen: false,
-    aiFloatMode: localStorage.getItem("ct_ai_float_mode") || "chat",
-    aiFloatPos: (() => {
-      try {
-        const raw = localStorage.getItem("ct_ai_float_pos");
-        return raw ? JSON.parse(raw) : null;
-      } catch {
-        return null;
-      }
-    })(),
-    aiPendingRewrite: null,
-    aiFloatAgentDraft: { instruction: "", output: "", meta: null, fileLabel: "" },
-    refreshAiFloat: null,
-    aiContextMode: localStorage.getItem("ct_ai_ctx_mode") || "selection",
-    aiContextIncludeBib: localStorage.getItem("ct_ai_ctx_bib") === "1",
-    aiContextIncludeStyle: localStorage.getItem("ct_ai_ctx_style") === "1",
-    aiProfiles: [],
-    aiActiveProfileId: localStorage.getItem(AI_ACTIVE_PROFILE_KEY) || "",
-    aiProfileForPolish: localStorage.getItem(AI_PROFILE_POLISH_KEY) || "",
-    aiProfileForChat: localStorage.getItem(AI_PROFILE_CHAT_KEY) || "",
-    aiProfileForDiagnose: localStorage.getItem(AI_PROFILE_DIAG_KEY) || "",
-    aiUseServer: localStorage.getItem("ct_ai_use_server") === "1",
-    aiAutoDiagnose: localStorage.getItem("ct_ai_auto_diag") === "1",
-    aiAutoSuggest: localStorage.getItem("ct_ai_auto_suggest") === "1",
-    aiAutoHint: localStorage.getItem("ct_ai_auto_hint") === "1",
-    aiAutoFix: autoFixDefault,
-    aiHint: "",
-    aiHintStatus: "",
     editorReadable: localStorage.getItem("ct_editor_readable") === "1",
     typewriterMode: localStorage.getItem("ct_typewriter") === "1",
     editorFontSize: clampNumber(localStorage.getItem("ct_editor_font_size"), 11, 22, 14.5),
@@ -1344,17 +1398,11 @@ const app = {
     editorPadY: clampNumber(localStorage.getItem("ct_editor_pad_y"), 8, 32, 14),
     editorPadX: clampNumber(localStorage.getItem("ct_editor_pad_x"), 8, 32, 14),
     treeDensity: localStorage.getItem("ct_tree_density") || "comfortable",
-    aiChatMode: localStorage.getItem("ct_ai_chat_mode") || "assistant",
-    aiFloatOpen: localStorage.getItem("ct_ai_float") === "1",
     focusMode: false,
     autoJumpError: localStorage.getItem("ct_auto_jump_error") === "1",
-    aiSessions: [],
-    aiActiveSessionId: null,
     theme: localStorage.getItem("ct_theme") || "default",
     labelCache: {},
     bibKeyCache: { projectId: "", keys: [], byFile: {}, updatedAt: 0 },
-    aiPanelCollapsed: localStorage.getItem("ct_ai_panel_collapsed") === "1",
-    aiPanelMode: localStorage.getItem("ct_ai_panel_mode") || "chat",
     layoutMode: "balanced",
     floatRightPane: false,
     splitAuto: localStorage.getItem("ct_split_auto") !== "0",
@@ -1385,14 +1433,6 @@ const app = {
     status: "idle",
     diagnostics: [],
     es: null,
-    aiFix: "",
-    aiFixStatus: "",
-    aiPatch: null,
-    aiPatchStatus: "",
-    lastAiAutoFixAt: 0,
-    aiOneClickStatus: "",
-    aiOneClickStep: "",
-    aiOneClickMark: 0,
     mainRepairTriedAt: 0,
     lastHeuristicFixAt: 0,
     stage: "",
@@ -1401,15 +1441,6 @@ const app = {
     lastMode: "",
     lastEngine: "",
     lastFinishedAt: "",
-  },
-  ai: {
-    ...aiDefaults,
-    suggestTimer: null,
-    suggestLastAt: 0,
-    suggestInFlight: false,
-    hintTimer: null,
-    hintLastAt: 0,
-    hintInFlight: false,
   },
   modal: null,
 };
@@ -1425,115 +1456,6 @@ app.ui.rightTab = localStorage.getItem("ct_rightTab") || "pdf";
   localStorage.setItem("ct_left_ratio", String(app.ui.leftRatio));
   localStorage.setItem("ct_right_ratio", String(app.ui.rightRatio));
 }
-initAiProfiles();
-
-function initAiProfiles() {
-  const list = loadAiProfilesFromStorage();
-  app.ui.aiProfiles = list;
-  const ids = new Set(list.map((p) => p.id));
-  if (!app.ui.aiActiveProfileId || !ids.has(app.ui.aiActiveProfileId)) {
-    app.ui.aiActiveProfileId = list[0] ? list[0].id : "";
-    if (app.ui.aiActiveProfileId) localStorage.setItem(AI_ACTIVE_PROFILE_KEY, app.ui.aiActiveProfileId);
-  }
-  if (app.ui.aiProfileForPolish && !ids.has(app.ui.aiProfileForPolish)) app.ui.aiProfileForPolish = "";
-  if (app.ui.aiProfileForChat && !ids.has(app.ui.aiProfileForChat)) app.ui.aiProfileForChat = "";
-  if (app.ui.aiProfileForDiagnose && !ids.has(app.ui.aiProfileForDiagnose)) app.ui.aiProfileForDiagnose = "";
-  saveAiProfilesToStorage(list);
-}
-
-function saveAiProfiles() {
-  saveAiProfilesToStorage(app.ui.aiProfiles || []);
-}
-
-function getAiProfileById(id) {
-  if (!id) return null;
-  return (app.ui.aiProfiles || []).find((p) => p.id === id) || null;
-}
-
-function setActiveAiProfile(id) {
-  app.ui.aiActiveProfileId = id || "";
-  if (id) localStorage.setItem(AI_ACTIVE_PROFILE_KEY, id);
-  else localStorage.removeItem(AI_ACTIVE_PROFILE_KEY);
-}
-
-function setAiProfileForMode(mode, id) {
-  const val = id || "";
-  if (mode === "polish") {
-    app.ui.aiProfileForPolish = val;
-    if (val) localStorage.setItem(AI_PROFILE_POLISH_KEY, val);
-    else localStorage.removeItem(AI_PROFILE_POLISH_KEY);
-  } else if (mode === "chat") {
-    app.ui.aiProfileForChat = val;
-    if (val) localStorage.setItem(AI_PROFILE_CHAT_KEY, val);
-    else localStorage.removeItem(AI_PROFILE_CHAT_KEY);
-  } else if (mode === "diagnose") {
-    app.ui.aiProfileForDiagnose = val;
-    if (val) localStorage.setItem(AI_PROFILE_DIAG_KEY, val);
-    else localStorage.removeItem(AI_PROFILE_DIAG_KEY);
-  }
-}
-
-function getAiProfileForMode(mode) {
-  if (mode === "polish") return app.ui.aiProfileForPolish || "";
-  if (mode === "chat") return app.ui.aiProfileForChat || "";
-  if (mode === "diagnose") return app.ui.aiProfileForDiagnose || "";
-  return "";
-}
-
-function getAiConfigFor(mode) {
-  const id = getAiProfileForMode(mode) || app.ui.aiActiveProfileId;
-  const profile = getAiProfileById(id);
-  if (profile) {
-    return {
-      apiKey: profile.apiKey,
-      baseUrl: profile.baseUrl,
-      model: profile.model,
-      apiStyle: profile.apiStyle,
-    };
-  }
-  return { ...app.ai };
-}
-
-function applyAiConfig(payload, mode) {
-  if (app && app.ui && app.ui.aiUseServer) return;
-  const cfg = getAiConfigFor(mode);
-  if (cfg.apiKey) payload.apiKey = cfg.apiKey;
-  if (cfg.baseUrl) payload.baseUrl = cfg.baseUrl;
-  if (cfg.model) payload.model = cfg.model;
-  if (cfg.apiStyle) payload.apiStyle = cfg.apiStyle;
-}
-
-function addAiProfile(seed) {
-  const base = seed && typeof seed === "object" ? seed : {};
-  const next = normalizeAiProfile(
-    {
-      id: mkAiProfileId(),
-      name: base.name || `Model ${app.ui.aiProfiles.length + 1}`,
-      apiKey: base.apiKey || "",
-      baseUrl: base.baseUrl || "",
-      model: base.model || "",
-      apiStyle: base.apiStyle || "",
-    },
-    base.name
-  );
-  app.ui.aiProfiles.push(next);
-  setActiveAiProfile(next.id);
-  saveAiProfiles();
-  return next;
-}
-
-function removeAiProfile(id) {
-  const list = (app.ui.aiProfiles || []).filter((p) => p.id !== id);
-  if (!list.length) return false;
-  app.ui.aiProfiles = list;
-  if (app.ui.aiActiveProfileId === id) setActiveAiProfile(list[0].id);
-  if (app.ui.aiProfileForPolish === id) setAiProfileForMode("polish", "");
-  if (app.ui.aiProfileForChat === id) setAiProfileForMode("chat", "");
-  if (app.ui.aiProfileForDiagnose === id) setAiProfileForMode("diagnose", "");
-  saveAiProfiles();
-  return true;
-}
-
 function applySplitVars() {
   normalizeSplitWidths();
   document.documentElement.style.setProperty("--leftW", `${app.ui.leftW}px`);
@@ -1665,7 +1587,8 @@ function refreshEditorView() {
 }
 
 function setLeftCollapsed(next) {
-  app.ui.leftCollapsed = !!next;
+  const wantCollapsed = !!next;
+  app.ui.leftCollapsed = wantCollapsed;
   localStorage.setItem("ct_left_collapsed", app.ui.leftCollapsed ? "1" : "0");
   applyLayoutClass();
   updateTopbarButtons();
@@ -1829,14 +1752,6 @@ function updateRightPaneFloat() {
   }
 }
 
-function setAiSetting(key, value) {
-  app.ai[key] = value;
-  if (key === "apiKey") localStorage.setItem("ct_ai_key", value);
-  if (key === "baseUrl") localStorage.setItem("ct_ai_base", value);
-  if (key === "model") localStorage.setItem("ct_ai_model", value);
-  if (key === "apiStyle") localStorage.setItem("ct_ai_style", value);
-}
-
 function setLang(next) {
   const lang = setI18nLang(next);
   if (app.ui) app.ui.lang = lang;
@@ -1980,17 +1895,6 @@ function setWsUrlOverride(value) {
   }
   localStorage.setItem("ct_ws_url", v);
   if (app.ui) app.ui.wsUrlOverride = v;
-}
-
-function setAiUseServer(next) {
-  app.ui.aiUseServer = !!next;
-  localStorage.setItem("ct_ai_use_server", app.ui.aiUseServer ? "1" : "0");
-}
-
-function setAiPanelCollapsed(next) {
-  app.ui.aiPanelCollapsed = !!next;
-  localStorage.setItem("ct_ai_panel_collapsed", app.ui.aiPanelCollapsed ? "1" : "0");
-  if (app.ui.refreshChatPanel) app.ui.refreshChatPanel();
 }
 
 function setFileView(view) {
@@ -2177,16 +2081,6 @@ function startFloatDrag(ev) {
 function cleanupEditor() {
   if (app.editor.cleanup) app.editor.cleanup();
   app.editor.cleanup = null;
-  if (app.ai && app.ai.suggestTimer) {
-    clearTimeout(app.ai.suggestTimer);
-    app.ai.suggestTimer = null;
-  }
-  if (app.ai && app.ai.hintTimer) {
-    clearTimeout(app.ai.hintTimer);
-    app.ai.hintTimer = null;
-  }
-  if (app.ai) app.ai.suggestInFlight = false;
-  if (app.ai) app.ai.hintInFlight = false;
   if (app.editor.view) app.editor.view.destroy();
   app.editor.view = null;
   if (app.editor.provider) app.editor.provider.destroy();
@@ -2362,6 +2256,22 @@ function scheduleStatus(view) {
   }, 200);
 }
 
+function isNetworkError(err) {
+  if (!err) return false;
+  if (err.status === 0) return true;
+  if (err.name === "TypeError") return true;
+  const msg = String(err.message || err).toLowerCase();
+  return msg.includes("failed to fetch") || msg.includes("network") || msg.includes("timeout");
+}
+
+function setLoadError(err, context = t("无法连接到服务器")) {
+  const detail = err && err.message ? err.message : String(err || "");
+  app.ui.loadError = context;
+  app.ui.loadErrorDetail = detail && detail !== context ? detail : "";
+  app.view = "loading";
+  mount(render());
+}
+
 async function loadMe() {
   const me = await api("/api/me");
   app.me = me && me.authenticated ? me : null;
@@ -2393,19 +2303,19 @@ async function tryAutoLogin() {
         const loginRes = await api("/api/login", {
           method: "POST",
           body: JSON.stringify({ username, password }),
+          timeoutMs: 5000,
         });
         if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
         localStorage.setItem("ct_last_user", username);
         return true;
-      } catch {
+      } catch (err) {
+        if (isNetworkError(err)) throw err;
         // try next password
       }
     }
   }
   return false;
 }
-
-const AI_CONTEXT_LIMIT = 12000;
 
 async function loadProjects() {
   if (app && app.ui && app.ui.guestMode) {
@@ -2459,9 +2369,6 @@ async function loadProject(projectId, { resetTab = false } = {}) {
   app.ui.historyLastSnapAt = {};
   app.ui.historyError = "";
   app.ui.groupTreeInit = false;
-  app.ui.aiChatPanelState = null;
-  app.ui.aiSessions = loadAiSessions();
-  app.ui.aiActiveSessionId = app.ui.aiSessions[0] ? app.ui.aiSessions[0].id : null;
   app.ui.pdfPageHeights = {};
   app.ui.pdfPageWidths = {};
   app.ui.pdfViewports = {};
@@ -2603,59 +2510,6 @@ function closeModal() {
 function showModal({ title, bodyEl, actions = [] }) {
   app.modal = { title, bodyEl, actions };
   mount(render());
-}
-
-function openAiConfigModal() {
-  const profile = getAiProfileById(app.ui.aiActiveProfileId) || addAiProfile();
-  const keyInput = h("input", {
-    class: "input ai-float-input",
-    type: "password",
-    placeholder: t("API Key"),
-    value: profile.apiKey || "",
-  });
-  const baseInput = h("input", {
-    class: "input ai-float-input",
-    placeholder: t("Base URL (OpenAI 兼容)"),
-    value: profile.baseUrl || "",
-  });
-  const modelInput = h("input", {
-    class: "input ai-float-input",
-    placeholder: t("模型 (例如 gpt-4o-mini)"),
-    value: profile.model || "",
-  });
-  const styleSelect = h("select", { class: "input ai-float-input" }, [
-    h("option", { value: "", html: t("API 类型"), selected: !profile.apiStyle ? "" : null }),
-    h("option", { value: "responses", html: t("responses (兼容)"), selected: profile.apiStyle === "responses" ? "" : null }),
-    h("option", { value: "chat", html: t("chat (兼容)"), selected: profile.apiStyle === "chat" ? "" : null }),
-  ]);
-  const bodyEl = h("div", { class: "ai-float-config" }, [
-    h("div", { class: "ai-float-config-title", html: t("AI 配置") }),
-    h("div", { class: "ai-float-config-row" }, [keyInput]),
-    h("div", { class: "ai-float-config-row" }, [baseInput, modelInput]),
-    h("div", { class: "ai-float-config-row" }, [styleSelect]),
-    h("div", { class: "ai-float-config-hint", html: t("若使用服务器 Key，请在服务端设置 OPENAI_API_KEY。") }),
-  ]);
-  const saveBtn = btn(t("保存并使用本地 Key"), {
-    kind: "primary",
-    onClick: () => {
-      profile.apiKey = keyInput.value.trim();
-      profile.baseUrl = baseInput.value.trim();
-      profile.model = modelInput.value.trim();
-      profile.apiStyle = styleSelect.value || "";
-      saveAiProfiles();
-      setAiUseServer(false);
-      app.ui.aiFloatNeedsConfig = false;
-      closeModal();
-    },
-  });
-  const serverBtn = btn(t("改用服务器"), {
-    onClick: () => {
-      setAiUseServer(true);
-      app.ui.aiFloatNeedsConfig = false;
-      closeModal();
-    },
-  });
-  showModal({ title: t("AI 配置"), bodyEl, actions: [saveBtn, serverBtn] });
 }
 
 function clearDropdowns() {
@@ -2881,24 +2735,6 @@ async function openFile(filePath) {
   const historyListener = EditorView.updateListener.of((u) => {
     if (u.docChanged) scheduleHistorySnapshot(u.view);
   });
-  const aiPreviewListener = EditorView.updateListener.of((u) => {
-    if (!app.ui.aiPendingRewrite) return;
-    if (u.docChanged) {
-      clearAiDiff(u.view);
-      app.ui.aiPendingRewrite = null;
-      mount(render());
-      return;
-    }
-    if (u.selectionSet) {
-      const sel = u.state.selection.main;
-      const pending = app.ui.aiPendingRewrite;
-      if (pending && (sel.from !== pending.from || sel.to !== pending.to)) {
-        clearAiDiff(u.view);
-        app.ui.aiPendingRewrite = null;
-        mount(render());
-      }
-    }
-  });
 
   const cacheListener = EditorView.updateListener.of((u) => {
     if (!u.docChanged) return;
@@ -2910,22 +2746,6 @@ async function openFile(filePath) {
   const syncListener = EditorView.updateListener.of((u) => {
     if (app.ui.autoSyncPdf && u.selectionSet) schedulePdfSync();
   });
-
-  const autoSuggestListener = EditorView.updateListener.of((u) => {
-    if (u.docChanged) scheduleAiCopilotSuggest(u.view);
-  });
-
-
-  const ghostKeymap = keymap.of([
-    {
-      key: "Tab",
-      run: (view) => acceptGhostSuggestion(view),
-    },
-    {
-      key: "Escape",
-      run: (view) => dismissGhostSuggestion(view),
-    },
-  ]);
 
   let typewriterRaf = null;
   const typewriterListener = EditorView.updateListener.of((u) => {
@@ -2979,19 +2799,15 @@ async function openFile(filePath) {
         { dark: false }
       ),
       flashLineField,
-      ghostSuggestField,
-      aiDiffField,
       yCollab(ytext, provider.awareness, { undoManager }),
+      syntaxHighlighting(WARM_HIGHLIGHT),
       autoCompileListener,
       outlineListener,
       statusListener,
       historyListener,
-      aiPreviewListener,
       cacheListener,
       syncListener,
-      autoSuggestListener,
       typewriterListener,
-      ghostKeymap,
     ],
   });
 
@@ -3401,6 +3217,33 @@ function updateCompileStageFromLog(chunk) {
   }
 }
 
+function buildDiagnosticSummary({ max = 6 } = {}) {
+  const diags = app && app.compile && Array.isArray(app.compile.diagnostics) ? app.compile.diagnostics : [];
+  if (!diags.length) return "";
+  const out = [];
+  const limit = Math.min(max, diags.length);
+  for (let i = 0; i < limit; i += 1) {
+    const d = diags[i] || {};
+    const file = d.file ? String(d.file) : "";
+    const line = Number.isFinite(d.line) ? d.line : d.line ? Number.parseInt(d.line, 10) : null;
+    const msg = d.message ? String(d.message).trim() : t("错误");
+    if (file && line) out.push(`${file}:${line} ${msg}`);
+    else if (file) out.push(`${file} ${msg}`);
+    else out.push(msg);
+  }
+  if (diags.length > limit) out.push(`(+${diags.length - limit})`);
+  return out.join("\n");
+}
+
+function updateProblems(diagnostics) {
+  app.compile.diagnostics = Array.isArray(diagnostics) ? diagnostics : [];
+  const summaryText = buildDiagnosticSummary();
+  const summaryTextEl = document.getElementById("compileSummaryText");
+  if (summaryTextEl) summaryTextEl.textContent = summaryText || "";
+  const summaryBox = document.getElementById("compileSummaryBox");
+  if (summaryBox) summaryBox.style.display = summaryText ? "" : "none";
+}
+
 function formatDuration(ms) {
   if (!Number.isFinite(ms)) return "-";
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -3632,8 +3475,6 @@ async function compileProject({ clean = false, mode = "full", origin = "manual" 
   app.compile.pendingMode = "full";
   app.compile.pendingOrigin = "manual";
   app.compile.diagnostics = [];
-  app.compile.aiFix = "";
-  app.compile.aiFixStatus = "";
   app.compile.status = "running";
   updateProblems([]);
 
@@ -3713,23 +3554,6 @@ async function compileProject({ clean = false, mode = "full", origin = "manual" 
     }
   };
 
-  const triggerAutoAiFix = async (job) => {
-    if (!shouldAutoAiFix(job)) return;
-    appendLog(`${t("[AI] 自动修复中...")}\n`);
-    try {
-      const patch = await runAiCompilePatch({ silent: true });
-      if (patch && Array.isArray(patch.edits) && patch.edits.length) {
-        await applyCompilePatchEdits(patch.edits);
-        appendLog(`${t("已修复 {n} 个文件", { n: patch.edits.length })}\n`);
-        compileProject({ mode: "quick", origin: "manual" }).catch(console.error);
-      } else {
-        appendLog(`${t("未返回可应用的修改")}\n`);
-      }
-    } catch {
-      // ignore auto-fix failures
-    }
-  };
-
   const refreshPreview = async () => {
     await refreshPdfArtifacts(projectId, { refresh: true });
   };
@@ -3773,13 +3597,6 @@ async function compileProject({ clean = false, mode = "full", origin = "manual" 
         }
         await refreshPreview();
         if (app.ui.autoSyncPdf) schedulePdfSync();
-        if (job && job.status === "error" && app.ui.aiAutoDiagnose) {
-          runAiCompileFix().catch(() => {
-            app.compile.aiFixStatus = "error";
-            updateAiFixSummary();
-          });
-        }
-        if (job && job.status === "error") await triggerAutoAiFix(job);
         return;
       }
       await new Promise((r) => setTimeout(r, 500));
@@ -3844,13 +3661,6 @@ async function compileProject({ clean = false, mode = "full", origin = "manual" 
         }
         await refreshPreview();
         if (app.ui.autoSyncPdf) schedulePdfSync();
-        if (job && job.status === "error" && app.ui.aiAutoDiagnose) {
-          runAiCompileFix().catch(() => {
-            app.compile.aiFixStatus = "error";
-            updateAiFixSummary();
-          });
-        }
-        if (job && job.status === "error") await triggerAutoAiFix(job);
         try { es.close(); } catch {}
         app.compile.es = null;
         resolve();
@@ -4038,140 +3848,6 @@ function getParagraphContext(view) {
   return { from, to, text: doc.sliceString(from, to) };
 }
 
-function acceptGhostSuggestion(view) {
-  const suggestion = getGhostSuggestion(view);
-  if (!suggestion) return false;
-  const pos = view.state.selection.main.head;
-  view.dispatch({
-    changes: { from: pos, to: pos, insert: suggestion },
-    effects: clearGhostSuggestEffect.of(null),
-  });
-  return true;
-}
-
-function dismissGhostSuggestion(view) {
-  const suggestion = getGhostSuggestion(view);
-  if (!suggestion) return false;
-  clearGhostSuggestion(view);
-  return true;
-}
-
-function scheduleAiCopilotSuggest(view) {
-  if (!app.ui.aiAutoSuggest) return;
-  if (!view) return;
-  if (app.ai.suggestTimer) clearTimeout(app.ai.suggestTimer);
-  app.ai.suggestTimer = setTimeout(() => {
-    app.ai.suggestTimer = null;
-    if (!app.ui.aiAutoSuggest) return;
-    if (!view.hasFocus) return;
-    if (getGhostSuggestion(view)) return;
-    if (!view.state.selection.main.empty) return;
-    const now = Date.now();
-    if (now - (app.ai.suggestLastAt || 0) < 10000) return;
-    aiCopilotSuggest();
-  }, 900);
-}
-
-function scheduleAiHint(view) {
-  if (!app.ui.aiAutoHint) return;
-  if (!view) return;
-  if (app.ai.hintTimer) clearTimeout(app.ai.hintTimer);
-  app.ai.hintTimer = setTimeout(() => {
-    app.ai.hintTimer = null;
-    if (!app.ui.aiAutoHint) return;
-    if (!view.hasFocus) return;
-    if (!view.state.selection.main.empty) return;
-    const now = Date.now();
-    if (now - (app.ai.hintLastAt || 0) < 20000) return;
-    runAiHint();
-  }, 1500);
-}
-
-async function runAiHint() {
-  const view = app.editor.view;
-  if (!view) return;
-  if (app.ai.hintInFlight) return;
-  app.ai.hintInFlight = true;
-  app.ui.aiHintStatus = "running";
-  if (app.ui.refreshAiHint) app.ui.refreshAiHint();
-  const para = getParagraphContext(view);
-  if (!para.text.trim()) {
-    app.ai.hintInFlight = false;
-    app.ui.aiHintStatus = "";
-    if (app.ui.refreshAiHint) app.ui.refreshAiHint();
-    return;
-  }
-  const question = "请给出3条精炼修改建议，每条不超过20字，使用项目符号输出。";
-  const payload = {
-    context: para.text.slice(-AI_CONTEXT_LIMIT),
-    question,
-    history: [],
-    filePath: app.current.openFile || "",
-    mode: "assistant",
-  };
-  applyAiConfig(payload, "chat");
-  try {
-    const { result } = await api("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    app.ui.aiHint = String(result || "").trim();
-    app.ui.aiHintStatus = "done";
-    app.ai.hintLastAt = Date.now();
-  } catch (e) {
-    app.ui.aiHint = e && e.message ? e.message : String(e);
-    app.ui.aiHintStatus = "error";
-  } finally {
-    app.ai.hintInFlight = false;
-    if (app.ui.refreshAiHint) app.ui.refreshAiHint();
-  }
-}
-
-async function aiCopilotSuggest() {
-  const view = app.editor.view;
-  if (!view) return alert(t("请先打开文件。"));
-  if (app.ai.suggestInFlight) return;
-  app.ai.suggestInFlight = true;
-  clearGhostSuggestion(view);
-  const para = getParagraphContext(view);
-  if (!para.text.trim()) {
-    app.ai.suggestInFlight = false;
-    return;
-  }
-  const question =
-    "基于上述段落，给出 1-2 句自然续写，仅输出需要插入的 LaTeX 连续文本，不要解释、不加代码块。";
-  const payload = {
-    context: para.text.slice(-AI_CONTEXT_LIMIT),
-    question,
-    history: [],
-    filePath: app.current.openFile || "",
-    mode: "assistant",
-  };
-  applyAiConfig(payload, "chat");
-  try {
-    const { result } = await api("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    let suggestion = String(result || "").trim();
-    if (!suggestion) return;
-    const fenced = extractLatexBlock(suggestion);
-    if (fenced) suggestion = fenced;
-    suggestion = suggestion.replace(/\s+$/g, "");
-    if (!suggestion) return;
-    const pos = view.state.selection.main.head;
-    const existing = view.state.doc.sliceString(pos, Math.min(view.state.doc.length, pos + suggestion.length));
-    if (normalizeWhitespace(existing) !== normalizeWhitespace(suggestion)) {
-      setGhostSuggestion(view, suggestion.startsWith("\n") ? suggestion : ` ${suggestion}`);
-      app.ai.suggestLastAt = Date.now();
-    }
-  } catch (e) {
-    console.warn(e);
-  } finally {
-    app.ai.suggestInFlight = false;
-  }
-}
-
 function cleanDuplicateParagraphs() {
   const view = app.editor.view;
   if (!view) return alert(t("请先打开文件。"));
@@ -4184,151 +3860,6 @@ function cleanDuplicateParagraphs() {
   view.dispatch({ changes: { from, to, insert: text } });
   view.focus();
   alert(t("已清理重复段落 {n} 处", { n: removed }));
-}
-
-async function aiPolish({ mode = "polish", presetInstruction = "" } = {}) {
-  const s = getEditorSelection();
-  if (!s) return alert(t("请先打开文件。"));
-
-  let sourceText = s.text;
-  let from = s.from;
-  let to = s.to;
-  if (s.empty) {
-    // Fallback: whole doc (confirm).
-    if (!confirm(t("未选择内容，发送整个文件给 AI？"))) return;
-    sourceText = s.view.state.doc.toString();
-    from = 0;
-    to = s.view.state.doc.length;
-  }
-
-  const instruction = h("textarea", { class: "textarea", placeholder: t("可选指令（例如：更学术、更简洁、保留术语）...") });
-  const output = h("textarea", { class: "textarea", placeholder: t("AI 输出将显示在这里...") });
-  output.readOnly = true;
-  if (presetInstruction) instruction.value = presetInstruction;
-
-  const presets = [
-    { label: t("更学术"), text: "更学术、更正式，保留术语与 LaTeX。" },
-    { label: t("更简洁"), text: "更简洁，去冗余，保留术语与 LaTeX。" },
-    { label: t("扩写"), text: "在不改变含义前提下适度扩写，补充过渡句，保留 LaTeX。" },
-    { label: t("摘要润色"), text: "仅润色摘要，突出贡献与结果，保留 LaTeX。" },
-    { label: t("方法清晰"), text: "让方法描述更清晰，强调步骤与因果，保留 LaTeX。" },
-    { label: t("术语统一"), text: "统一术语与缩写写法，修正不一致，保留 LaTeX。" },
-    { label: t("翻译成英文"), text: "Translate to academic English, keep LaTeX commands intact." },
-    { label: t("翻译成中文"), text: "翻译成中文，保留 LaTeX 命令与环境。" },
-    { label: t("改为要点"), text: "改为条目列表，使用 LaTeX itemize 环境，保留术语。" },
-  ];
-
-  const presetList = h("div", { class: "ai-preset-list" });
-  for (const p of presets) {
-    const b = btn(p.label, {
-      kind: "tiny",
-      onClick: () => {
-        instruction.value = p.text;
-        instruction.focus();
-      },
-    });
-    presetList.appendChild(b);
-  }
-
-  const body = h("div", {}, [
-    h("div", { class: "hint", html: t("提示：先选中一段文字效果更好。") }),
-    h("div", { class: "ai-presets" }, [
-      h("div", { class: "label", html: t("预设") }),
-      presetList,
-    ]),
-    h("div", { class: "label", html: t("指令") }),
-    instruction,
-    h("div", { class: "label", html: t("结果") }),
-    output,
-  ]);
-
-  const runBtn = btn(t("运行 AI"), {
-    kind: "primary",
-    onClick: async () => {
-      output.value = t("处理中...");
-      try {
-        const payload = { text: sourceText, instruction: instruction.value, mode };
-        applyAiConfig(payload, "polish");
-        const { result } = await api("/api/ai/polish", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        output.value = result || "";
-      } catch (e) {
-        output.value = e && e.message ? e.message : String(e);
-      }
-    },
-  });
-
-  const applyBtn = btn(t("替换选中"), {
-    onClick: () => {
-      if (!output.value) return;
-      const cleaned = pickBestRewrite(output.value, sourceText);
-      if (!cleaned) return;
-      s.view.dispatch({ changes: { from, to, insert: cleaned } });
-      closeModal();
-    },
-  });
-
-  const insertBtn = btn(t("插入到下方"), {
-    onClick: () => {
-      if (!output.value) return;
-      const cleaned = pickBestRewrite(output.value, sourceText);
-      if (!cleaned) return;
-      const insertPos = to;
-      s.view.dispatch({ changes: { from: insertPos, to: insertPos, insert: `\n\n${cleaned}` } });
-      closeModal();
-    },
-  });
-
-  const modeLabel = mode === "polish" ? t("润色") : mode;
-  showModal({ title: `AI ${modeLabel}`, bodyEl: body, actions: [runBtn, applyBtn, insertBtn] });
-}
-
-function extractAgentRewrite(text) {
-  const raw = String(text || "");
-  const fenceDirect = raw.match(/```(?:latex|tex)?\n([\s\S]*?)```/i);
-  if (fenceDirect && fenceDirect[1]) return fenceDirect[1].trim();
-  const markers = ["## Rewrite", "### Rewrite", "REWRITE:", "重写：", "改写："];
-  let idx = -1;
-  let marker = "";
-  for (const m of markers) {
-    const pos = raw.indexOf(m);
-    if (pos !== -1) {
-      idx = pos + m.length;
-      marker = m;
-      break;
-    }
-  }
-  if (idx === -1) return raw.trim();
-  const chunk = raw.slice(idx).trim();
-  if (!chunk) return raw.trim();
-  const fence = chunk.match(/```[\s\S]*?```/);
-  if (fence) {
-    return fence[0].replace(/^```[a-zA-Z]*\n?/, "").replace(/```$/, "").trim();
-  }
-  return chunk;
-}
-
-function extractLatexBlock(text) {
-  const raw = String(text || "");
-  const fence = raw.match(/```(?:latex|tex)?\n([\s\S]*?)```/i);
-  if (fence && fence[1]) return fence[1].trim();
-  return "";
-}
-
-function extractRewritePair(text) {
-  const raw = String(text || "");
-  const block = raw.match(/```original\s*([\s\S]*?)```[\s\S]*?```rewrite\s*([\s\S]*?)```/i);
-  if (block && block[1] && block[2]) {
-    return { original: block[1].trim(), rewrite: block[2].trim() };
-  }
-  const origMatch = raw.match(/(?:^|\n)\s*(?:ORIGINAL|Original|原文|原始)\s*[:：]\s*([\s\S]*?)(?=\n\s*(?:REWRITE|Rewrite|改写|修改后|重写)\s*[:：])/);
-  const rewMatch = raw.match(/(?:^|\n)\s*(?:REWRITE|Rewrite|改写|修改后|重写)\s*[:：]\s*([\s\S]+)/);
-  if (origMatch && rewMatch && origMatch[1] && rewMatch[1]) {
-    return { original: origMatch[1].trim(), rewrite: rewMatch[1].trim() };
-  }
-  return null;
 }
 
 function normalizeWhitespace(text) {
@@ -4359,2628 +3890,6 @@ function dedupeParagraphs(text) {
     lastNorm = norm;
   }
   return { text: out.join("\n\n"), removed };
-}
-
-function pickBestRewrite(output, original) {
-  const raw = String(output || "").trim();
-  if (!raw) return "";
-  const fenced = extractLatexBlock(raw);
-  if (fenced) return fenced;
-
-  const rewriteMatch = raw.match(/(?:^|\n)#+\s*Rewrite\s*[:：]?\s*\n([\s\S]+)$/i);
-  if (rewriteMatch && rewriteMatch[1]) return rewriteMatch[1].trim();
-  const rewriteZh = raw.match(/(?:^|\n)(?:改写|修改后|重写)\s*[:：]\s*([\s\S]+)$/);
-  if (rewriteZh && rewriteZh[1]) return rewriteZh[1].trim();
-
-  const candidate = extractAgentRewrite(raw).trim();
-  if (!original) return candidate;
-
-  const origNorm = normalizeWhitespace(original);
-  const candNorm = normalizeWhitespace(candidate);
-  if (!origNorm || candNorm === origNorm) return candidate;
-
-  if (candidate.includes(original)) {
-    const idx = candidate.lastIndexOf(original);
-    const cleaned = (candidate.slice(0, idx) + candidate.slice(idx + original.length)).trim();
-    if (cleaned && normalizeWhitespace(cleaned) !== origNorm) return cleaned;
-  }
-
-  const parts = candidate.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-  if (parts.length > 1) {
-    for (let i = parts.length - 1; i >= 0; i -= 1) {
-      if (normalizeWhitespace(parts[i]) !== origNorm) return parts[i];
-    }
-  }
-
-  return candidate;
-}
-
-async function aiAgentReview() {
-  const s = getEditorSelection();
-  if (!s) return alert(t("请先打开文件。"));
-
-  let sourceText = s.text;
-  let from = s.from;
-  let to = s.to;
-  if (s.empty) {
-    from = 0;
-    to = s.view.state.doc.length;
-    sourceText = s.view.state.doc.toString();
-  }
-
-  const instruction = h("textarea", {
-    class: "textarea",
-    placeholder: t("可选指令（例如：更学术、更简洁、保留术语）..."),
-  });
-  const output = h("textarea", { class: "textarea", placeholder: t("AI 输出将显示在这里...") });
-  output.readOnly = true;
-
-  const presets = [
-    { label: t("审稿人模式"), text: "请以顶会审稿人视角指出问题、风险和不足，并给出修改方案。" },
-    { label: t("结构优化"), text: "只关注结构与逻辑层次，给出章节调整与内容补齐建议。" },
-    { label: t("摘要优化"), text: "只针对摘要改写，突出贡献与结果，保留 LaTeX。" },
-    { label: t("术语一致性"), text: "检查术语一致性和表述统一性，指出不一致并给出改写。" },
-  ];
-  const presetList = h("div", { class: "ai-preset-list" });
-  for (const p of presets) {
-    const b = btn(p.label, {
-      kind: "tiny",
-      onClick: () => {
-        instruction.value = p.text;
-        instruction.focus();
-      },
-    });
-    presetList.appendChild(b);
-  }
-
-  const modeSelect = h(
-    "select",
-    {
-      class: "input ai-context-select",
-      value: app.ui.aiContextMode || "selection",
-      onchange: (ev) => {
-        app.ui.aiContextMode = ev.target.value || "selection";
-        localStorage.setItem("ct_ai_ctx_mode", app.ui.aiContextMode);
-      },
-    },
-    [
-      h("option", { value: "selection", html: t("选中段落") }),
-      h("option", { value: "current", html: t("当前文件") }),
-      h("option", { value: "all", html: t("全部 TeX") }),
-    ]
-  );
-
-  const bibToggle = h("label", { class: "toggle ai-toggle" }, [
-    h("input", {
-      type: "checkbox",
-      checked: app.ui.aiContextIncludeBib,
-      onchange: (ev) => {
-        app.ui.aiContextIncludeBib = ev.target.checked;
-        localStorage.setItem("ct_ai_ctx_bib", app.ui.aiContextIncludeBib ? "1" : "0");
-      },
-    }),
-    h("span", { html: t("包含参考文献") }),
-  ]);
-
-  const styleToggle = h("label", { class: "toggle ai-toggle" }, [
-    h("input", {
-      type: "checkbox",
-      checked: app.ui.aiContextIncludeStyle,
-      onchange: (ev) => {
-        app.ui.aiContextIncludeStyle = ev.target.checked;
-        localStorage.setItem("ct_ai_ctx_style", app.ui.aiContextIncludeStyle ? "1" : "0");
-      },
-    }),
-    h("span", { html: t("包含样式文件") }),
-  ]);
-
-  const toggleRow = h("div", { class: "ai-context-row options" }, [
-    h("div", { class: "label", html: t("上下文") }),
-    h("div", { class: "ai-context-options" }, [bibToggle, styleToggle]),
-  ]);
-
-  const updateToggles = () => {
-    const enabled = modeSelect.value === "all";
-    bibToggle.querySelector("input").disabled = !enabled;
-    styleToggle.querySelector("input").disabled = !enabled;
-  };
-  modeSelect.addEventListener("change", updateToggles);
-  updateToggles();
-
-  const body = h("div", {}, [
-    h("div", { class: "hint", html: t("提示：先选中一段文字效果更好。") }),
-    h("div", { class: "ai-presets" }, [
-      h("div", { class: "label", html: t("预设") }),
-      presetList,
-    ]),
-    h("div", { class: "ai-context-row model" }, [
-      h("div", { class: "label", html: t("上下文来源") }),
-      modeSelect,
-    ]),
-    toggleRow,
-    h("div", { class: "label", html: t("指令") }),
-    instruction,
-    h("div", { class: "label", html: t("结果") }),
-    output,
-  ]);
-
-  const runBtn = btn(t("运行 AI"), {
-    kind: "primary",
-    onClick: async () => {
-      output.value = t("处理中...");
-      try {
-        const mode = modeSelect.value || "selection";
-        let sourceText = "";
-        if (mode === "selection") {
-          sourceText = s.empty ? s.view.state.doc.toString() : s.text;
-        } else if (mode === "current") {
-          sourceText = s.view.state.doc.toString();
-        } else {
-          const texFiles = listTexFiles();
-          const bibFiles = app.ui.aiContextIncludeBib ? listBibFiles() : [];
-          const styleFiles = app.ui.aiContextIncludeStyle ? listStyleFiles() : [];
-          const files = [...texFiles, ...bibFiles, ...styleFiles];
-          const res = await buildContextFromFiles(files, AI_CONTEXT_LIMIT);
-          sourceText = res.text || "";
-        }
-        if (!sourceText.trim()) {
-          output.value = t("上下文未设置");
-          return;
-        }
-        const question = instruction.value.trim() || "请作为论文修改代理，指出问题、给出修改建议，并提供改写后的 LaTeX。";
-        const payload = {
-          context: sourceText,
-          question,
-          history: [],
-          filePath: app.current.openFile || "",
-          mode: "agent",
-        };
-        applyAiConfig(payload, "chat");
-        const { result } = await api("/api/ai/chat", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        output.value = result || "";
-      } catch (e) {
-        output.value = e && e.message ? e.message : String(e);
-      }
-    },
-  });
-
-  const applyBtn = btn(t("替换选中"), {
-    onClick: () => {
-      if (!output.value) return;
-      const rewrite = pickBestRewrite(output.value, sourceText);
-      if (!rewrite) return;
-      s.view.dispatch({ changes: { from, to, insert: rewrite } });
-      closeModal();
-    },
-  });
-
-  const insertBtn = btn(t("插入到下方"), {
-    onClick: () => {
-      if (!output.value) return;
-      const rewrite = pickBestRewrite(output.value, sourceText);
-      if (!rewrite) return;
-      const insertPos = to;
-      s.view.dispatch({ changes: { from: insertPos, to: insertPos, insert: `\n\n${rewrite}` } });
-      closeModal();
-    },
-  });
-
-  showModal({ title: t("论文代理"), bodyEl: body, actions: [runBtn, applyBtn, insertBtn] });
-}
-
-async function buildChatStateFromMode(selection, mode, session) {
-  const filePath = app.current.openFile || app.current.mainFile || "";
-  let baseContext = "";
-  let contextTrimmed = false;
-  let meta = { files: 0, total: 0, truncated: false };
-  let source = mode;
-
-  if (mode === "selection") {
-    if (selection.empty) {
-      source = "current";
-    } else {
-      baseContext = selection.text;
-      if (baseContext.length > AI_CONTEXT_LIMIT) {
-        baseContext = baseContext.slice(baseContext.length - AI_CONTEXT_LIMIT);
-        contextTrimmed = true;
-        meta.truncated = true;
-      }
-      meta = { files: filePath ? 1 : 0, total: baseContext.length, truncated: contextTrimmed };
-    }
-  }
-
-  if (source === "current") {
-    baseContext = selection.view.state.doc.toString();
-    if (baseContext.length > AI_CONTEXT_LIMIT) {
-      baseContext = baseContext.slice(baseContext.length - AI_CONTEXT_LIMIT);
-      contextTrimmed = true;
-      meta.truncated = true;
-    }
-    meta = { files: filePath ? 1 : 0, total: baseContext.length, truncated: contextTrimmed };
-  }
-
-  if (source === "all") {
-    const texFiles = listTexFiles();
-    const bibFiles = app.ui.aiContextIncludeBib ? listBibFiles() : [];
-    const styleFiles = app.ui.aiContextIncludeStyle ? listStyleFiles() : [];
-    const files = [...texFiles, ...bibFiles, ...styleFiles];
-    const res = await buildContextFromFiles(files, AI_CONTEXT_LIMIT);
-    baseContext = res.text || "";
-    meta = { files: res.files.length, total: res.total, truncated: res.truncated };
-    contextTrimmed = res.truncated;
-  }
-
-  const history = session && Array.isArray(session.history) ? session.history : [];
-
-  const hint = contextTrimmed
-    ? t("提示：上下文过长，已截断为最后 12000 字符。")
-    : t("提示：仅使用当前 TeX 内容作为上下文。");
-
-  return {
-    filePath,
-    context: baseContext,
-    history,
-    user: app.me.username,
-    meta: { ...meta, source },
-    sessionId: session ? session.id : null,
-    labels: {
-      title: t("AI 聊天"),
-      send: t("发送"),
-      clear: t("清空对话"),
-      placeholder: t("输入你的问题..."),
-      empty: t("暂无对话"),
-      hint,
-      fileLabel: source === "all" ? t("全部 TeX") : filePath || t("当前文件"),
-    },
-  };
-}
-
-function buildChatStateFromSession(session) {
-  const meta = session.meta || { files: 0, total: 0, truncated: false, source: "current" };
-  const source = meta.source || "current";
-  const fileLabel = source === "all" ? t("全部 TeX") : session.filePath || t("当前文件");
-  const hint = meta.truncated
-    ? t("提示：上下文过长，已截断为最后 12000 字符。")
-    : t("提示：仅使用当前 TeX 内容作为上下文。");
-  return {
-    filePath: session.filePath || "",
-    context: session.context || "",
-    history: session.history || [],
-    user: app.me.username,
-    meta,
-    sessionId: session.id,
-    labels: {
-      title: t("AI 聊天"),
-      send: t("发送"),
-      clear: t("清空对话"),
-      placeholder: t("输入你的问题..."),
-      empty: t("暂无对话"),
-      hint,
-      fileLabel,
-    },
-  };
-}
-
-function renderChatModal(state) {
-  const history = state.history || [];
-  const messagesEl = h("div", { class: "ai-chat-messages" });
-  const input = h("textarea", { class: "textarea ai-chat-input", placeholder: state.labels.placeholder });
-
-  const renderMessages = () => {
-    messagesEl.innerHTML = "";
-    if (!history.length) {
-      messagesEl.appendChild(h("div", { class: "hint", html: state.labels.empty }));
-      return;
-    }
-    for (const msg of history) {
-      const role = msg.role === "assistant" ? "assistant" : "user";
-      const contentEl = h("div", { class: "ai-chat-content" });
-      contentEl.textContent = msg.content || "";
-      messagesEl.appendChild(
-        h("div", { class: `ai-chat-msg ${role}` }, [
-          h("div", { class: "ai-chat-meta", html: role === "assistant" ? "AI" : state.user }),
-          contentEl,
-        ])
-      );
-    }
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  };
-
-  const body = h("div", { class: "ai-chat" }, [
-    h("div", { class: "hint", html: state.labels.hint }),
-    h("div", { class: "label", html: state.labels.fileLabel }),
-    messagesEl,
-    input,
-  ]);
-
-  const sendBtn = btn(state.labels.send, {
-    kind: "primary",
-    onClick: async () => {
-      const question = input.value.trim();
-      if (!question) return;
-      input.value = "";
-      const priorHistory = history.slice();
-      history.push({ role: "user", content: question });
-      renderMessages();
-      try {
-        const payload = {
-          context: state.context,
-          question,
-          history: priorHistory,
-          filePath: state.filePath,
-          mode: app.ui.aiChatMode === "agent" ? "agent" : "",
-        };
-        applyAiConfig(payload, "chat");
-        const { result } = await api("/api/ai/chat", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        history.push({ role: "assistant", content: result || "" });
-        renderMessages();
-      } catch (e) {
-        history.push({ role: "assistant", content: e && e.message ? e.message : String(e) });
-        renderMessages();
-      }
-    },
-  });
-
-  const clearBtn = btn(state.labels.clear, {
-    kind: "tiny",
-    onClick: () => {
-      history.length = 0;
-      renderMessages();
-    },
-  });
-
-  renderMessages();
-  showModal({ title: state.labels.title, bodyEl: body, actions: [clearBtn, sendBtn] });
-}
-
-async function updateChatPanelFromSelection() {
-  const s = getEditorSelection();
-  if (!s) return alert(t("请先打开文件。"));
-  const mode = app.ui.aiContextMode || "selection";
-  const session = getActiveAiSession();
-  const state = await buildChatStateFromMode(s, mode, session);
-  if (!state) return;
-  session.context = state.context;
-  session.meta = state.meta;
-  session.filePath = state.filePath;
-  session.updatedAt = Date.now();
-  app.ui.aiChatPanelState = state;
-  saveAiSessions();
-  if (app.ui.refreshChatPanel) app.ui.refreshChatPanel();
-}
-
-async function aiChat() {
-  await updateChatPanelFromSelection();
-  if (app.ui.selectRightTab) app.ui.selectRightTab("ai");
-}
-
-function renderChatPanel() {
-  const container = h(
-    "div",
-    { class: `ai-panel split${app.ui.aiPanelCollapsed ? " collapsed" : ""}`, id: "aiPanel" }
-  );
-
-  const draw = () => {
-    const frag = document.createDocumentFragment();
-    const sessions = app.ui.aiSessions || [];
-    if (!sessions.length) createAiSession();
-    const activeSession = getActiveAiSession();
-    let state = app.ui.aiChatPanelState;
-    if (!state || state.sessionId !== activeSession.id) {
-      state = buildChatStateFromSession(activeSession);
-      app.ui.aiChatPanelState = state;
-    }
-
-    const modeSelect = h(
-      "select",
-      {
-        class: "input ai-context-select",
-        value: app.ui.aiContextMode || "selection",
-        onchange: (ev) => {
-          const mode = ev.target.value || "selection";
-          app.ui.aiContextMode = mode;
-          localStorage.setItem("ct_ai_ctx_mode", mode);
-          if (app.ui.refreshChatPanel) app.ui.refreshChatPanel();
-        },
-      },
-      [
-        h("option", { value: "selection", html: t("选中段落") }),
-        h("option", { value: "current", html: t("当前文件") }),
-        h("option", { value: "all", html: t("全部 TeX") }),
-      ]
-    );
-
-    const initBtn = btn(t("使用当前文稿"), {
-      kind: "primary",
-      onClick: () => {
-        updateChatPanelFromSelection();
-      },
-    });
-
-    const bibToggle = h("label", { class: "toggle ai-toggle" }, [
-      h("input", {
-        type: "checkbox",
-        checked: app.ui.aiContextIncludeBib,
-        disabled: (app.ui.aiContextMode || "selection") !== "all" ? "" : null,
-        onchange: (ev) => {
-          app.ui.aiContextIncludeBib = ev.target.checked;
-          localStorage.setItem("ct_ai_ctx_bib", app.ui.aiContextIncludeBib ? "1" : "0");
-        },
-      }),
-      h("span", { html: t("包含参考文献") }),
-    ]);
-
-    const styleToggle = h("label", { class: "toggle ai-toggle" }, [
-      h("input", {
-        type: "checkbox",
-        checked: app.ui.aiContextIncludeStyle,
-        disabled: (app.ui.aiContextMode || "selection") !== "all" ? "" : null,
-        onchange: (ev) => {
-          app.ui.aiContextIncludeStyle = ev.target.checked;
-          localStorage.setItem("ct_ai_ctx_style", app.ui.aiContextIncludeStyle ? "1" : "0");
-        },
-      }),
-      h("span", { html: t("包含样式文件") }),
-    ]);
-
-    const sessionList = h("div", { class: "ai-sessions" });
-    const sessionHeader = h("div", { class: "ai-sessions-header" }, [
-      h("div", { class: "ai-sessions-title", html: t("AI") }),
-      h("div", { class: "ai-sessions-actions" }, [
-        btn("+", {
-          kind: "tiny",
-          onClick: () => {
-            const s = createAiSession();
-            app.ui.aiChatPanelState = buildChatStateFromSession(s);
-            if (app.ui.refreshChatPanel) app.ui.refreshChatPanel();
-          },
-        }),
-        btn(app.ui.aiPanelCollapsed ? "»" : "«", {
-          kind: "tiny",
-          onClick: () => setAiPanelCollapsed(!app.ui.aiPanelCollapsed),
-          title: t("会话列表"),
-        }),
-      ]),
-    ]);
-    const sessionItems = h("div", { class: "ai-sessions-list" });
-    for (const s of sessions) {
-      const active = s.id === activeSession.id;
-      const title = s.title || "Chat";
-      const updated = s.updatedAt ? new Date(s.updatedAt).toLocaleString() : "";
-      const row = h("div", { class: `ai-session ${active ? "active" : ""}`.trim() }, [
-        h("button", {
-          class: "ai-session-title",
-          title,
-          onclick: () => setActiveAiSession(s.id),
-          html: title,
-        }),
-        h("div", { class: "ai-session-meta", html: updated }),
-        h("div", { class: "ai-session-actions" }, [
-          btn("✎", {
-            kind: "tiny",
-            onClick: (ev) => {
-              ev.stopPropagation();
-              const next = prompt(t("重命名为"), title);
-              if (!next || next === title) return;
-              s.title = next.trim();
-              s.updatedAt = Date.now();
-              saveAiSessions();
-              if (app.ui.refreshChatPanel) app.ui.refreshChatPanel();
-            },
-          }),
-          btn("×", {
-            kind: "tiny",
-            onClick: (ev) => {
-              ev.stopPropagation();
-              const idx = sessions.findIndex((x) => x.id === s.id);
-              if (idx !== -1) sessions.splice(idx, 1);
-              if (!sessions.length) createAiSession();
-              if (app.ui.aiActiveSessionId === s.id) {
-                app.ui.aiActiveSessionId = sessions[0].id;
-              }
-              saveAiSessions();
-              if (app.ui.refreshChatPanel) app.ui.refreshChatPanel();
-            },
-          }),
-        ]),
-      ]);
-      sessionItems.appendChild(row);
-    }
-    sessionList.appendChild(sessionHeader);
-    sessionList.appendChild(sessionItems);
-
-    const panelMode = app.ui.aiPanelMode || "chat";
-    const setPanelMode = (mode) => {
-      app.ui.aiPanelMode = mode === "agent" ? "agent" : "chat";
-      localStorage.setItem("ct_ai_panel_mode", app.ui.aiPanelMode);
-      if (app.ui.refreshChatPanel) app.ui.refreshChatPanel();
-    };
-
-    const chatTab = btn(t("聊天"), {
-      kind: "tiny",
-      onClick: () => setPanelMode("chat"),
-      title: t("AI 聊天"),
-    });
-    const agentTab = btn(t("代理"), {
-      kind: "tiny",
-      onClick: () => setPanelMode("agent"),
-      title: t("论文代理"),
-    });
-    if (panelMode === "chat") chatTab.classList.add("active");
-    if (panelMode === "agent") agentTab.classList.add("active");
-    const modeTabs = h("div", { class: "ai-panel-tabs" }, [chatTab, agentTab]);
-
-    if (panelMode === "agent") {
-      const instruction = h("textarea", {
-        class: "textarea ai-agent-input",
-        placeholder: t("可选指令（例如：更学术、更简洁、保留术语）..."),
-      });
-      const output = h("textarea", { class: "textarea ai-agent-output", placeholder: t("AI 输出将显示在这里...") });
-      output.readOnly = true;
-      const previewText = state.context ? state.context.slice(-4000) : "";
-      const contextPreview = h("textarea", {
-        class: "textarea ai-agent-context",
-        value: previewText,
-        readOnly: true,
-      });
-
-      const runBtn = btn(t("运行代理"), {
-        kind: "primary",
-        onClick: async () => {
-          if (!state.context) {
-            await updateChatPanelFromSelection();
-          }
-          const fresh = app.ui.aiChatPanelState || state;
-          const question = instruction.value.trim() || "请作为论文修改代理，指出问题、给出修改建议，并提供改写后的 LaTeX。";
-          const payload = {
-            context: fresh.context || "",
-            question,
-            history: [],
-            filePath: fresh.filePath || "",
-            mode: "agent",
-          };
-          if (!payload.context.trim()) {
-            output.value = t("上下文未设置");
-            return;
-          }
-          output.value = t("处理中...");
-          applyAiConfig(payload, "chat");
-          try {
-            const { result } = await api("/api/ai/chat", {
-              method: "POST",
-              body: JSON.stringify(payload),
-            });
-            output.value = result || "";
-          } catch (e) {
-            output.value = e && e.message ? e.message : String(e);
-          }
-        },
-      });
-
-      const applyAgentRewrite = (mode) => {
-        const s = getEditorSelection();
-        if (!s) return alert(t("请先打开文件。"));
-        const fullText = s.view.state.doc.toString();
-        const source = mode === "replaceAll" ? fullText : s.text;
-        const rewrite = pickBestRewrite(output.value, source || fullText);
-        if (!rewrite) return;
-        if (mode === "replaceAll") {
-          s.view.dispatch({ changes: { from: 0, to: s.view.state.doc.length, insert: rewrite } });
-        } else if (mode === "replace" && !s.empty) {
-          s.view.dispatch({ changes: { from: s.from, to: s.to, insert: rewrite } });
-        } else {
-          const pos = s.to;
-          s.view.dispatch({ changes: { from: pos, to: pos, insert: `\n\n${rewrite}` } });
-        }
-        s.view.focus();
-      };
-
-      const applyBtn = btn(t("替换选中"), { onClick: () => applyAgentRewrite("replace") });
-      const replaceAllBtn = btn(t("替换全文"), { onClick: () => applyAgentRewrite("replaceAll") });
-      const insertBtn = btn(t("插入到下方"), { onClick: () => applyAgentRewrite("insert") });
-
-      const agentPane = h("div", { class: "ai-agent-pane" }, [
-        modeTabs,
-        h("div", { class: "ai-context-row" }, [
-          h("div", { class: "label", html: t("上下文来源") }),
-          modeSelect,
-          initBtn,
-        ]),
-        h("div", { class: "ai-context-row options" }, [
-          h("div", { class: "label", html: t("上下文") }),
-          h("div", { class: "ai-context-options" }, [bibToggle, styleToggle]),
-        ]),
-        h("div", { class: "ai-context-meta", html: `${t("上下文")}: ${describeContextMeta(state.meta)}` }),
-        h("div", { class: "label", html: t("上下文预览") }),
-        contextPreview,
-        h("div", { class: "label", html: t("指令") }),
-        instruction,
-        h("div", { class: "ai-agent-actions" }, [runBtn, applyBtn, replaceAllBtn, insertBtn]),
-        h("div", { class: "label", html: t("结果") }),
-        output,
-      ]);
-
-      container.appendChild(sessionList);
-      container.appendChild(agentPane);
-      return;
-    }
-
-    const messagesEl = h("div", { class: "ai-chat-messages" });
-    const input = h("textarea", { class: "textarea ai-chat-input", placeholder: state.labels.placeholder });
-    const history = state.history || [];
-
-    const renderMessages = () => {
-      messagesEl.innerHTML = "";
-      if (!history.length) {
-        messagesEl.appendChild(h("div", { class: "hint", html: state.labels.empty }));
-        return;
-      }
-      for (const msg of history) {
-        const role = msg.role === "assistant" ? "assistant" : "user";
-        const contentEl = h("div", { class: "ai-chat-content" });
-        contentEl.textContent = msg.content || "";
-        messagesEl.appendChild(
-          h("div", { class: `ai-chat-msg ${role}` }, [
-            h("div", { class: "ai-chat-meta", html: role === "assistant" ? "AI" : state.user }),
-            contentEl,
-          ])
-        );
-      }
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    };
-
-    const sendMessage = async () => {
-      if (!state.context) {
-        alert(t("上下文未设置"));
-        return;
-      }
-      const question = input.value.trim();
-      if (!question) return;
-      input.value = "";
-      const priorHistory = history.slice();
-      history.push({ role: "user", content: question });
-      renderMessages();
-      try {
-        const payload = {
-          context: state.context,
-          question,
-          history: priorHistory,
-          filePath: state.filePath,
-          mode: app.ui.aiChatMode === "agent" ? "agent" : "",
-        };
-        applyAiConfig(payload, "chat");
-        const { result } = await api("/api/ai/chat", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        history.push({ role: "assistant", content: result || "" });
-        activeSession.history = history;
-        activeSession.updatedAt = Date.now();
-        saveAiSessions();
-        renderMessages();
-      } catch (e) {
-        history.push({ role: "assistant", content: e && e.message ? e.message : String(e) });
-        activeSession.history = history;
-        activeSession.updatedAt = Date.now();
-        saveAiSessions();
-        renderMessages();
-      }
-    };
-
-    const sendBtn = btn(state.labels.send, {
-      kind: "primary",
-      onClick: () => sendMessage(),
-    });
-
-    input.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" && !ev.shiftKey) {
-        ev.preventDefault();
-        sendMessage();
-      }
-    });
-
-    const clearBtn = btn(state.labels.clear, {
-      kind: "tiny",
-      onClick: () => {
-        history.length = 0;
-        activeSession.history = history;
-        activeSession.updatedAt = Date.now();
-        saveAiSessions();
-        renderMessages();
-      },
-    });
-
-    const refreshBtn = btn(t("更新上下文"), {
-      kind: "tiny",
-      onClick: () => {
-        updateChatPanelFromSelection();
-      },
-    });
-
-    const metaLine = h("div", { class: "ai-context-meta", html: `${t("上下文")}: ${describeContextMeta(state.meta)}` });
-
-    const chatModeSelect = h("select", {
-      class: "input ai-context-select",
-      onchange: (ev) => {
-        const next = ev.target.value === "agent" ? "agent" : "assistant";
-        app.ui.aiChatMode = next;
-        localStorage.setItem("ct_ai_chat_mode", next);
-      },
-    });
-    chatModeSelect.appendChild(
-      h("option", { value: "assistant", html: t("助手"), selected: app.ui.aiChatMode !== "agent" ? "" : null })
-    );
-    chatModeSelect.appendChild(
-      h("option", { value: "agent", html: t("代理"), selected: app.ui.aiChatMode === "agent" ? "" : null })
-    );
-
-    const chatModelSelect = h("select", {
-      class: "input ai-context-select",
-      onchange: (ev) => {
-        setAiProfileForMode("chat", ev.target.value);
-      },
-    });
-    chatModelSelect.appendChild(
-      h("option", { value: "", html: t("跟随当前模型"), selected: !getAiProfileForMode("chat") ? "" : null })
-    );
-    for (const p of app.ui.aiProfiles || []) {
-      chatModelSelect.appendChild(
-        h("option", { value: p.id, html: p.name || p.model || "Model", selected: p.id === getAiProfileForMode("chat") ? "" : null })
-      );
-    }
-
-    const toggleSessionsBtn = btn(app.ui.aiPanelCollapsed ? t("会话列表") : t("会话列表"), {
-      kind: "tiny",
-      onClick: () => setAiPanelCollapsed(!app.ui.aiPanelCollapsed),
-    });
-
-    const header = h("div", { class: "ai-chat-header" }, [
-      h("div", { class: "ai-chat-title", html: state.labels.title }),
-      h("div", { class: "ai-chat-actions" }, [toggleSessionsBtn, refreshBtn, clearBtn]),
-    ]);
-
-    const quickActions = [
-      { label: t("审稿意见"), text: "请以顶会审稿人视角给出主要问题、风险与改进建议。" },
-      { label: t("结构建议"), text: "请给出结构与逻辑层次的改进建议，并指出缺失内容。" },
-      { label: t("改写当前段落"), text: "请改写当前段落，使其更学术、更清晰，保留 LaTeX。" },
-      { label: t("摘要改写"), text: "请改写摘要，突出贡献与结果，保留 LaTeX。" },
-    ];
-    const quickRow = h("div", { class: "ai-quick-actions" });
-    for (const qa of quickActions) {
-      quickRow.appendChild(
-        btn(qa.label, {
-          kind: "tiny",
-          onClick: () => {
-            input.value = qa.text;
-            input.focus();
-          },
-        })
-      );
-    }
-
-    const applyRewrite = (mode) => {
-      const s = getEditorSelection();
-      if (!s) return alert(t("请先打开文件。"));
-      const last = history.slice().reverse().find((m) => m && m.role === "assistant" && m.content);
-      let latex = last ? extractLatexBlock(last.content) : "";
-      if (!latex && last && last.content) latex = pickBestRewrite(last.content, s.text);
-      if (!latex) return alert(t("未找到可用的 LaTeX 片段"));
-      if (mode === "replace" && !s.empty) {
-        s.view.dispatch({ changes: { from: s.from, to: s.to, insert: latex } });
-      } else {
-        const pos = s.to;
-        s.view.dispatch({ changes: { from: pos, to: pos, insert: `\n\n${latex}` } });
-      }
-      s.view.focus();
-    };
-
-    const applyBtn = btn(t("应用改写"), { kind: "tiny", onClick: () => applyRewrite("replace") });
-    const insertBtn = btn(t("插入改写"), { kind: "tiny", onClick: () => applyRewrite("insert") });
-
-    const chatPane = h("div", { class: "ai-chat-pane" }, []);
-    chatPane.appendChild(modeTabs);
-    chatPane.appendChild(h("div", { class: "ai-context-row" }, [
-      h("div", { class: "label", html: t("上下文来源") }),
-      modeSelect,
-      initBtn,
-    ]));
-    chatPane.appendChild(h("div", { class: "ai-context-row model" }, [
-      h("div", { class: "label", html: t("AI 模式") }),
-      chatModeSelect,
-    ]));
-    chatPane.appendChild(h("div", { class: "ai-context-row model" }, [
-      h("div", { class: "label", html: t("AI 模型") }),
-      chatModelSelect,
-    ]));
-    chatPane.appendChild(h("div", { class: "ai-context-row options" }, [
-      h("div", { class: "label", html: t("上下文") }),
-      h("div", { class: "ai-context-options" }, [bibToggle, styleToggle]),
-    ]));
-    chatPane.appendChild(header);
-    chatPane.appendChild(h("div", { class: "label", html: t("快速任务") }));
-    chatPane.appendChild(quickRow);
-    chatPane.appendChild(h("div", { class: "hint", html: state.labels.hint }));
-    chatPane.appendChild(h("div", { class: "label", html: state.labels.fileLabel }));
-    chatPane.appendChild(metaLine);
-    chatPane.appendChild(messagesEl);
-    chatPane.appendChild(input);
-    chatPane.appendChild(h("div", { class: "ai-chat-footer" }, [applyBtn, insertBtn, sendBtn]));
-    renderMessages();
-
-    container.appendChild(sessionList);
-    container.appendChild(chatPane);
-  };
-
-  draw();
-  app.ui.refreshChatPanel = draw;
-  return container;
-}
-
-async function refreshAiFloatContext({ silent = false } = {}) {
-  const s = getEditorSelection();
-  if (!s) {
-    if (!silent) alert(t("请先打开文件。"));
-    return false;
-  }
-  const mode = app.ui.aiContextMode || "selection";
-  const session = getActiveAiSession();
-  const state = await buildChatStateFromMode(s, mode, session);
-  session.context = state.context;
-  session.meta = state.meta;
-  session.filePath = state.filePath;
-  session.updatedAt = Date.now();
-  app.ui.aiChatPanelState = state;
-  saveAiSessions();
-  if (app.ui.refreshAiFloat) app.ui.refreshAiFloat();
-  return true;
-}
-
-async function openAiFloat() {
-  if (!app.ui.assistantEnabled) return;
-  if (app.ui.leftPaneTab !== "files") {
-    app.ui.leftPaneTab = "files";
-    localStorage.setItem("ct_left_pane_tab", "files");
-  }
-  app.ui.aiFloatOpen = true;
-  localStorage.setItem("ct_ai_float", "1");
-  await refreshAiFloatContext({ silent: true });
-  mount(render());
-  setTimeout(() => {
-    const input = document.getElementById("aiFloatInput");
-    if (input) input.focus();
-  }, 0);
-}
-
-function closeAiFloat() {
-  app.ui.aiFloatOpen = false;
-  app.ui.aiFloatConfigOpen = false;
-  app.ui.aiFloatNeedsConfig = false;
-  localStorage.setItem("ct_ai_float", "0");
-  clearAiDiff(app.editor.view);
-  app.ui.aiPendingRewrite = null;
-  mount(render());
-}
-
-function toggleAiFloat() {
-  if (app.ui.aiFloatOpen) closeAiFloat();
-  else openAiFloat();
-}
-
-function renderAiFloat() {
-  if (!app.ui.aiFloatOpen || !app.ui.assistantEnabled) return null;
-  const activeSession = getActiveAiSession();
-  let state = app.ui.aiChatPanelState;
-  if (!state || state.sessionId !== activeSession.id) {
-    state = buildChatStateFromSession(activeSession);
-    app.ui.aiChatPanelState = state;
-  }
-  const history = state.history || [];
-  const messagesEl = h("div", { class: "ai-chat-messages terminal", id: "aiFloatMessages" });
-  const input = h("textarea", {
-    class: "textarea ai-chat-input terminal",
-    id: "aiFloatInput",
-    placeholder: t("输入指令或问题… @文件 用于上下文"),
-  });
-  const agentHint = h("div", { class: "hint ai-float-hint", html: t("Agent：对话即可，提出修改会显示红/绿建议块。") });
-  const agentMeta = h("div", { class: "ai-context-meta ai-float-meta", html: "" });
-
-  const buildFileSuggestWrap = (textarea) => {
-    const wrap = h("div", { class: "ai-float-input-wrap" }, [textarea]);
-    const suggest = h("div", { class: "ai-float-suggest", style: "display:none" });
-    wrap.appendChild(suggest);
-    const list = (app.current.tree || []).filter((f) => /\.(tex|bib|cls|sty|bst|bbx|cbx|dbx)$/i.test(f));
-    const update = () => {
-      const value = textarea.value || "";
-      const caret = textarea.selectionStart != null ? textarea.selectionStart : value.length;
-      const prefix = value.slice(0, caret);
-      const match = prefix.match(/@([A-Za-z0-9._\-\/]*)$/);
-      if (!match) {
-        suggest.style.display = "none";
-        return;
-      }
-      const key = (match[1] || "").toLowerCase();
-      const matches = list.filter((f) => {
-        const base = fileBaseName(f).toLowerCase();
-        const full = f.toLowerCase();
-        return !key || base.includes(key) || full.includes(key);
-      }).slice(0, 10);
-      if (!matches.length) {
-        suggest.style.display = "none";
-        return;
-      }
-      suggest.innerHTML = "";
-      for (const f of matches) {
-        const item = h("button", {
-          class: "ai-float-suggest-item",
-          type: "button",
-          onclick: () => {
-            const cur = textarea.value || "";
-            const end = textarea.selectionStart != null ? textarea.selectionStart : cur.length;
-            const head = cur.slice(0, end);
-            const tail = cur.slice(end);
-            const m = head.match(/@([A-Za-z0-9._\-\/]*)$/);
-            if (!m) return;
-            const start = end - m[0].length;
-            const before = cur.slice(0, start);
-            const after = tail.startsWith(" ") ? tail : ` ${tail}`;
-            const next = `${before}@${f}${after}`;
-            textarea.value = next;
-            const pos = before.length + f.length + 2;
-            textarea.selectionStart = textarea.selectionEnd = pos;
-            textarea.focus();
-            suggest.style.display = "none";
-          },
-        });
-        item.textContent = f;
-        suggest.appendChild(item);
-      }
-      suggest.style.display = "";
-    };
-    textarea.addEventListener("input", update);
-    textarea.addEventListener("keyup", update);
-    textarea.addEventListener("focus", update);
-    textarea.addEventListener("blur", () => {
-      setTimeout(() => {
-        suggest.style.display = "none";
-      }, 120);
-    });
-    return wrap;
-  };
-
-  const renderMessages = () => {
-    messagesEl.innerHTML = "";
-    if (!history.length) {
-      messagesEl.appendChild(h("div", { class: "hint", html: state.labels.empty }));
-      return;
-    }
-    for (const msg of history) {
-      const role = msg.role === "assistant" ? "assistant" : "user";
-      const contentEl = h("div", { class: "ai-chat-content" });
-      contentEl.textContent = msg.content || "";
-      messagesEl.appendChild(
-        h("div", { class: `ai-chat-msg ${role}` }, [
-          h("div", { class: "ai-chat-meta", html: role === "assistant" ? "AI" : state.user }),
-          contentEl,
-        ])
-      );
-    }
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  };
-
-  const updateMeta = (ctx) => {
-    agentMeta.textContent = ctx.fileLabel
-      ? `${t("上下文")}: ${ctx.fileLabel} · ${describeContextMeta(ctx.meta)}`
-      : `${t("上下文")}: ${describeContextMeta(ctx.meta)}`;
-  };
-
-  const sendMessage = async () => {
-    const question = input.value.trim();
-    if (!question) return;
-    input.value = "";
-    const ctx = await buildAiContextFromInput(question);
-    updateMeta(ctx);
-    if (!ctx.context) {
-      history.push({ role: "assistant", content: t("未找到可用上下文，请检查 @文件 或打开当前文件。") });
-      renderMessages();
-      return;
-    }
-    const priorHistory = history.slice();
-    history.push({ role: "user", content: ctx.cleaned || question });
-    renderMessages();
-    try {
-      const assistHint =
-        "\n% AI_ASSIST:\n% 若提出修改，请使用如下格式输出：\n% ORIGINAL:\n% <原文片段>\n% REWRITE:\n% <改写后的片段>\n";
-      const payload = {
-        context: ctx.context ? `${ctx.context}${assistHint}` : ctx.context,
-        question: ctx.cleaned || question,
-        history: priorHistory,
-        filePath: app.current.openFile || app.current.mainFile || "",
-        mode: "agent",
-      };
-      applyAiConfig(payload, "chat");
-      const { result } = await api("/api/ai/chat", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      history.push({ role: "assistant", content: result || "" });
-      activeSession.history = history;
-      activeSession.updatedAt = Date.now();
-      saveAiSessions();
-      renderMessages();
-      const pair = extractRewritePair(result || "");
-      if (pair && pair.original && pair.rewrite) {
-        const files = ctx.files && ctx.files.length ? ctx.files : [app.current.openFile || app.current.mainFile].filter(Boolean);
-        for (const file of files) {
-          if (!file) continue;
-          const content = await getCurrentFileText(file);
-          const idx = content.indexOf(pair.original);
-          if (idx === -1) continue;
-          if (app.current.openFile !== file) {
-            await openFile(file);
-          }
-          const view = app.editor.view;
-          if (!view) break;
-          const liveText = view.state.doc.toString();
-          const liveIdx = liveText.indexOf(pair.original);
-          if (liveIdx === -1) continue;
-          const lines = buildAiDiffLines(pair.original, pair.rewrite);
-          if (!lines.length) break;
-          clearAiDiff(view);
-          app.ui.aiPendingRewrite = { from: liveIdx, to: liveIdx + pair.original.length, text: pair.rewrite, lines };
-          setAiDiff(view, liveIdx, liveIdx + pair.original.length, lines);
-          mount(render());
-          break;
-        }
-      }
-    } catch (e) {
-      const errMsg = e && e.message ? e.message : String(e);
-      if (errMsg.includes("AI not configured")) {
-        history.push({ role: "assistant", content: t("AI 未配置，请填写 API Key 或配置服务器环境变量。") });
-        activeSession.history = history;
-        activeSession.updatedAt = Date.now();
-        saveAiSessions();
-        renderMessages();
-        openAiConfigModal();
-        return;
-      }
-      history.push({ role: "assistant", content: errMsg });
-      activeSession.history = history;
-      activeSession.updatedAt = Date.now();
-      saveAiSessions();
-      renderMessages();
-    }
-  };
-
-  input.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" && !ev.shiftKey) {
-      ev.preventDefault();
-      sendMessage();
-    }
-  });
-
-  const clearBtn = btn(t("清空"), {
-    kind: "tiny",
-    onClick: () => {
-      history.length = 0;
-      activeSession.history = history;
-      activeSession.updatedAt = Date.now();
-      saveAiSessions();
-      app.ui.aiPendingRewrite = null;
-      clearAiDiff(app.editor.view);
-      renderMessages();
-      mount(render());
-    },
-  });
-  const configBtn = btn(t("配置"), {
-    kind: "tiny",
-    onClick: () => {
-      openAiConfigModal();
-    },
-  });
-  const closeBtn = btn("×", { kind: "tiny", onClick: () => closeAiFloat() });
-
-  const header = h("div", { class: "ai-float-header" }, [
-    h("div", { class: "ai-float-title" }, [h("span", { html: t("AI Agent") })]),
-    h("div", { class: "ai-float-actions" }, [configBtn, clearBtn, closeBtn]),
-  ]);
-
-
-  const askBtn = btn(t("发送"), { kind: "primary tiny", onClick: () => sendMessage() });
-  const applyBtn = btn(t("保存"), {
-    kind: "tiny primary",
-    onClick: () => {
-      const s = getEditorSelection();
-      const pending = app.ui.aiPendingRewrite;
-      if (!s || !pending || pending.from == null || pending.to == null) return;
-      s.view.dispatch({ changes: { from: pending.from, to: pending.to, insert: pending.text } });
-      s.view.focus();
-      clearAiDiff(s.view);
-      app.ui.aiPendingRewrite = null;
-      mount(render());
-    },
-  });
-  const cancelBtn = btn(t("取消"), {
-    kind: "tiny",
-    onClick: () => {
-      clearAiDiff(app.editor.view);
-      app.ui.aiPendingRewrite = null;
-      mount(render());
-    },
-  });
-  const copyBtn = btn(t("复制结果"), {
-    kind: "tiny",
-    onClick: async () => {
-      const pending = app.ui.aiPendingRewrite;
-      const last = history.slice().reverse().find((m) => m && m.role === "assistant" && m.content);
-      const text = (pending && pending.text) || (last && last.content) || "";
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
-        // ignore
-      }
-    },
-  });
-
-  const body = h("div", { class: "ai-float-body" }, [
-    agentHint,
-    agentMeta,
-    messagesEl,
-    buildFileSuggestWrap(input),
-    h("div", { class: "ai-float-row ai-float-chat-actions" }, [askBtn]),
-    h(
-      "div",
-      { class: "ai-float-row", style: app.ui.aiPendingRewrite ? "" : "display:none" },
-      [applyBtn, cancelBtn, copyBtn]
-    ),
-  ]);
-
-  const shell = h("div", { class: "ai-float-shell" }, [header, body]);
-  const wrap = h("div", { class: "ai-float", id: "aiFloat" }, [shell]);
-
-  const savedPos = app.ui.aiFloatPos || null;
-  if (savedPos && Number.isFinite(savedPos.x) && Number.isFinite(savedPos.y)) {
-    wrap.style.left = `${savedPos.x}px`;
-    wrap.style.top = `${savedPos.y}px`;
-    wrap.style.right = "auto";
-    wrap.style.bottom = "auto";
-    wrap.style.transform = "none";
-  }
-  header.onmousedown = (ev) => {
-    if (ev.button !== 0) return;
-    if (ev.target && ev.target.closest && ev.target.closest(".ai-float-actions")) return;
-    const rect = wrap.getBoundingClientRect();
-    const offsetX = ev.clientX - rect.left;
-    const offsetY = ev.clientY - rect.top;
-    const onMove = (moveEv) => {
-      const x = Math.min(Math.max(8, moveEv.clientX - offsetX), window.innerWidth - rect.width - 8);
-      const y = Math.min(Math.max(8, moveEv.clientY - offsetY), window.innerHeight - rect.height - 8);
-      wrap.style.left = `${x}px`;
-      wrap.style.top = `${y}px`;
-      wrap.style.right = "auto";
-      wrap.style.bottom = "auto";
-      wrap.style.transform = "none";
-      app.ui.aiFloatPos = { x, y };
-    };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      if (app.ui.aiFloatPos) localStorage.setItem("ct_ai_float_pos", JSON.stringify(app.ui.aiFloatPos));
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  };
-
-  renderMessages();
-  app.ui.refreshAiFloat = () => {
-    state = app.ui.aiChatPanelState || state;
-    renderMessages();
-  };
-  return wrap;
-}
-
-async function runAiCompileFix() {
-  const logEl = document.getElementById("compileLog");
-  const rawLog = (logEl && logEl.textContent) || app.current.lastLog || "";
-  if (!rawLog || !rawLog.trim()) throw new Error(t("没有可用的编译日志"));
-  app.compile.aiFixStatus = "running";
-  updateAiFixSummary();
-
-  const pid = app.current.project && app.current.project.id;
-  const payload = {
-    log: rawLog.slice(-12000),
-    diagnostics: app.compile.diagnostics || [],
-    mainFile: app.current.mainFile,
-    targetFile: pid ? getPdfTargetFile(pid) : "",
-    compiler: app.current.compiler,
-  };
-  if (Array.isArray(app.current.tree)) {
-    const files = app.current.tree
-      .filter((f) => /\.(tex|bib|cls|sty|bst|bbx|cbx|dbx)$/i.test(f))
-      .slice(0, 200);
-    if (files.length) payload.files = files;
-  }
-  applyAiConfig(payload, "diagnose");
-  try {
-    const { result } = await api("/api/ai/compile-fix", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    app.compile.aiFix = result || "";
-    app.compile.aiFixStatus = "done";
-    updateAiFixSummary();
-    return result || "";
-  } catch (e) {
-    app.compile.aiFixStatus = "error";
-    updateAiFixSummary();
-    throw e;
-  }
-}
-
-async function aiCompileFix() {
-  const output = h("textarea", { class: "textarea", placeholder: t("AI 输出将显示在这里...") });
-  output.readOnly = true;
-
-  const body = h("div", {}, [
-    h("div", { class: "hint", html: t("将使用最近的编译日志进行诊断。") }),
-    output,
-  ]);
-
-  const runBtn = btn(t("运行 AI"), {
-    kind: "primary",
-    onClick: async () => {
-      output.value = t("处理中...");
-      try {
-        const result = await runAiCompileFix();
-        output.value = result || "";
-      } catch (e) {
-        app.compile.aiFixStatus = "error";
-        updateAiFixSummary();
-        output.value = e && e.message ? e.message : String(e);
-      }
-    },
-  });
-
-  showModal({ title: t("AI 诊断结果"), bodyEl: body, actions: [runBtn] });
-}
-
-function buildErrorSummary() {
-  const diags = app.compile.diagnostics || [];
-  if (diags.length) {
-    return diags.map((d) => `${d.file}:${d.line || 1} ${d.message || ""}`.trim()).join("\n");
-  }
-  const logEl = document.getElementById("compileLog");
-  const raw = (logEl && logEl.textContent) || app.current.lastLog || "";
-  if (!raw.trim()) return "";
-  const lines = raw.split(/\r?\n/);
-  const errLines = lines.filter((l) => l.startsWith("!") || l.includes("Error") || l.includes("Fatal error"));
-  if (errLines.length) return errLines.slice(-6).join("\n");
-  return lines.slice(-20).join("\n");
-}
-
-function normalizeLogForSummary(logText) {
-  let txt = String(logText || "").replace(/\r/g, "");
-  txt = txt.replace(
-    /([/\\][^\n]{0,240})\n([^\n]*\.(?:tex|bib|sty|cls|bst|bbx|cbx|dbx|png|pdf|jpg|jpeg|svg|eps):\d+:)/gi,
-    "$1$2"
-  );
-  txt = txt.replace(/(LaTeX Error:[^\n]{0,120})\n([a-z].{0,120})/g, "$1 $2");
-  return txt;
-}
-
-function cleanSummaryPath(line) {
-  const marker = "/collabtex-data/projects/";
-  const idx = line.lastIndexOf(marker);
-  if (idx === -1) {
-    if (/^-[0-9a-f]{6,}\//i.test(line)) return line.replace(/^-[0-9a-f]{6,}\//i, "");
-    return line;
-  }
-  const rest = line.slice(idx + marker.length);
-  const parts = rest.split("/");
-  if (parts.length <= 1) return line;
-  let rel = parts.slice(1).join("/");
-  if (/^-[0-9a-f]{6,}\//i.test(rel)) rel = rel.replace(/^-[0-9a-f]{6,}\//i, "");
-  return rel;
-}
-
-function extractKeyLines(logText) {
-  const raw = normalizeLogForSummary(logText || "");
-  if (!raw.trim()) return [];
-  const lines = raw.split(/\r?\n/);
-  const fileLine = /^(.+?):(\d+):\s+(.*)$/;
-  const keys = [];
-  let lastFile = null;
-  let lastLine = null;
-  for (const line of lines) {
-    const m = line.match(fileLine);
-    if (m) {
-      lastFile = m[1];
-      lastLine = Number(m[2]);
-      const msg = String(m[3] || "").trim();
-      if (/error|fatal|undefined|missing|not found|cannot|can't/i.test(msg)) {
-        const entry = `${lastFile}:${lastLine} ${msg}`.trim();
-        keys.push(cleanSummaryPath(entry));
-      }
-      continue;
-    }
-    if (line.startsWith("!")) {
-      const msg = line.replace(/^!\s*/, "").trim();
-      if (lastFile) {
-        const entry = `${lastFile}:${lastLine || 1} ${msg}`.trim();
-        keys.push(cleanSummaryPath(entry));
-      } else {
-        keys.push(cleanSummaryPath(msg));
-      }
-    }
-  }
-  const uniq = [];
-  const seen = new Set();
-  for (const k of keys) {
-    if (seen.has(k)) continue;
-    seen.add(k);
-    uniq.push(k);
-  }
-  return uniq.slice(-8);
-}
-
-function buildDiagnosticSummary() {
-  const diags = app.compile.diagnostics || [];
-  const logEl = document.getElementById("compileLog");
-  const rawLog = (logEl && logEl.textContent) || app.current.lastLog || "";
-  const blocks = [];
-  if (diags.length) {
-    blocks.push(`${t("诊断摘要")}:`);
-    blocks.push(...diags.slice(0, 8).map((d) => `${d.file}:${d.line || 1} ${d.message || ""}`.trim()));
-  }
-  const keyLines = extractKeyLines(rawLog);
-  if (keyLines.length) {
-    if (blocks.length) blocks.push("");
-    blocks.push(`${t("关键行号")}:`);
-    blocks.push(...keyLines);
-  }
-  return blocks.join("\n").trim();
-}
-
-function updateLogSummary() {
-  const box = document.getElementById("compileSummaryBox");
-  const textEl = document.getElementById("compileSummaryText");
-  if (!box || !textEl) return;
-  const summary = buildDiagnosticSummary();
-  if (!summary) {
-    box.style.display = "none";
-    textEl.textContent = "";
-    updateAiFixSummary();
-    return;
-  }
-  textEl.textContent = summary;
-  box.style.display = "";
-  updateAiFixSummary();
-}
-
-function jumpToFirstError() {
-  const diags = app.compile.diagnostics || [];
-  if (!diags.length) return alert(t("没有可跳转的错误"));
-  const first = diags[0];
-  if (first && first.file) {
-    openFileAt(first.file, first.line || 1).catch(console.error);
-  }
-}
-
-function updateAiFixSummary() {
-  const box = document.getElementById("compileAiFixBox");
-  const textEl = document.getElementById("compileAiFixText");
-  if (!box || !textEl) return;
-  const status = app.compile.aiFixStatus || "";
-  if (!app.compile.aiFix && status !== "running" && status !== "error") {
-    box.style.display = "none";
-    textEl.textContent = "";
-    return;
-  }
-  if (status === "running") {
-    textEl.textContent = t("诊断中...");
-  } else if (status === "error") {
-    textEl.textContent = t("诊断失败");
-  } else {
-    textEl.textContent = app.compile.aiFix || "";
-  }
-  box.style.display = "";
-}
-
-function parseJsonFromText(raw) {
-  if (!raw) return null;
-  const fence = String(raw).match(/```json\\s*([\\s\\S]*?)```/i);
-  const candidate = fence && fence[1] ? fence[1].trim() : String(raw).trim();
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    // try extracting the first JSON object
-    const start = candidate.indexOf("{");
-    const end = candidate.lastIndexOf("}");
-    if (start !== -1 && end !== -1 && end > start) {
-      try {
-        return JSON.parse(candidate.slice(start, end + 1));
-      } catch {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
-function cleanCompilePath(p) {
-  return String(p || "")
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\.\/+/, "")
-    .replace(/^\/+/, "");
-}
-
-function resolveTreePath(candidate) {
-  const tree = app.current.tree || [];
-  if (tree.includes(candidate)) return candidate;
-  const lower = candidate.toLowerCase();
-  for (const f of tree) {
-    if (f.toLowerCase() === lower) return f;
-  }
-  return "";
-}
-
-function extractCompileFixFilesFromLog(logText) {
-  const raw = String(logText || "");
-  const out = new Set();
-  const re1 = /`([^`]+\\.(?:tex|bib|sty|cls|bst|bbx|cbx|dbx))`/gi;
-  const re2 = /\\b([^\\s:]+\\.(?:tex|bib|sty|cls|bst|bbx|cbx|dbx))\\b/gi;
-  let m;
-  while ((m = re1.exec(raw))) out.add(m[1]);
-  while ((m = re2.exec(raw))) out.add(m[1]);
-  const keyLines = extractKeyLines(raw);
-  for (const line of keyLines) {
-    const match = line.match(/([^\\s:]+\\.(?:tex|bib|sty|cls|bst|bbx|cbx|dbx))/i);
-    if (match) out.add(match[1]);
-  }
-  return Array.from(out);
-}
-
-function parseUsepackageSet(text) {
-  const set = new Set();
-  const raw = String(text || "");
-  const re = /\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/gi;
-  let m;
-  while ((m = re.exec(raw))) {
-    const names = String(m[1] || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    for (const n of names) set.add(n);
-  }
-  return set;
-}
-
-function insertPackagesIntoPreamble(text, packages) {
-  const list = (packages || []).map((p) => String(p || "").trim()).filter(Boolean);
-  if (!list.length) return null;
-  const raw = String(text || "");
-  const idx = raw.search(/\\begin\s*\{document\}/i);
-  if (idx === -1) return null;
-  let head = raw.slice(0, idx);
-  const tail = raw.slice(idx);
-  if (!head.endsWith("\n")) head += "\n";
-  const insertLines = list.map((p) => `\\usepackage{${p}}`).join("\n") + "\n";
-  return head + insertLines + tail;
-}
-
-function extractUndefinedCommands(logText) {
-  const raw = String(logText || "");
-  const lines = raw.split(/\r?\n/);
-  const out = new Set();
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (!line || !/Undefined control sequence/i.test(line)) continue;
-    for (let j = i + 1; j < Math.min(lines.length, i + 4); j += 1) {
-      const m = lines[j].match(/\\[A-Za-z@]+/);
-      if (m && m[0]) {
-        out.add(m[0].slice(1));
-        break;
-      }
-    }
-  }
-  return Array.from(out);
-}
-
-function extractUndefinedEnvironments(logText) {
-  const raw = String(logText || "");
-  const out = new Set();
-  const re = /Environment\s+([A-Za-z*]+)\s+undefined/gi;
-  let m;
-  while ((m = re.exec(raw))) {
-    if (m[1]) out.add(m[1]);
-  }
-  return Array.from(out);
-}
-
-function detectMissingPackages(logText, sourceText) {
-  const pkgs = new Set();
-  const text = String(sourceText || "");
-  const hasPkgs = parseUsepackageSet(text);
-  const hasBiblatex = /\\usepackage\s*(?:\[[^\]]*\])?\s*\{[^}]*biblatex[^}]*\}/i.test(text) || /\\printbibliography/i.test(text);
-
-  const add = (pkg, cond = true) => {
-    if (!cond) return;
-    if (!hasPkgs.has(pkg)) pkgs.add(pkg);
-  };
-
-  const cmds = extractUndefinedCommands(logText);
-  for (const c of cmds) {
-    const key = c.toLowerCase();
-    if (key === "toprule") add("booktabs");
-    else if (key === "midrule") add("booktabs");
-    else if (key === "bottomrule") add("booktabs");
-    else if (key === "cmidrule") add("booktabs");
-    else if (key === "includegraphics") add("graphicx");
-    else if (key === "multirow") add("multirow");
-    else if (key === "mathbb") add("amssymb");
-    else if (key === "cfrac") add("amsmath");
-    else if (key === "textcolor" || key === "color") add("xcolor");
-    else if (key === "todo") add("todonotes");
-    else if ((key === "citep" || key === "citet") && !hasBiblatex) add("natbib");
-  }
-
-  const envs = extractUndefinedEnvironments(logText);
-  for (const e of envs) {
-    const key = e.toLowerCase();
-    if (key === "align" || key === "align*" || key === "gather" || key === "gather*" || key === "multline") add("amsmath");
-    else if (key === "algorithm") add("algorithm");
-    else if (key === "algorithmic") add("algorithmic");
-    else if (key === "tikzpicture") add("tikz");
-    else if (key === "axis") add("pgfplots");
-  }
-
-  if (/\\includegraphics\b/i.test(text)) add("graphicx");
-  if (/\\toprule|\\midrule|\\bottomrule|\\cmidrule/i.test(text)) add("booktabs");
-  if (/\\multirow\b/i.test(text)) add("multirow");
-  if (/\\mathbb\b/i.test(text)) add("amssymb");
-  if (/\\cfrac\b|\\dfrac\b|\\tfrac\b/i.test(text)) add("amsmath");
-  if (/\\begin\{align\*?\}|\\begin\{gather\*?\}|\\begin\{multline\*?\}/i.test(text)) add("amsmath");
-  if (/\\begin\{tikzpicture\}|\\usetikzlibrary/i.test(text)) add("tikz");
-  if (/\\begin\{axis\}|\\addplot/i.test(text)) add("pgfplots");
-  if (/\\textcolor\b|\\color\b/i.test(text)) add("xcolor");
-  if ((/\\citep\b|\\citet\b/i.test(text)) && !hasBiblatex) add("natbib");
-
-  return Array.from(pkgs);
-}
-
-function detectPreferredCompiler(logText, sourceText) {
-  const raw = `${logText || ""}\n${sourceText || ""}`.toLowerCase();
-  if (raw.includes("fontspec") || raw.includes("\\setmainfont") || raw.includes("xecjk") || raw.includes("\\setcjkmainfont")) {
-    return "xelatex";
-  }
-  return "";
-}
-
-function needsDocumentSkeleton(logText, text) {
-  const raw = String(text || "");
-  if (/\\documentclass/i.test(raw)) return false;
-  if (/\\begin\s*\{document\}/i.test(raw)) return true;
-  const log = String(logText || "");
-  if (/Missing \\begin\{document\}/i.test(log)) return true;
-  if (/Environment\s+[A-Za-z*]+\s+undefined/i.test(log)) return true;
-  return false;
-}
-
-function wrapWithDocumentSkeleton(text) {
-  const raw = String(text || "");
-  if (/\\documentclass/i.test(raw)) return null;
-  const hasBegin = /\\begin\s*\{document\}/i.test(raw);
-  const hasEnd = /\\end\s*\{document\}/i.test(raw);
-  if (hasBegin && hasEnd) {
-    return `\\documentclass{article}\n${raw}`;
-  }
-  const body = raw.trim();
-  return `\\documentclass{article}\n\\begin{document}\n${body}\n\\end{document}\n`;
-}
-
-async function runHeuristicCompileFix() {
-  const logEl = document.getElementById("compileLog");
-  const rawLog = (logEl && logEl.textContent) || app.current.lastLog || "";
-  if (!rawLog || !rawLog.trim()) return null;
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId) return null;
-  const mainFile = getPdfTargetFile(projectId) || app.current.mainFile;
-  if (!mainFile || !mainFile.endsWith(".tex")) return null;
-  const originalText = await getCurrentFileText(mainFile);
-  let updatedText = originalText;
-  const reasons = [];
-  if (needsDocumentSkeleton(rawLog, updatedText)) {
-    const wrapped = wrapWithDocumentSkeleton(updatedText);
-    if (wrapped && wrapped !== updatedText) {
-      updatedText = wrapped;
-      reasons.push(t("已补全文档结构"));
-    }
-  }
-  const packages = detectMissingPackages(rawLog, updatedText);
-  if (packages.length) {
-    const updated = insertPackagesIntoPreamble(updatedText, packages);
-    if (updated && updated !== updatedText) {
-      updatedText = updated;
-      reasons.push(`${t("已补充宏包")}: ${packages.join(", ")}`);
-    }
-  }
-  const edits = [];
-  if (updatedText !== originalText) {
-    edits.push({
-      path: mainFile,
-      content: updatedText,
-      reason: reasons.join(" · "),
-    });
-  }
-  const preferredCompiler = detectPreferredCompiler(rawLog, updatedText);
-  const compiler =
-    preferredCompiler && preferredCompiler !== app.current.compiler ? preferredCompiler : "";
-
-  if (!edits.length && !compiler) return null;
-  return { edits, compiler, notes: edits.length ? `${t("已补充宏包")}: ${packages.join(", ")}` : "" };
-}
-
-function collectCompileFixFiles() {
-  const files = [];
-  const seen = new Set();
-  const tree = app.current.tree || [];
-  const diags = app.compile.diagnostics || [];
-  for (const d of diags) {
-    const raw = cleanCompilePath(d.file || "");
-    const resolved = resolveTreePath(raw);
-    if (resolved && !seen.has(resolved)) {
-      seen.add(resolved);
-      files.push(resolved);
-    }
-  }
-  const logEl = document.getElementById("compileLog");
-  const rawLog = (logEl && logEl.textContent) || app.current.lastLog || "";
-  for (const f of extractCompileFixFilesFromLog(rawLog)) {
-    const cleaned = cleanCompilePath(f);
-    const resolved = resolveTreePath(cleaned);
-    if (resolved && !seen.has(resolved)) {
-      seen.add(resolved);
-      files.push(resolved);
-    }
-  }
-  const main = resolveTreePath(cleanCompilePath(app.current.mainFile || ""));
-  if (main && !seen.has(main)) files.push(main);
-  const fallback = tree.find((f) => f.endsWith(".tex"));
-  if (fallback && !seen.has(fallback)) files.push(fallback);
-  return files.slice(0, 6);
-}
-
-async function applyCompilePatchEdits(edits) {
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId || !Array.isArray(edits) || !edits.length) return;
-  for (const edit of edits) {
-    const rel = resolveTreePath(cleanCompilePath(edit.path || ""));
-    const path = rel || cleanCompilePath(edit.path || "");
-    if (!path) continue;
-    const content = String(edit.content || "");
-    if (app.current.openFile === path) {
-      if (!replaceEditorContent(content)) {
-        await api(`/api/projects/${projectId}/file`, {
-          method: "POST",
-          body: JSON.stringify({ path, content }),
-        });
-      }
-      updateDocCaches(path, content);
-    } else {
-      await api(`/api/projects/${projectId}/file`, {
-        method: "POST",
-        body: JSON.stringify({ path, content }),
-      });
-    }
-  }
-  await loadProject(projectId);
-  if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-}
-
-function shouldAutoAiFix(job) {
-  if (!app.ui.aiAutoFix) return false;
-  if (!job || job.status !== "error") return false;
-  if (app.compile.aiPatchStatus === "running") return false;
-  const now = Date.now();
-  if (app.compile.lastAiAutoFixAt && now - app.compile.lastAiAutoFixAt < 3000) return false;
-  app.compile.lastAiAutoFixAt = now;
-  return true;
-}
-
-function setAiOneClickProgress(step, state = "running") {
-  app.compile.aiOneClickStep = step || "";
-  app.compile.aiOneClickStatus = state || "";
-  app.compile.aiOneClickMark = Date.now();
-  const btnEl = document.getElementById("aiOneClickFixBtn");
-  if (btnEl) btnEl.disabled = state === "running";
-  const el = document.getElementById("aiOneClickProgress");
-  if (!el) return;
-  if (!step) {
-    el.textContent = "";
-    el.dataset.state = "";
-    el.style.display = "none";
-    return;
-  }
-  el.textContent = step;
-  el.dataset.state = state || "";
-  el.style.display = "inline-flex";
-}
-
-function clearAiOneClickProgress(delay = 0) {
-  const mark = app.compile.aiOneClickMark;
-  const clearNow = () => {
-    if (app.compile.aiOneClickMark !== mark) return;
-    setAiOneClickProgress("", "");
-  };
-  if (delay > 0) setTimeout(clearNow, delay);
-  else clearNow();
-}
-
-async function flushActiveFileToDisk() {
-  const projectId = app.current.project && app.current.project.id;
-  const filePath = app.current.openFile;
-  if (!projectId || !filePath) return;
-  if (isAssetFile(filePath) || isFolderPlaceholder(filePath)) return;
-  if (!app.editor || !app.editor.view) return;
-  try {
-    const content = app.editor.view.state.doc.toString();
-    await api(`/api/projects/${projectId}/file`, {
-      method: "POST",
-      body: JSON.stringify({ path: filePath, content }),
-    });
-    updateDocCaches(filePath, content);
-  } catch {
-    // ignore flush errors
-  }
-}
-
-function syncPdfTargetToJob(job) {
-  if (!job || !job.mainFile) return;
-  const mainFile = String(job.mainFile || "");
-  if (!mainFile) return;
-  if (app.current.mainFile !== mainFile) app.current.mainFile = mainFile;
-  const pid = app.current.project && app.current.project.id;
-  if (!pid) return;
-  if (app.ui.pdfTargetFile !== mainFile) {
-    app.ui.pdfTargetFile = mainFile;
-    localStorage.setItem(`ct_pdfTarget_${pid}`, mainFile);
-    resetPdfState();
-    const select = document.getElementById("pdfTargetSelect");
-    if (select) select.value = mainFile;
-    const mainSelect = document.getElementById("mainSelect");
-    if (mainSelect) mainSelect.value = mainFile;
-  }
-}
-
-async function runAiCompilePatch({ silent = false } = {}) {
-  const logEl = document.getElementById("compileLog");
-  const rawLog = (logEl && logEl.textContent) || app.current.lastLog || "";
-  if (!rawLog || !rawLog.trim()) {
-    if (silent) return null;
-    throw new Error(t("没有可用的编译日志"));
-  }
-  const pid = app.current.project && app.current.project.id;
-  if (!pid) return null;
-
-  let payload = {
-    projectId: pid,
-    log: rawLog.slice(-12000),
-    diagnostics: app.compile.diagnostics || [],
-    mainFile: app.current.mainFile,
-    targetFile: pid ? getPdfTargetFile(pid) : "",
-    compiler: app.current.compiler,
-  };
-  const useServer = !!app.ui.aiUseServer;
-  if (useServer) {
-    setBottomMode("terminal");
-    appendBottomTerminal("[codex] start");
-  }
-
-  if (!useServer) {
-    const files = collectCompileFixFiles();
-    if (!files.length) {
-      if (silent) return null;
-      throw new Error(t("未找到可修复的文件"));
-    }
-
-    const filePayload = [];
-    const skipped = [];
-    for (const f of files) {
-      try {
-        const content = await getCurrentFileText(f);
-        if (content && content.length > 80000) {
-          skipped.push(f);
-          continue;
-        }
-        filePayload.push({ path: f, content: content || "" });
-      } catch {
-        skipped.push(f);
-      }
-    }
-    if (!filePayload.length) {
-      if (silent) return null;
-      throw new Error(t("未找到可修复的文件"));
-    }
-
-    payload = { ...payload, files: filePayload, skipped };
-    applyAiConfig(payload, "diagnose");
-  }
-  app.compile.aiPatchStatus = "running";
-  app.compile.aiPatch = null;
-  try {
-    const endpoint = useServer ? "/api/ai/compile-codex" : "/api/ai/compile-patch";
-    const { result } = await api(endpoint, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    let parsed = null;
-    if (result && typeof result === "object") {
-      parsed = result;
-    } else {
-      parsed = parseJsonFromText(result);
-    }
-    if (!parsed) {
-      parsed = { notes: result || "", edits: [] };
-    } else {
-      if (!Array.isArray(parsed.edits)) parsed.edits = [];
-      if (!parsed.notes && typeof result === "string") parsed.notes = result;
-    }
-    if (useServer) {
-      const notes = parsed && parsed.notes ? String(parsed.notes) : "";
-      if (notes) appendBottomTerminal(`[codex]\n${notes}`);
-      else appendBottomTerminal("[codex] done");
-    }
-    app.compile.aiPatch = parsed;
-    app.compile.aiPatchStatus = "done";
-    return parsed;
-  } catch (e) {
-    app.compile.aiPatchStatus = "error";
-    if (useServer) {
-      const msg = e && e.message ? e.message : String(e);
-      appendBottomTerminal(`[codex] error: ${msg}`);
-    }
-    if (silent) return null;
-    throw e;
-  }
-}
-
-function showAiCompilePatchModal({ patch = null, auto = false } = {}) {
-  const body = h("div", { class: "ai-patch-body" }, [
-    h("div", { class: "hint", html: t("处理中...") }),
-  ]);
-  const applyAllBtn = btn(t("应用全部"), {
-    kind: "primary",
-    disabled: true,
-    onClick: async () => {
-      const patch = app.compile.aiPatch;
-      if (!patch || !Array.isArray(patch.edits) || !patch.edits.length) return;
-      try {
-        await applyCompilePatchEdits(patch.edits);
-        alert(t("应用完成"));
-        closeModal();
-      } catch (e) {
-        alert(t("应用失败"));
-      }
-    },
-  });
-  const applyAndCompileBtn = btn(t("应用并重新编译"), {
-    kind: "primary",
-    disabled: true,
-    onClick: async () => {
-      const patch = app.compile.aiPatch;
-      if (!patch || !Array.isArray(patch.edits) || !patch.edits.length) return;
-      try {
-        await applyCompilePatchEdits(patch.edits);
-        closeModal();
-        compileProject({ mode: "quick", origin: "manual" }).catch(console.error);
-      } catch (e) {
-        alert(t("应用失败"));
-      }
-    },
-  });
-  showModal({ title: t("AI 自动修复结果"), bodyEl: body, actions: [applyAllBtn, applyAndCompileBtn] });
-
-  const renderResult = (patch) => {
-    body.innerHTML = "";
-    const notes = patch && patch.notes ? String(patch.notes) : "";
-    if (notes) body.appendChild(h("pre", { class: "ai-patch-notes" }, [notes]));
-    const edits = patch && Array.isArray(patch.edits) ? patch.edits : [];
-    if (!edits.length) {
-      body.appendChild(h("div", { class: "hint", html: t("未返回可应用的修改") }));
-      return;
-    }
-    applyAllBtn.disabled = false;
-    applyAndCompileBtn.disabled = false;
-    for (const edit of edits) {
-      const card = h("div", { class: "ai-patch-card" });
-      const header = h("div", { class: "ai-patch-header" }, [
-        h("div", { class: "ai-patch-file", html: edit.path || "" }),
-        btn(t("应用此文件"), {
-          kind: "tiny",
-          onClick: async () => {
-            try {
-              await applyCompilePatchEdits([edit]);
-              alert(t("应用完成"));
-            } catch {
-              alert(t("应用失败"));
-            }
-          },
-        }),
-      ]);
-      const ta = h("textarea", { class: "textarea", value: String(edit.content || "") });
-      ta.readOnly = true;
-      card.appendChild(header);
-      if (edit.reason) card.appendChild(h("div", { class: "hint", html: edit.reason }));
-      card.appendChild(ta);
-      body.appendChild(card);
-    }
-  };
-
-  if (patch) {
-    renderResult(patch);
-    return;
-  }
-  runAiCompilePatch({ silent: !!auto })
-    .then((patchResult) => {
-      if (!patchResult) {
-        body.innerHTML = "";
-        body.appendChild(h("div", { class: "hint", html: t("未返回可应用的修改") }));
-        return;
-      }
-      renderResult(patchResult);
-    })
-    .catch((e) => {
-      body.innerHTML = "";
-      body.appendChild(h("div", { class: "hint", html: e && e.message ? e.message : String(e) }));
-    });
-}
-
-async function oneClickAiCompileFix() {
-  if (app.compile.aiPatchStatus === "running") return;
-  const logEl = document.getElementById("compileLog");
-  if (logEl) logEl.textContent += `${t("AI 修复中...")}\n`;
-  try {
-    setAiOneClickProgress(t("AI 生成修改..."), "running");
-    const patch = await runAiCompilePatch({ silent: false });
-    if (!patch || !Array.isArray(patch.edits) || !patch.edits.length) {
-      setAiOneClickProgress(t("AI 未返回修改"), "error");
-      clearAiOneClickProgress(2500);
-      alert(t("未返回可应用的修改"));
-      return;
-    }
-    setAiOneClickProgress(t("AI 应用修改..."), "running");
-    await applyCompilePatchEdits(patch.edits);
-    setAiOneClickProgress(t("AI 重新编译..."), "running");
-    await compileProject({ mode: "quick", origin: "manual" });
-    setAiOneClickProgress(t("AI 修复完成"), "success");
-    clearAiOneClickProgress(2500);
-    alert(t("已自动修复并重新编译"));
-  } catch (e) {
-    setAiOneClickProgress(t("AI 修复失败"), "error");
-    clearAiOneClickProgress(3000);
-    alert(e && e.message ? e.message : String(e));
-  }
-}
-
-async function copyCompileError() {
-  const summary = buildErrorSummary();
-  if (!summary) return alert(t("没有可复制的错误原因"));
-  try {
-    await navigator.clipboard.writeText(summary);
-    alert(t("已复制错误原因"));
-  } catch {
-    const ta = h("textarea", { class: "textarea", value: summary });
-    const body = h("div", {}, [
-      h("div", { class: "hint", html: t("复制失败，请手动复制：") }),
-      ta,
-    ]);
-    showModal({ title: t("复制错误"), bodyEl: body, actions: [] });
-  }
-}
-
-async function copyDiagnosticSummary() {
-  const summary = buildDiagnosticSummary();
-  if (!summary) return alert(t("没有可复制的诊断摘要"));
-  try {
-    await navigator.clipboard.writeText(summary);
-    alert(t("已复制诊断摘要"));
-  } catch {
-    const ta = h("textarea", { class: "textarea", value: summary });
-    const body = h("div", {}, [
-      h("div", { class: "hint", html: t("复制失败，请手动复制：") }),
-      ta,
-    ]);
-    showModal({ title: t("诊断摘要"), bodyEl: body, actions: [] });
-  }
-}
-
-function updateProblems(diags) {
-  const host = document.getElementById("problemsList");
-  if (!host) return;
-  host.innerHTML = "";
-
-  const list = Array.isArray(diags) ? diags : [];
-  if (list.length === 0) {
-    host.appendChild(h("div", { class: "hint", html: t("(无)") }));
-    updateLogSummary();
-    updateAiFixSummary();
-    return;
-  }
-
-  for (const d of list.slice(0, 30)) {
-    const fp = String(d.file || "").replace(/^\.\//, "");
-    const line = d.line || 1;
-    const msg = d.message || t("错误");
-    host.appendChild(
-      h("div", { class: "project-row" }, [
-        h("div", { class: "project-meta" }, [
-          h("div", { class: "project-name", html: `${fp}:${line}` }),
-          h("div", { class: "hint", html: msg }),
-        ]),
-        btn(t("打开"), {
-          onClick: async () => {
-            await openFileAt(fp, line);
-          },
-        }),
-      ])
-    );
-  }
-
-  updateLogSummary();
-  updateAiFixSummary();
-}
-
-async function loadHistory(filePath, { force = false } = {}) {
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId) return;
-  if (!filePath) {
-    app.ui.historyEntries = [];
-    app.ui.historyFile = null;
-    app.ui.historyLoading = false;
-    if (app.ui.refreshHistory) app.ui.refreshHistory();
-    return;
-  }
-
-  const targetFile = filePath;
-  if (!force && app.ui.historyFile === filePath && app.ui.historyEntries.length) {
-    if (app.ui.refreshHistory) app.ui.refreshHistory();
-    return;
-  }
-
-  app.ui.historyLoading = true;
-  app.ui.historyFile = targetFile;
-  app.ui.historyError = "";
-  if (app.ui.refreshHistory) app.ui.refreshHistory();
-
-  try {
-    const data = await api(`/api/projects/${projectId}/history?file=${encodeURIComponent(targetFile)}`);
-    if (app.ui.historyFile !== targetFile) return;
-    app.ui.historyEntries = Array.isArray(data && data.entries) ? data.entries : [];
-  } catch (e) {
-    console.warn(e);
-    if (app.ui.historyFile === targetFile) {
-      app.ui.historyEntries = [];
-      app.ui.historyError = e && e.message ? e.message : String(e);
-    }
-  } finally {
-    if (app.ui.historyFile === targetFile) {
-      app.ui.historyLoading = false;
-      if (app.ui.refreshHistory) app.ui.refreshHistory();
-    }
-  }
-}
-
-function replaceEditorContent(text) {
-  const view = app.editor && app.editor.view;
-  if (!view) return false;
-  view.dispatch({
-    changes: { from: 0, to: view.state.doc.length, insert: text || "" },
-  });
-  view.focus();
-  return true;
-}
-
-async function viewHistoryItem(entry) {
-  const projectId = app.current.project && app.current.project.id;
-  const file = app.ui.historyFile || app.current.openFile;
-  if (!projectId || !file || !entry || !entry.id) return;
-  try {
-    const text = await api(
-      `/api/projects/${projectId}/history/item?file=${encodeURIComponent(file)}&id=${encodeURIComponent(entry.id)}`
-    );
-    const ta = h("textarea", { class: "textarea", value: text || "" });
-    ta.readOnly = true;
-    const body = h("div", {}, [
-      h("div", { class: "hint", html: `${file} · ${formatTime(entry.ts)}` }),
-      ta,
-    ]);
-    const restoreBtn = btn(t("恢复"), {
-      kind: "primary",
-      onClick: async () => {
-        closeModal();
-        await restoreHistoryItem(entry);
-      },
-    });
-    showModal({ title: t("历史"), bodyEl: body, actions: [restoreBtn] });
-  } catch (e) {
-    alert(e && e.message ? e.message : String(e));
-  }
-}
-
-async function restoreHistoryItem(entry) {
-  const projectId = app.current.project && app.current.project.id;
-  const file = app.ui.historyFile || app.current.openFile;
-  if (!projectId || !file || !entry || !entry.id) return;
-  if (!confirm(t("恢复此版本？"))) return;
-  try {
-    const text = await api(
-      `/api/projects/${projectId}/history/item?file=${encodeURIComponent(file)}&id=${encodeURIComponent(entry.id)}`
-    );
-    if (app.current.openFile !== file) {
-      await openFile(file);
-    }
-    if (!replaceEditorContent(text)) {
-      await api(`/api/projects/${projectId}/file`, {
-        method: "POST",
-        body: JSON.stringify({ path: file, content: text || "" }),
-      });
-    }
-    await loadHistory(file, { force: true });
-  } catch (e) {
-    alert(e && e.message ? e.message : String(e));
-  }
-}
-
-async function getCurrentFileText(file) {
-  if (app.current.openFile === file && app.editor && app.editor.view) {
-    return app.editor.view.state.doc.toString();
-  }
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId) return "";
-  return await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(file)}`);
-}
-
-function listFilesByExts(exts) {
-  if (!Array.isArray(app.current.tree)) return [];
-  const set = new Set(exts.map((x) => String(x || "").toLowerCase()));
-  return app.current.tree.filter((f) => set.has(fileExt(f)));
-}
-
-function listTexFiles() {
-  return listFilesByExts([".tex"]);
-}
-
-function listBibFiles() {
-  return listFilesByExts([".bib"]);
-}
-
-function listStyleFiles() {
-  return listFilesByExts([".sty", ".cls", ".bst", ".bbx", ".cbx", ".dbx"]);
-}
-
-async function refreshBibKeyCache() {
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId) return;
-  const files = listBibFiles();
-  const byFile = {};
-  const all = new Set();
-  for (const f of files) {
-    try {
-      const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(f)}`);
-      const keys = extractBibKeys(text);
-      byFile[f] = keys;
-      for (const k of keys) all.add(k);
-    } catch {
-      // ignore individual file errors
-    }
-  }
-  app.ui.bibKeyCache = {
-    projectId,
-    keys: Array.from(all).sort(),
-    byFile,
-    updatedAt: Date.now(),
-  };
-}
-
-async function refreshLabelCache() {
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId) return;
-  const files = listTexFiles();
-  const cache = {};
-  for (const f of files) {
-    try {
-      const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(f)}`);
-      cache[f] = extractLabels(text);
-    } catch {
-      // ignore individual file errors
-    }
-  }
-  app.ui.labelCache = cache;
-}
-
-function fileGroupKey(filePath) {
-  const ext = fileExt(filePath);
-  if (ext === ".tex") return "tex";
-  if (isAssetFile(filePath)) return "fig";
-  if (ext === ".bib") return "bib";
-  if (STYLE_EXTS.has(ext)) return "style";
-  return "other";
-}
-
-function collectDirPaths(paths) {
-  const dirs = new Set([""]);
-  for (const p of paths || []) {
-    const parts = String(p || "").split("/").filter(Boolean);
-    if (parts.length <= 1) continue;
-    let cur = "";
-    for (let i = 0; i < parts.length - 1; i += 1) {
-      cur = cur ? `${cur}/${parts[i]}` : parts[i];
-      dirs.add(cur);
-    }
-  }
-  return dirs;
-}
-
-function expandAllFolders() {
-  const tree = Array.isArray(app.current.tree) ? app.current.tree : [];
-  const dirs = collectDirPaths(tree);
-  if (app.ui.fileView !== "all") {
-    const groups = new Set(tree.map(fileGroupKey));
-    for (const g of groups) dirs.add(`@group/${g}`);
-  }
-  app.ui.openFolders = dirs;
-  app.ui.groupTreeInit = true;
-  if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-}
-
-function collapseAllFolders() {
-  app.ui.openFolders = new Set([""]);
-  app.ui.groupTreeInit = true;
-  if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-}
-
-function revealActiveFile() {
-  const file = app.current.openFile;
-  if (!file) return;
-  const dirs = collectDirPaths([file]);
-  const next = new Set(app.ui.openFolders || []);
-  for (const d of dirs) next.add(d);
-  if (app.ui.fileView !== "all") next.add(`@group/${fileGroupKey(file)}`);
-  app.ui.openFolders = next;
-  app.ui.groupTreeInit = true;
-  if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-  setTimeout(() => {
-    const row = document.querySelector(".tree-row.file.active");
-    if (row) row.scrollIntoView({ block: "center" });
-  }, 0);
-}
-
-function toggleFileMultiSelect() {
-  app.ui.fileMultiSelect = !app.ui.fileMultiSelect;
-  app.ui.selectedFiles = new Set();
-  if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-}
-
-function toggleFileSelection(path) {
-  if (!app.ui.selectedFiles) app.ui.selectedFiles = new Set();
-  if (app.ui.selectedFiles.has(path)) app.ui.selectedFiles.delete(path);
-  else app.ui.selectedFiles.add(path);
-  if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-}
-
-async function deleteSelectedFiles() {
-  const files = Array.from(app.ui.selectedFiles || []);
-  if (!files.length) return;
-  if (!confirm(t("确认删除 {name} ?", { name: files.join(", ") }))) return;
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId) return;
-  for (const file of files) {
-    try {
-      await api(`/api/projects/${projectId}/file`, {
-        method: "DELETE",
-        body: JSON.stringify({ path: file }),
-      });
-    } catch {
-      // ignore per-file failure
-    }
-    if (app.current.openFile === file) {
-      app.current.openFile = null;
-      cleanupEditor();
-    }
-    setOpenFiles(app.ui.openFiles.filter((p) => p !== file));
-  }
-  setPinnedFiles(app.ui.pinnedFiles.filter((p) => !files.includes(p)));
-  app.ui.selectedFiles = new Set();
-  await loadProject(projectId);
-  cleanupEditor();
-  mount(render());
-}
-
-async function moveSelectedFiles() {
-  const files = Array.from(app.ui.selectedFiles || []);
-  if (!files.length) return;
-  const dest = prompt(t("移动到"), "");
-  if (dest === null) return;
-  const prefix = String(dest || "").trim().replace(/\/+$/, "");
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId) return;
-  let nextPinned = Array.isArray(app.ui.pinnedFiles) ? app.ui.pinnedFiles.slice() : [];
-  for (const file of files) {
-    const base = fileBaseName(file);
-    const newPath = prefix ? `${prefix}/${base}` : base;
-    if (!newPath || newPath === file) continue;
-    try {
-      await api(`/api/projects/${projectId}/rename`, {
-        method: "POST",
-        body: JSON.stringify({ oldPath: file, newPath }),
-      });
-      setOpenFiles(app.ui.openFiles.map((p) => (p === file ? newPath : p)));
-      if (app.current.openFile === file) app.current.openFile = newPath;
-      nextPinned = remapPathList(nextPinned, file, newPath);
-    } catch {
-      // ignore per-file failure
-    }
-  }
-  setPinnedFiles(nextPinned);
-  app.ui.selectedFiles = new Set();
-  await loadProject(projectId);
-  cleanupEditor();
-  mount(render());
-}
-
-async function buildContextFromFiles(files, limit = AI_CONTEXT_LIMIT) {
-  let total = 0;
-  let out = "";
-  let truncated = false;
-  const used = [];
-  for (const f of files) {
-    const header = `\n% ==== file: ${f} ====\n`;
-    if (total + header.length > limit) {
-      truncated = true;
-      break;
-    }
-    out += header;
-    total += header.length;
-    const text = await getCurrentFileText(f);
-    if (total + text.length > limit) {
-      out += text.slice(0, Math.max(0, limit - total));
-      total = out.length;
-      truncated = true;
-      used.push(f);
-      break;
-    }
-    out += text + "\n";
-    total = out.length;
-    used.push(f);
-  }
-  return { text: out.trim(), total, truncated, files: used };
-}
-
-function describeContextMeta(meta) {
-  if (!meta) return "";
-  const parts = [
-    `${t("文件数")}: ${meta.files || 0}`,
-    `${t("长度")}: ${meta.total || 0}`,
-  ];
-  if (meta.truncated) parts.push(t("已截断"));
-  return parts.join(" · ");
-}
-
-function parseAtFiles(text) {
-  const input = String(text || "");
-  const files = [];
-  const re = /@([A-Za-z0-9._\-\/]+)(?=\s|$)/g;
-  let match;
-  while ((match = re.exec(input))) {
-    const path = match[1];
-    if (app.current && Array.isArray(app.current.tree) && app.current.tree.includes(path)) {
-      files.push(path);
-    }
-  }
-  const cleaned = input.replace(re, "").replace(/\s{2,}/g, " ").trim();
-  return { files: Array.from(new Set(files)), cleaned };
-}
-
-async function buildAiContextFromInput(inputText) {
-  const { files, cleaned } = parseAtFiles(inputText);
-  const fallback = app.current.openFile || app.current.mainFile || "";
-  const list = files.length ? files : (fallback ? [fallback] : []);
-  if (!list.length) {
-    return { context: "", cleaned, meta: { files: 0, total: 0, truncated: false }, fileLabel: "", files: [] };
-  }
-  const res = await buildContextFromFiles(list, AI_CONTEXT_LIMIT);
-  const meta = { files: res.files.length, total: res.total, truncated: res.truncated };
-  const label = files.length ? files.join(", ") : fallback;
-  return { context: res.text || "", cleaned, meta, fileLabel: label, files: res.files || list };
-}
-
-function buildAiDiffLines(oldText, newText) {
-  const a = String(oldText || "").split(/\r?\n/);
-  const b = String(newText || "").split(/\r?\n/);
-  const n = a.length;
-  const m = b.length;
-  const maxCost = 20000;
-  if (!n && !m) return [];
-  if (n * m > maxCost) {
-    const delLines = a.filter((line) => line.trim() !== "").map((line) => ({ type: "del", text: line }));
-    const addLines = b.filter((line) => line.trim() !== "").map((line) => ({ type: "add", text: line }));
-    return [...delLines, ...addLines].slice(0, 200);
-  }
-  const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i -= 1) {
-    for (let j = m - 1; j >= 0; j -= 1) {
-      if (a[i] === b[j]) dp[i][j] = dp[i + 1][j + 1] + 1;
-      else dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-  const out = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      out.push({ type: "same", text: a[i] });
-      i += 1;
-      j += 1;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      out.push({ type: "del", text: a[i] });
-      i += 1;
-    } else {
-      out.push({ type: "add", text: b[j] });
-      j += 1;
-    }
-  }
-  while (i < n) {
-    out.push({ type: "del", text: a[i] });
-    i += 1;
-  }
-  while (j < m) {
-    out.push({ type: "add", text: b[j] });
-    j += 1;
-  }
-  const compact = out.filter((line) => line.type !== "same" || line.text.trim() !== "");
-  if (!compact.some((line) => line.type === "add" || line.type === "del")) return [];
-  const withSegments = compact.slice(0, 200).map((line) => ({ ...line }));
-  const diffWords = (oldLine, newLine) => {
-    const aTokens = String(oldLine || "").split(/(\s+)/).filter((t) => t !== "");
-    const bTokens = String(newLine || "").split(/(\s+)/).filter((t) => t !== "");
-    const na = aTokens.length;
-    const nb = bTokens.length;
-    if (!na && !nb) return { aSeg: [], bSeg: [] };
-    const dp = Array.from({ length: na + 1 }, () => Array(nb + 1).fill(0));
-    for (let i = na - 1; i >= 0; i -= 1) {
-      for (let j = nb - 1; j >= 0; j -= 1) {
-        if (aTokens[i] === bTokens[j]) dp[i][j] = dp[i + 1][j + 1] + 1;
-        else dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-    const aSeg = [];
-    const bSeg = [];
-    let i = 0;
-    let j = 0;
-    while (i < na && j < nb) {
-      if (aTokens[i] === bTokens[j]) {
-        aSeg.push({ type: "same", text: aTokens[i] });
-        bSeg.push({ type: "same", text: bTokens[j] });
-        i += 1;
-        j += 1;
-      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-        aSeg.push({ type: "del", text: aTokens[i] });
-        i += 1;
-      } else {
-        bSeg.push({ type: "add", text: bTokens[j] });
-        j += 1;
-      }
-    }
-    while (i < na) {
-      aSeg.push({ type: "del", text: aTokens[i] });
-      i += 1;
-    }
-    while (j < nb) {
-      bSeg.push({ type: "add", text: bTokens[j] });
-      j += 1;
-    }
-    return { aSeg, bSeg };
-  };
-  for (let i = 0; i < withSegments.length - 1; i += 1) {
-    const cur = withSegments[i];
-    const next = withSegments[i + 1];
-    if (cur.type === "del" && next.type === "add") {
-      const seg = diffWords(cur.text, next.text);
-      cur.segments = seg.aSeg;
-      next.segments = seg.bSeg;
-    }
-  }
-  return withSegments;
-}
-
-function aiSessionsKey() {
-  const pid = app.current.project && app.current.project.id;
-  return pid ? `ct_ai_sessions_${pid}` : "ct_ai_sessions";
-}
-
-function loadAiSessions() {
-  const key = aiSessionsKey();
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((s) => s && s.id)
-      .map((s) => ({
-        id: String(s.id),
-        title: String(s.title || "Chat"),
-        history: Array.isArray(s.history) ? s.history.slice(0, 50) : [],
-        context: String(s.context || ""),
-        meta: s.meta || null,
-        filePath: String(s.filePath || ""),
-        updatedAt: s.updatedAt || Date.now(),
-      }));
-  } catch {
-    return [];
-  }
-}
-
-function saveAiSessions() {
-  const key = aiSessionsKey();
-  try {
-    const sessions = app.ui.aiSessions || [];
-    const trimmed = sessions.slice(0, 30).map((s) => ({
-      id: s.id,
-      title: s.title,
-      history: Array.isArray(s.history) ? s.history.slice(0, 50) : [],
-      context: String(s.context || "").slice(0, AI_CONTEXT_LIMIT),
-      meta: s.meta || null,
-      filePath: s.filePath || "",
-      updatedAt: s.updatedAt || Date.now(),
-    }));
-    localStorage.setItem(key, JSON.stringify(trimmed));
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function newAiSessionTitle() {
-  const count = (app.ui.aiSessions || []).length + 1;
-  return `Chat ${count}`;
-}
-
-function createAiSession(title) {
-  const id = `chat_${Math.random().toString(36).slice(2)}_${Date.now()}`;
-  const session = {
-    id,
-    title: title || newAiSessionTitle(),
-    history: [],
-    context: "",
-    meta: null,
-    filePath: "",
-    updatedAt: Date.now(),
-  };
-  app.ui.aiSessions.unshift(session);
-  app.ui.aiActiveSessionId = id;
-  saveAiSessions();
-  return session;
-}
-
-function getActiveAiSession() {
-  const sessions = app.ui.aiSessions || [];
-  if (!sessions.length) return createAiSession();
-  const activeId = app.ui.aiActiveSessionId;
-  const found = sessions.find((s) => s.id === activeId);
-  if (found) return found;
-  app.ui.aiActiveSessionId = sessions[0].id;
-  return sessions[0];
-}
-
-function setActiveAiSession(id) {
-  app.ui.aiActiveSessionId = id;
-  if (app.ui.refreshChatPanel) app.ui.refreshChatPanel();
 }
 
 async function compareHistoryItem(entry) {
@@ -7713,7 +4622,7 @@ function showChartBuilder() {
   const titleInput = h("input", { class: "input", placeholder: t("图标题") });
   const captionInput = h("input", { class: "input", placeholder: t("图注") });
   const labelInput = h("input", { class: "input", placeholder: "fig:chart" });
-  const output = h("textarea", { class: "textarea", placeholder: t("AI 输出将显示在这里...") });
+  const output = h("textarea", { class: "textarea", placeholder: t("输出将显示在这里...") });
   output.readOnly = true;
 
   const generate = () => {
@@ -9004,8 +5913,7 @@ function renderProject() {
   };
 
   if (app.ui.leftRailMode !== "files") app.ui.leftRailMode = "files";
-  if (app.ui.leftPaneTab !== "files" && app.ui.leftPaneTab !== "chats") app.ui.leftPaneTab = "files";
-  if (!app.ui.assistantEnabled && app.ui.leftPaneTab === "chats") app.ui.leftPaneTab = "files";
+  if (app.ui.leftPaneTab !== "files") app.ui.leftPaneTab = "files";
 
   const setLeftRailMode = (mode) => {
     const next = "files";
@@ -9019,32 +5927,9 @@ function renderProject() {
     mount(render());
   };
   const setLeftPaneTab = (tab) => {
-    const next = tab === "chats" ? "chats" : "files";
-    app.ui.leftPaneTab = next;
-    localStorage.setItem("ct_left_pane_tab", next);
+    app.ui.leftPaneTab = "files";
+    localStorage.setItem("ct_left_pane_tab", "files");
     mount(render());
-  };
-  const setAssistantEnabled = (next) => {
-    app.ui.assistantEnabled = !!next;
-    localStorage.setItem("ct_assistant_enabled", app.ui.assistantEnabled ? "1" : "0");
-    if (!app.ui.assistantEnabled && app.ui.leftPaneTab === "chats") {
-      app.ui.leftPaneTab = "files";
-      localStorage.setItem("ct_left_pane_tab", "files");
-    }
-    if (!app.ui.assistantEnabled && app.ui.rightTab === "ai") {
-      app.ui.rightTab = "pdf";
-      localStorage.setItem("ct_rightTab", "pdf");
-    }
-    if (!app.ui.assistantEnabled && app.ui.aiFloatOpen) {
-      app.ui.aiFloatOpen = false;
-      localStorage.setItem("ct_ai_float", "0");
-    }
-    mount(render());
-  };
-
-  const openChatPane = () => {
-    if (!app.ui.assistantEnabled) return;
-    toggleAiFloat();
   };
 
   const texFiles = Array.isArray(app.current.tree) ? app.current.tree.filter((f) => f.endsWith(".tex")) : [];
@@ -9169,18 +6054,6 @@ function renderProject() {
     h("span", { html: t("自动同步 PDF") }),
   ]);
 
-  const deleteProjectBtn = btn(t("删除项目"), {
-    kind: "menu-item danger",
-    disabled: !isOwnerOrAdmin,
-    onClick: async (ev) => {
-      ev.stopPropagation();
-      if (!confirm(t("确认删除 {name} ?", { name: p.name || p.id }))) return;
-      await api(`/api/projects/${p.id}`, { method: "DELETE" });
-      clearDropdowns();
-      await goProjects();
-    },
-  });
-
   const settingsMenu = dropdownMenu("panel-settings", h("div", { class: "dropdown-panel settings-panel" }, [
     h("div", { class: "label", html: t("预览文件") }),
     pdfTargetSelect,
@@ -9195,8 +6068,6 @@ function renderProject() {
     h("div", { class: "menu-sep" }),
     openPdfMenuBtn,
     refreshPdfMenuBtn,
-    h("div", { class: "menu-sep" }),
-    deleteProjectBtn,
   ]));
 
   const settingsBtn = btn(t("设置"), { kind: "tiny", onClick: (ev) => toggleDropdown("panel-settings", ev) });
@@ -9209,18 +6080,58 @@ function renderProject() {
   const recentFilesEl = null;
   const pinnedFilesEl = renderPinnedFiles();
 
-  const projectSettingsMenu = dropdownMenu("project-settings", buildProjectSettingsPanel(p, { onDelete: goProjects }));
+  const renameProject = () => {
+    if (!isOwnerOrAdmin) return;
+    const currentName = p.name || p.id;
+    const nameInput = input({ value: currentName, placeholder: t("项目名称") });
+    const save = async () => {
+      const name = String(nameInput.value || "").trim();
+      if (!name || name === currentName) {
+        closeModal();
+        return;
+      }
+      await api(`/api/projects/${p.id}/meta`, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+      await loadProjects();
+      p.name = name;
+      if (app.current && app.current.project) app.current.project.name = name;
+      closeModal();
+      mount(render());
+    };
+    nameInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") save();
+    });
+    const body = h("div", { class: "modal-form" }, [
+      h("div", { class: "label", html: t("新名称") }),
+      nameInput,
+      h("div", { class: "hint", html: t("点击保存后生效") }),
+    ]);
+    showModal({
+      title: t("重命名项目"),
+      bodyEl: body,
+      actions: [btn(t("保存"), { kind: "primary", onClick: save })],
+    });
+    setTimeout(() => {
+      nameInput.focus();
+      nameInput.select();
+    }, 0);
+  };
+
   const projectBtn = h("button", {
-    class: "project-title-btn dropdown-trigger",
+    class: "project-title-btn",
     title: p.name || p.id,
-    onclick: (ev) => toggleDropdown("project-settings", ev),
-    html: `${p.name || p.id} ▾`,
+    onclick: renameProject,
+    html: p.name || p.id,
   });
-  const projectBtnWrap = h("div", {
-    class: "dropdown dropdown-left",
-    "data-dropdown-id": "project-settings",
-    onclick: (ev) => toggleDropdown("project-settings", ev),
-  }, [projectBtn, projectSettingsMenu]);
+  const leftBrandBtn = h("button", {
+    class: "left-brand-btn",
+    title: t("返回项目列表"),
+    onclick: () => goProjects(),
+    html: "CollabTex",
+  });
+  const leftTitleWrap = h("div", { class: "left-title-wrap" }, [leftBrandBtn, projectBtn]);
   const shareInput = input({ placeholder: t("分享给 (如 user01)") });
   const shareMenu = dropdownMenu("share", h("div", { class: "dropdown-panel share-panel" }, [
     h("div", { class: "label", html: t("分享给") }),
@@ -9280,21 +6191,14 @@ function renderProject() {
   ]);
   const headerActions = h("div", { class: "left-header-actions" }, [shareWrap, settingsWrap]);
   const headerChildren = [
-    h("div", { class: "left-header-top" }, [projectBtnWrap, headerActions]),
+    h("div", { class: "left-header-top" }, [leftTitleWrap, headerActions]),
   ];
-  if (app.ui.leftRailMode === "files") {
-    if (app.ui.leftPaneTab === "files") headerChildren.push(toolsRow);
-    else headerChildren.push(h("div", { class: "left-header-sub", html: t("聊天") }));
-  }
+  if (app.ui.leftRailMode === "files") headerChildren.push(toolsRow);
 
   const leftHeader = h("div", { class: "left-pane-header" }, headerChildren);
 
   const leftBody = h("div", { class: "left-pane-body" }, []);
-  if (app.ui.leftPaneTab === "chats" && app.ui.assistantEnabled) {
-    leftBody.appendChild(renderChatPanel());
-  } else {
-    leftBody.appendChild(renderFileTree());
-  }
+  leftBody.appendChild(renderFileTree());
 
   const left = h(
     "div",
@@ -9354,7 +6258,7 @@ function renderProject() {
     const rest = parts.join(" ");
     if (head === "help") {
       appendBottomTerminal(
-        "commands: help, compile, quick, clean, open <file>, reveal, ai-fix, ai-patch, mode <terminal|log>, clear, ls"
+        "commands: help, compile, quick, clean, open <file>, reveal, mode <terminal|log>, clear, ls"
       );
       return;
     }
@@ -9402,14 +6306,6 @@ function renderProject() {
       compileProject({ mode: "full", clean: true, origin: "manual" }).catch((e) =>
         appendBottomTerminal(e && e.message ? e.message : String(e))
       );
-      return;
-    }
-    if (head === "ai-fix") {
-      oneClickAiCompileFix().catch((e) => appendBottomTerminal(e && e.message ? e.message : String(e)));
-      return;
-    }
-    if (head === "ai-patch") {
-      showAiCompilePatchModal();
       return;
     }
     appendBottomTerminal(`unknown command: ${head}`);
@@ -9552,138 +6448,6 @@ function renderProject() {
   compileBtn.appendChild(compileIcon);
   compileBtn.appendChild(compileLabel);
 
-  const aiProfiles = app.ui.aiProfiles || [];
-
-  const activeProfileSelect = h("select", {
-    class: "input",
-    onchange: (ev) => {
-      setActiveAiProfile(ev.target.value);
-      saveAiProfiles();
-    },
-  });
-  if (app.ui.aiUseServer) activeProfileSelect.disabled = true;
-  if (!aiProfiles.length) addAiProfile();
-  for (const p of app.ui.aiProfiles) {
-    activeProfileSelect.appendChild(
-      h("option", { value: p.id, html: p.name || p.model || "Model", selected: p.id === app.ui.aiActiveProfileId ? "" : null })
-    );
-  }
-
-  const addProfileBtn = btn(t("新增模型"), {
-    kind: "tiny",
-    disabled: app.ui.aiUseServer,
-    onClick: () => {
-      const seed = getAiProfileById(app.ui.aiActiveProfileId) || {};
-      addAiProfile(seed);
-      mount(render());
-    },
-  });
-
-  const modeSelect = (mode, label) => {
-    const sel = h("select", {
-      class: "input ai-mode-select",
-      disabled: app.ui.aiUseServer,
-      onchange: (ev) => setAiProfileForMode(mode, ev.target.value),
-    });
-    sel.appendChild(h("option", { value: "", html: t("跟随当前模型"), selected: !getAiProfileForMode(mode) ? "" : null }));
-    for (const p of app.ui.aiProfiles) {
-      sel.appendChild(h("option", { value: p.id, html: p.name || p.model || "Model", selected: p.id === getAiProfileForMode(mode) ? "" : null }));
-    }
-    return h("div", { class: "ai-mode-row" }, [
-      h("div", { class: "label", html: label }),
-      sel,
-    ]);
-  };
-
-  const profileCards = h("div", { class: "ai-profiles", style: app.ui.aiUseServer ? "display:none" : "" });
-  const renderProfileCard = (p) => {
-    const nameInput = h("input", {
-      class: "input",
-      placeholder: t("模型名称"),
-      value: p.name,
-      onchange: (ev) => {
-        p.name = ev.target.value.trim() || p.name;
-        saveAiProfiles();
-        mount(render());
-      },
-    });
-
-    const keyInput = h("input", {
-      class: "input",
-      type: "password",
-      placeholder: t("Qwen3-VL API 密钥"),
-      value: p.apiKey || "",
-      oninput: (ev) => {
-        p.apiKey = ev.target.value;
-        saveAiProfiles();
-      },
-    });
-    keyInput.autocomplete = "off";
-    let keyToggle;
-    keyToggle = btn(t("显示"), {
-      kind: "tiny",
-      onClick: () => {
-        const reveal = keyInput.type === "password";
-        keyInput.type = reveal ? "text" : "password";
-        keyToggle.textContent = reveal ? t("隐藏") : t("显示");
-      },
-    });
-
-    const baseInput = h("input", {
-      class: "input",
-      placeholder: t("Base URL (OpenAI 兼容)"),
-      value: p.baseUrl || "",
-      oninput: (ev) => {
-        p.baseUrl = ev.target.value.trim();
-        saveAiProfiles();
-      },
-    });
-
-    const modelInput = h("input", {
-      class: "input",
-      placeholder: t("模型 (例如 qwen3-vl)"),
-      value: p.model || "",
-      oninput: (ev) => {
-        p.model = ev.target.value.trim();
-        saveAiProfiles();
-      },
-    });
-
-    const styleSelect = h(
-      "select",
-      {
-        class: "input",
-        onchange: (ev) => {
-          p.apiStyle = ev.target.value;
-          saveAiProfiles();
-        },
-      },
-      [
-        h("option", { value: "", html: t("API 类型"), selected: !p.apiStyle ? "" : null }),
-        h("option", { value: "responses", html: t("responses (兼容)"), selected: p.apiStyle === "responses" ? "" : null }),
-        h("option", { value: "chat", html: t("chat (兼容)"), selected: p.apiStyle === "chat" ? "" : null }),
-      ]
-    );
-
-    const deleteBtn = btn(t("删除模型"), {
-      kind: "tiny danger",
-      onClick: () => {
-        if (app.ui.aiProfiles.length <= 1) return;
-        removeAiProfile(p.id);
-        mount(render());
-      },
-    });
-
-    return h("div", { class: "ai-profile-card" }, [
-      h("div", { class: "ai-profile-header" }, [nameInput, deleteBtn]),
-      h("div", { class: "row" }, [keyInput, keyToggle]),
-      h("div", { class: "row" }, [baseInput, modelInput]),
-      h("div", { class: "row" }, [styleSelect]),
-    ]);
-  };
-
-  for (const p of app.ui.aiProfiles) profileCards.appendChild(renderProfileCard(p));
-
   const wsInput = h("input", {
     class: "input",
     placeholder: t("WebSocket 地址 (可选)"),
@@ -9747,7 +6511,11 @@ function renderProject() {
   pdfViewer.ondblclick = async (ev) => {
     if (!app.current.project) return;
     const target = ev.target;
-    const canvas = target && target.closest ? target.closest("canvas.pdf-canvas") : null;
+    let canvas = target && target.closest ? target.closest("canvas.pdf-canvas") : null;
+    if (!canvas && target && target.closest) {
+      const wrap = target.closest(".pdf-page-wrap");
+      if (wrap) canvas = wrap.querySelector("canvas.pdf-canvas");
+    }
     if (!canvas) return;
     const page = Number(canvas.getAttribute("data-page") || canvas.dataset.page || app.ui.pdfPage || 1);
     const rect = canvas.getBoundingClientRect();
@@ -9817,7 +6585,6 @@ function renderProject() {
   });
   const pdfActions = h("div", { class: "pdf-action-bar" }, [
     h("div", { class: "pdf-action-left" }, [compileBtn]),
-    h("div", { class: "pdf-action-right" }, [pageInfo]),
   ]);
 
   const logDiv = h("div", { class: "log", id: "compileLog" });
@@ -9826,14 +6593,6 @@ function renderProject() {
   const logHeader = h("div", { class: "log-header" }, [
     h("div", { class: "log-group" }, [
       h("div", { class: "log-title", html: t("编译") }),
-      btn(t("一键修复"), { kind: "tiny primary", onClick: () => oneClickAiCompileFix(), id: "aiOneClickFixBtn" }),
-      h("span", {
-        class: "ai-progress",
-        id: "aiOneClickProgress",
-        "data-state": app.compile.aiOneClickStatus || "",
-        style: app.compile.aiOneClickStep ? "" : "display:none",
-        html: app.compile.aiOneClickStep || "",
-      }),
     ]),
   ]);
 
@@ -9846,28 +6605,10 @@ function renderProject() {
     [h("div", { class: "summary-title", html: t("诊断摘要") }), summaryTextEl]
   );
 
-  const aiFixTextEl = h("pre", { class: "summary-text", id: "compileAiFixText" });
-  const aiFixInitial =
-    app.compile.aiFixStatus === "running"
-      ? t("诊断中...")
-      : app.compile.aiFixStatus === "error"
-        ? t("诊断失败")
-        : app.compile.aiFix || "";
-  aiFixTextEl.textContent = aiFixInitial;
-  const aiFixBox = h(
-    "div",
-    {
-      class: "log-summary ai-fix",
-      id: "compileAiFixBox",
-      style: aiFixInitial ? "" : "display:none",
-    },
-    [h("div", { class: "summary-title", html: t("AI 修复建议") }), aiFixTextEl]
-  );
-
-  const pdfPane = h("div", { class: "pdf-pane" }, [pdfViewer, pdfActions]);
+  const pdfPane = h("div", { class: "pdf-pane" }, [pdfViewer, pdfActions, pageInfo]);
   const tabPages = {
     pdf: h("div", { class: "tab-page pdf-page", id: "tab_pdf" }, [pdfPane]),
-    logs: h("div", { class: "tab-page log-page", id: "tab_logs" }, [logHeader, summaryBox, aiFixBox, logDiv]),
+    logs: h("div", { class: "tab-page log-page", id: "tab_logs" }, [logHeader, summaryBox, logDiv]),
   };
 
   const selectTab = () => {
@@ -9929,12 +6670,9 @@ function renderProject() {
     linkEl.appendChild(iconSvg(icon, { size: 16 }));
     return linkEl;
   };
-  const railChatBtn = app.ui.assistantEnabled
-    ? railIconBtn("chat", t("聊天"), () => openChatPane(), { active: app.ui.leftPaneTab === "chats" })
-    : null;
+  const railChatBtn = null;
   const rail = h("div", { class: "studio-rail" }, [
     h("div", { class: "studio-rail-group" }, [
-      railActionLink("back", t("返回项目列表"), "#projects", () => goProjects()),
       railActionBtn("panel", app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), () => toggleLeftPane()),
       railIconBtn("files", t("文件"), () => setLeftRailMode("files"), { active: app.ui.leftRailMode === "files" }),
       railChatBtn,
@@ -9949,14 +6687,29 @@ function renderProject() {
     h("div", { class: "studio-main" }, [layout]),
   ]);
 
-  const aiFloat = renderAiFloat();
-  return h("div", { class: "page studio-page" }, aiFloat ? [shell, aiFloat] : [shell]);
+  return h("div", { class: "page studio-page" }, [shell]);
 }
 
 function renderLoading() {
+  const err = app && app.ui ? app.ui.loadError : "";
+  const detail = app && app.ui ? app.ui.loadErrorDetail : "";
+  if (!err) {
+    return h("div", { class: "page" }, [
+      topbar(t("加载中..."), []),
+      h("div", { class: "center" }, [h("div", { class: "hint", html: t("加载中...") })]),
+    ]);
+  }
+  const retryBtn = btn(t("重新加载"), { kind: "primary", onClick: () => location.reload() });
+  const info = h("div", { class: "loading-panel" }, [
+    h("div", { class: "hint error", html: err }),
+    detail ? h("div", { class: "loading-detail", html: detail }) : null,
+    h("div", { class: "loading-detail", html: t("当前地址: {origin}", { origin: location.origin }) }),
+    h("div", { class: "loading-detail", html: t("若使用 VSCode 端口转发，请使用 Ports 面板里的转发链接。") }),
+    h("div", { class: "loading-actions" }, [retryBtn]),
+  ].filter(Boolean));
   return h("div", { class: "page" }, [
-    topbar(t("加载中..."), []),
-    h("div", { class: "center" }, [h("div", { class: "hint", html: t("加载中...") })]),
+    topbar(t("加载失败"), []),
+    h("div", { class: "center" }, [info]),
   ]);
 }
 
@@ -9970,7 +6723,7 @@ function renderModalOverlay() {
   return h("div", { class: "modal-overlay", onclick: (e) => { if (e.target.classList.contains("modal-overlay")) closeModal(); } }, [
     h("div", { class: "modal" }, [
       h("div", { class: "modal-header" }, [
-        h("div", { class: "modal-title", html: title || "AI" }),
+        h("div", { class: "modal-title", html: title || "" }),
       ]),
       h("div", { class: "modal-body" }, [bodyEl]),
       actionRow,
@@ -9994,13 +6747,39 @@ function render() {
 async function bootstrap() {
   app.view = "loading";
   app.ui.authError = "";
+  app.ui.loadError = "";
+  app.ui.loadErrorDetail = "";
   applySplitVars();
   mount(render());
 
-  await loadMe().catch(() => {});
+  try {
+    await loadMe();
+  } catch (err) {
+    if (isNetworkError(err)) {
+      setLoadError(err);
+      return;
+    }
+  }
   if (!app.me) {
-    const ok = await tryAutoLogin();
-    if (ok) await loadMe().catch(() => {});
+    let ok = false;
+    try {
+      ok = await tryAutoLogin();
+    } catch (err) {
+      if (isNetworkError(err)) {
+        setLoadError(err);
+        return;
+      }
+    }
+    if (ok) {
+      try {
+        await loadMe();
+      } catch (err) {
+        if (isNetworkError(err)) {
+          setLoadError(err);
+          return;
+        }
+      }
+    }
   }
   if (!app.me) {
     localStorage.removeItem("ct_session_token");
@@ -10010,7 +6789,15 @@ async function bootstrap() {
     return;
   }
 
-  await loadProjects();
+  try {
+    await loadProjects();
+  } catch (err) {
+    if (isNetworkError(err)) {
+      setLoadError(err, t("无法加载项目列表"));
+      return;
+    }
+    throw err;
+  }
   const routed = await handleRoute();
   if (!routed) {
     app.view = "projects";
@@ -10041,10 +6828,6 @@ document.addEventListener("click", () => {
   }
 });
 window.addEventListener("keydown", (ev) => {
-  if (ev.key === "Escape" && app && app.ui && app.ui.aiFloatOpen) {
-    closeAiFloat();
-    return;
-  }
   if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s" && ev.shiftKey) {
     if (app.view === "project") {
       ev.preventDefault();
@@ -10100,6 +6883,10 @@ window.addEventListener("unhandledrejection", (ev) => reportUiError(ev && ev.rea
 
 bootstrap().catch((e) => {
   console.error(e);
+  if (isNetworkError(e)) {
+    setLoadError(e);
+    return;
+  }
   enterGuestMode();
   loadProjects().then(() => mount(render())).catch(() => mount(render()));
 });

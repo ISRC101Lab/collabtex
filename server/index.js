@@ -31,8 +31,6 @@ import {
   resolveProjectFilePath,
 } from "./lib/projects.js";
 import { startCompile, getJob, subscribeJob, publicJob, getCompileOverview } from "./lib/compile.js";
-import { aiPolish, aiCompileFix, aiCompilePatch, aiChat } from "./lib/ai.js";
-import { runCodexExec } from "./lib/codex_cli.js";
 import { listHistory, readHistoryItem, recordHistory } from "./lib/history.js";
 import { createCollabServer } from "./collab.js";
 
@@ -40,8 +38,8 @@ import Busboy from "busboy";
 import unzipper from "unzipper";
 import archiver from "archiver";
 
-const WEB_PORT = Number(process.env.WEB_PORT || 4090);
-const WS_PORT = Number(process.env.WS_PORT || (Number.isFinite(WEB_PORT) ? WEB_PORT + 1 : 4091));
+const WEB_PORT = Number(process.env.WEB_PORT || 4092);
+const WS_PORT = Number(process.env.WS_PORT || (Number.isFinite(WEB_PORT) ? WEB_PORT + 1 : 4093));
 const WEB_HOST = process.env.WEB_HOST || "0.0.0.0";
 const WS_HOST = process.env.WS_HOST || "0.0.0.0";
 
@@ -328,51 +326,7 @@ function isZipSymlink(entry) {
 const TEMPLATE_CATALOG = [
   { id: "blank", name: "Blank (Article)", mainFile: "main.tex", dir: "" },
   { id: "acm-sigconf", name: "ACM SIGCONF (acmart)", mainFile: "main.tex", dir: "acm-sigconf" },
-  { id: "ai-generic", name: "AI Conf (Generic)", mainFile: "main.tex", dir: "ai-generic" },
 ];
-
-const CODEX_TEXT_EXTS = new Set([
-  ".tex",
-  ".bib",
-  ".cls",
-  ".sty",
-  ".bst",
-  ".cfg",
-  ".def",
-  ".txt",
-  ".md",
-  ".json",
-  ".yaml",
-  ".yml",
-  ".csv",
-  ".tsv",
-]);
-
-let codexBusy = false;
-
-function isCodexTextFile(relPath) {
-  const ext = path.extname(String(relPath || "")).toLowerCase();
-  return CODEX_TEXT_EXTS.has(ext);
-}
-
-async function snapshotProjectTextFiles(dataDir, projectId, maxBytes = 800000) {
-  const projDir = projectPath(dataDir, projectId);
-  const tree = await listProjectTree(projDir);
-  const out = new Map();
-  for (const rel of tree) {
-    if (!isCodexTextFile(rel)) continue;
-    const abs = resolveProjectFilePath(dataDir, projectId, rel);
-    try {
-      const st = await fs.stat(abs);
-      if (!st.isFile() || st.size > maxBytes) continue;
-      const text = await fs.readFile(abs, "utf8");
-      out.set(rel, text);
-    } catch {
-      // ignore
-    }
-  }
-  return out;
-}
 
 function templateRoot() {
   return path.resolve(new URL("./templates", import.meta.url).pathname);
@@ -423,7 +377,14 @@ async function main() {
   let usersDb = await ensureDefaultUsers(dataDir);
 
   const app = express();
+  app.set("etag", false);
   app.use(express.json({ limit: "20mb" }));
+
+  const setNoStoreHeaders = (res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  };
 
   // Minimal API access log to help debug "button does nothing" reports.
   app.use((req, res, next) => {
@@ -437,6 +398,36 @@ async function main() {
         // ignore
       }
     });
+    next();
+  });
+
+  // Static/page access log to confirm the browser reaches the server.
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on("finish", () => {
+      try {
+        if (req.path.startsWith("/api/")) return;
+        const shouldLog =
+          req.path === "/" ||
+          req.path === "/index.html" ||
+          req.path.endsWith(".js") ||
+          req.path.endsWith(".css");
+        if (!shouldLog) return;
+        const ms = Date.now() - start;
+        const host = req.headers.host || "";
+        console.log(`${req.method} ${req.path} ${res.statusCode} ${ms}ms ${host}`);
+      } catch {
+        // ignore
+      }
+    });
+    next();
+  });
+
+  // Prevent stale API responses (304) from breaking client logic.
+  app.use((req, res, next) => {
+    if (req.path && req.path.startsWith("/api/")) {
+      setNoStoreHeaders(res);
+    }
     next();
   });
 
@@ -471,6 +462,17 @@ async function main() {
     if (!sess || !sess.username) return res.json({ authenticated: false });
     const token = getTokenFromReq(req, session);
     res.json({ authenticated: true, username: sess.username, isAdmin: !!sess.isAdmin, token });
+  });
+
+  app.get("/api/ping", (req, res) => {
+    res.json({
+      ok: true,
+      time: new Date().toISOString(),
+      host: req.headers.host || "",
+      forwardedHost: req.headers["x-forwarded-host"] || "",
+      forwardedProto: req.headers["x-forwarded-proto"] || "",
+      remote: req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : "",
+    });
   });
 
   // Projects
@@ -1783,198 +1785,21 @@ async function main() {
     }
   });
 
-  // AI: compile log diagnosis (optional; requires OPENAI_API_KEY).
-  app.post("/api/ai/compile-fix", requireAuth(session), async (req, res) => {
-    const { log, diagnostics, mainFile, targetFile, compiler, apiKey, baseUrl, model, apiStyle } = req.body || {};
-    if (!log) return jsonError(res, 400, "missing log");
-    try {
-      const result = await aiCompileFix({
-        log,
-        diagnostics,
-        mainFile,
-        targetFile,
-        compiler,
-        apiKey,
-        baseUrl,
-        model,
-        apiStyle,
-      });
-      res.json({ result });
-    } catch (e) {
-      jsonError(res, 400, e && e.message ? e.message : String(e));
-    }
-  });
-
-  // AI: compile fix with file edits (optional; requires OPENAI_API_KEY).
-  app.post("/api/ai/compile-patch", requireAuth(session), async (req, res) => {
-    const { log, diagnostics, mainFile, targetFile, compiler, files, apiKey, baseUrl, model, apiStyle } = req.body || {};
-    if (!log) return jsonError(res, 400, "missing log");
-    if (!files || !Array.isArray(files) || files.length === 0) return jsonError(res, 400, "missing files");
-    try {
-      const result = await aiCompilePatch({
-        log,
-        diagnostics,
-        mainFile,
-        targetFile,
-        compiler,
-        files,
-        apiKey,
-        baseUrl,
-        model,
-        apiStyle,
-      });
-      res.json({ result });
-    } catch (e) {
-      jsonError(res, 400, e && e.message ? e.message : String(e));
-    }
-  });
-
-  // AI: compile fix using Codex CLI (server-side key, edits files directly).
-  app.post("/api/ai/compile-codex", requireAuth(session), async (req, res) => {
-    const { projectId, log, diagnostics, mainFile, targetFile, compiler } = req.body || {};
-    if (!projectId) return jsonError(res, 400, "missing projectId");
-    if (!log) return jsonError(res, 400, "missing log");
-    if (!process.env.OPENAI_API_KEY) return jsonError(res, 400, "OPENAI_API_KEY not configured");
-    if (codexBusy) return jsonError(res, 409, "codex busy");
-
-    const db = await loadProjects(dataDir);
-    const p = db.projects.find((x) => x.id === projectId);
-    if (!p) return jsonError(res, 404, "project not found");
-    if (!canAccessProject(p, req.user.username)) return jsonError(res, 403, "forbidden");
-
-    const projDir = projectPath(dataDir, projectId);
-    const effectiveMain = mainFile || p.mainFile;
-    const prompt = [
-      "You are Codex. Fix LaTeX compilation errors by editing project files.",
-      "Only modify files in this project. Keep changes minimal.",
-      "Do NOT run LaTeX compilation commands; only edit files.",
-      effectiveMain ? `Main file: ${effectiveMain}` : "",
-      targetFile ? `Target file: ${targetFile}` : "",
-      compiler ? `Compiler: ${compiler}` : "",
-      diagnostics && diagnostics.length ? `Diagnostics: ${JSON.stringify(diagnostics)}` : "",
-      "Compile log:",
-      String(log || "").slice(-12000),
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    codexBusy = true;
-    try {
-      const before = await snapshotProjectTextFiles(dataDir, projectId);
-      const result = await runCodexExec({ cwd: projDir, prompt });
-      const after = await snapshotProjectTextFiles(dataDir, projectId);
-
-      const edits = [];
-      for (const [rel, content] of after.entries()) {
-        const prev = before.get(rel);
-        if (prev !== content) {
-          edits.push({ path: rel, content, reason: prev ? "updated by Codex" : "created by Codex" });
-        }
-      }
-
-      const notesParts = [];
-      if (result && typeof result.code === "number" && result.code !== 0) {
-        notesParts.push(`Codex exit code: ${result.code}`);
-      }
-      if (edits.length) notesParts.push(`Updated ${edits.length} file(s).`);
-      const tail = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-      if (tail) notesParts.push(tail.slice(-4000));
-
-      res.json({ result: { notes: notesParts.join("\n"), edits } });
-    } catch (e) {
-      jsonError(res, 500, e && e.message ? e.message : String(e));
-    } finally {
-      codexBusy = false;
-    }
-  });
-
-  // AI: polishing/rewrite (optional; requires OPENAI_API_KEY).
-  app.post("/api/ai/polish", requireAuth(session), async (req, res) => {
-    const { text, instruction, mode, apiKey, baseUrl, model, apiStyle } = req.body || {};
-    if (!text) return jsonError(res, 400, "missing text");
-    try {
-      const result = await aiPolish({ text, instruction, mode, apiKey, baseUrl, model, apiStyle });
-      res.json({ result });
-    } catch (e) {
-      jsonError(res, 400, e && e.message ? e.message : String(e));
-    }
-  });
-
-  // AI: chat-style writing assistant (LaTeX context only).
-  app.post("/api/ai/chat", requireAuth(session), async (req, res) => {
-    const { context, question, history, filePath, apiKey, baseUrl, model, apiStyle, mode } = req.body || {};
-    if (!question) return jsonError(res, 400, "missing question");
-    if (!context) return jsonError(res, 400, "missing context");
-    try {
-      const result = await aiChat({ context, question, history, filePath, apiKey, baseUrl, model, apiStyle, mode });
-      res.json({ result });
-    } catch (e) {
-      jsonError(res, 400, e && e.message ? e.message : String(e));
-    }
-  });
-
-  // AI: agent-edit - AI agent directly edits LaTeX files
-  app.post("/api/ai/agent-edit", requireAuth(session), async (req, res) => {
-    const { projectId, filePath, context, question, history, apiKey, baseUrl, model, apiStyle } = req.body || {};
-
-    if (!projectId) return jsonError(res, 400, "missing projectId");
-    if (!filePath) return jsonError(res, 400, "missing filePath");
-    if (!question) return jsonError(res, 400, "missing question");
-    if (!context) return jsonError(res, 400, "missing context");
-
-    try {
-      // Permission check
-      const db = await loadProjects(dataDir);
-      const p = db.projects.find((x) => x.id === projectId);
-      if (!p) return jsonError(res, 404, "project not found");
-      if (!canAccessProject(p, req.user.username)) return jsonError(res, 403, "forbidden");
-
-      // Call AI with agent mode
-      const aiResult = await aiChat({
-        context,
-        question,
-        history,
-        filePath,
-        apiKey,
-        baseUrl,
-        model,
-        apiStyle,
-        mode: 'agent'
-      });
-
-      // Parse LaTeX code block from AI response
-      const latexMatch = aiResult.match(/```latex\n([\s\S]*?)\n```/);
-      if (!latexMatch) {
-        return res.json({
-          success: false,
-          result: aiResult,
-          edits: [],
-          notes: "AI 未返回有效的 LaTeX 代码块"
-        });
-      }
-
-      const newContent = latexMatch[1];
-      const projDir = projectPath(dataDir, projectId);
-      const fullPath = resolveProjectFilePath(projDir, filePath);
-
-      // Atomic write
-      await fs.writeFile(fullPath, newContent, 'utf-8');
-
-      res.json({
-        success: true,
-        result: aiResult,
-        edits: [{ path: filePath, content: newContent, reason: "AI agent 修改" }],
-        notes: "文件已成功更新"
-      });
-    } catch (e) {
-      jsonError(res, 400, e && e.message ? e.message : String(e));
-    }
-  });
-
   // Frontend
   const publicDir = path.resolve(new URL("../public", import.meta.url).pathname);
-  app.use(express.static(publicDir, { index: false }));
-  app.get("*", async (_req, res) => res.sendFile(path.join(publicDir, "index.html")));
+  const staticNoStore = (res, filePath) => {
+    if (/\.(html|js|css|map|mjs)$/i.test(filePath)) setNoStoreHeaders(res);
+  };
+  app.use(express.static(publicDir, {
+    index: false,
+    etag: false,
+    lastModified: false,
+    setHeaders: staticNoStore,
+  }));
+  app.get("*", async (_req, res) => {
+    setNoStoreHeaders(res);
+    res.sendFile(path.join(publicDir, "index.html"));
+  });
 
   // Collab server
   const collab = createCollabServer({ dataDir, session, host: WS_HOST });

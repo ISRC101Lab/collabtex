@@ -7,7 +7,13 @@
     <link rel="stylesheet" href="/style.css?v={{BUILD_ID}}" />
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="boot-fallback">
+        <div class="boot-title">正在加载 CollabTeX…</div>
+        <div class="boot-desc">如果长时间无响应，请确认端口转发地址是否正确。</div>
+      </div>
+    </div>
+    <noscript>需要启用 JavaScript 才能使用 CollabTeX。</noscript>
     <script type="module" src="/bundle.js?v={{BUILD_ID}}"></script>
   </body>
 </html>
