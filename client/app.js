@@ -2605,6 +2605,59 @@ function showModal({ title, bodyEl, actions = [] }) {
   mount(render());
 }
 
+function openAiConfigModal() {
+  const profile = getAiProfileById(app.ui.aiActiveProfileId) || addAiProfile();
+  const keyInput = h("input", {
+    class: "input ai-float-input",
+    type: "password",
+    placeholder: t("API Key"),
+    value: profile.apiKey || "",
+  });
+  const baseInput = h("input", {
+    class: "input ai-float-input",
+    placeholder: t("Base URL (OpenAI 兼容)"),
+    value: profile.baseUrl || "",
+  });
+  const modelInput = h("input", {
+    class: "input ai-float-input",
+    placeholder: t("模型 (例如 gpt-4o-mini)"),
+    value: profile.model || "",
+  });
+  const styleSelect = h("select", { class: "input ai-float-input" }, [
+    h("option", { value: "", html: t("API 类型"), selected: !profile.apiStyle ? "" : null }),
+    h("option", { value: "responses", html: t("responses (兼容)"), selected: profile.apiStyle === "responses" ? "" : null }),
+    h("option", { value: "chat", html: t("chat (兼容)"), selected: profile.apiStyle === "chat" ? "" : null }),
+  ]);
+  const bodyEl = h("div", { class: "ai-float-config" }, [
+    h("div", { class: "ai-float-config-title", html: t("AI 配置") }),
+    h("div", { class: "ai-float-config-row" }, [keyInput]),
+    h("div", { class: "ai-float-config-row" }, [baseInput, modelInput]),
+    h("div", { class: "ai-float-config-row" }, [styleSelect]),
+    h("div", { class: "ai-float-config-hint", html: t("若使用服务器 Key，请在服务端设置 OPENAI_API_KEY。") }),
+  ]);
+  const saveBtn = btn(t("保存并使用本地 Key"), {
+    kind: "primary",
+    onClick: () => {
+      profile.apiKey = keyInput.value.trim();
+      profile.baseUrl = baseInput.value.trim();
+      profile.model = modelInput.value.trim();
+      profile.apiStyle = styleSelect.value || "";
+      saveAiProfiles();
+      setAiUseServer(false);
+      app.ui.aiFloatNeedsConfig = false;
+      closeModal();
+    },
+  });
+  const serverBtn = btn(t("改用服务器"), {
+    onClick: () => {
+      setAiUseServer(true);
+      app.ui.aiFloatNeedsConfig = false;
+      closeModal();
+    },
+  });
+  showModal({ title: t("AI 配置"), bodyEl, actions: [saveBtn, serverBtn] });
+}
+
 function clearDropdowns() {
   if (!app || !app.ui) return;
   app.ui.dropdownOpen = "";
@@ -5388,14 +5441,12 @@ function renderAiFloat() {
     } catch (e) {
       const errMsg = e && e.message ? e.message : String(e);
       if (errMsg.includes("AI not configured")) {
-        app.ui.aiFloatNeedsConfig = true;
-        app.ui.aiFloatConfigOpen = true;
         history.push({ role: "assistant", content: t("AI 未配置，请填写 API Key 或配置服务器环境变量。") });
         activeSession.history = history;
         activeSession.updatedAt = Date.now();
         saveAiSessions();
         renderMessages();
-        mount(render());
+        openAiConfigModal();
         return;
       }
       history.push({ role: "assistant", content: errMsg });
@@ -5429,9 +5480,7 @@ function renderAiFloat() {
   const configBtn = btn(t("配置"), {
     kind: "tiny",
     onClick: () => {
-      app.ui.aiFloatConfigOpen = !app.ui.aiFloatConfigOpen;
-      app.ui.aiFloatNeedsConfig = false;
-      mount(render());
+      openAiConfigModal();
     },
   });
   const closeBtn = btn("×", { kind: "tiny", onClick: () => closeAiFloat() });
@@ -5441,66 +5490,6 @@ function renderAiFloat() {
     h("div", { class: "ai-float-actions" }, [configBtn, clearBtn, closeBtn]),
   ]);
 
-  const profile = getAiProfileById(app.ui.aiActiveProfileId) || addAiProfile();
-  const configOpen =
-    app.ui.aiFloatConfigOpen ||
-    app.ui.aiFloatNeedsConfig ||
-    (!app.ui.aiUseServer && !profile.apiKey);
-  const configBox = (() => {
-    if (!configOpen) return null;
-    const keyInput = h("input", {
-      class: "input ai-float-input",
-      type: "password",
-      placeholder: t("API Key"),
-      value: profile.apiKey || "",
-    });
-    const baseInput = h("input", {
-      class: "input ai-float-input",
-      placeholder: t("Base URL (OpenAI 兼容)"),
-      value: profile.baseUrl || "",
-    });
-    const modelInput = h("input", {
-      class: "input ai-float-input",
-      placeholder: t("模型 (例如 gpt-4o-mini)"),
-      value: profile.model || "",
-    });
-    const styleSelect = h("select", { class: "input ai-float-input" }, [
-      h("option", { value: "", html: t("API 类型"), selected: !profile.apiStyle ? "" : null }),
-      h("option", { value: "responses", html: t("responses (兼容)"), selected: profile.apiStyle === "responses" ? "" : null }),
-      h("option", { value: "chat", html: t("chat (兼容)"), selected: profile.apiStyle === "chat" ? "" : null }),
-    ]);
-    const saveBtn = btn(t("保存并使用本地 Key"), {
-      kind: "primary tiny",
-      onClick: () => {
-        profile.apiKey = keyInput.value.trim();
-        profile.baseUrl = baseInput.value.trim();
-        profile.model = modelInput.value.trim();
-        profile.apiStyle = styleSelect.value || "";
-        saveAiProfiles();
-        setAiUseServer(false);
-        app.ui.aiFloatNeedsConfig = false;
-        app.ui.aiFloatConfigOpen = false;
-        mount(render());
-      },
-    });
-    const serverBtn = btn(t("改用服务器"), {
-      kind: "tiny",
-      onClick: () => {
-        setAiUseServer(true);
-        app.ui.aiFloatNeedsConfig = false;
-        app.ui.aiFloatConfigOpen = false;
-        mount(render());
-      },
-    });
-    return h("div", { class: "ai-float-config" }, [
-      h("div", { class: "ai-float-config-title", html: t("AI 配置") }),
-      h("div", { class: "ai-float-config-row" }, [keyInput]),
-      h("div", { class: "ai-float-config-row" }, [baseInput, modelInput]),
-      h("div", { class: "ai-float-config-row" }, [styleSelect]),
-      h("div", { class: "ai-float-config-actions" }, [saveBtn, serverBtn]),
-      h("div", { class: "ai-float-config-hint", html: t("若使用服务器 Key，请在服务端设置 OPENAI_API_KEY。") }),
-    ]);
-  })();
 
   const askBtn = btn(t("发送"), { kind: "primary tiny", onClick: () => sendMessage() });
   const applyBtn = btn(t("保存"), {
@@ -5541,7 +5530,6 @@ function renderAiFloat() {
   const body = h("div", { class: "ai-float-body" }, [
     agentHint,
     agentMeta,
-    configBox,
     messagesEl,
     buildFileSuggestWrap(input),
     h("div", { class: "ai-float-row ai-float-chat-actions" }, [askBtn]),
