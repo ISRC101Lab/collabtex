@@ -14,7 +14,7 @@
   padding: 5px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: #f2f2ed;
+  background: rgba(255, 214, 170, 0.12);
   color: var(--muted);
   font-size: 12px;
 }
@@ -29,25 +29,25 @@
 }
 
 
-.compile-status[data-status="running"] { border-color: rgba(13, 114, 122, 0.35); background: var(--accent-weak); color: var(--accent-strong); }
+.compile-status[data-status="running"] { border-color: rgba(242, 140, 40, 0.4); background: var(--accent-weak); color: #fff4e6; }
 
 
-.compile-status[data-status="running"]::before { background: var(--accent); box-shadow: 0 0 0 3px rgba(13, 114, 122, 0.2); }
+.compile-status[data-status="running"]::before { background: var(--accent); box-shadow: 0 0 0 3px rgba(242, 140, 40, 0.2); }
 
 
-.compile-status[data-status="queued"] { border-color: rgba(214, 122, 31, 0.35); background: rgba(214, 122, 31, 0.12); color: #8a4b0e; }
+.compile-status[data-status="queued"] { border-color: rgba(214, 122, 31, 0.45); background: rgba(214, 122, 31, 0.16); color: #f4d2a6; }
 
 
-.compile-status[data-status="queued"]::before { background: var(--accent-warm); box-shadow: 0 0 0 3px rgba(214, 122, 31, 0.2); }
+.compile-status[data-status="queued"]::before { background: var(--accent-warm); box-shadow: 0 0 0 3px rgba(214, 122, 31, 0.22); }
 
 
-.compile-status[data-status="success"] { border-color: rgba(46, 160, 67, 0.35); background: rgba(46, 160, 67, 0.12); color: #116329; }
+.compile-status[data-status="success"] { border-color: rgba(46, 160, 67, 0.35); background: rgba(46, 160, 67, 0.12); color: #d7f2dd; }
 
 
 .compile-status[data-status="success"]::before { background: #2ea043; box-shadow: 0 0 0 3px rgba(46, 160, 67, 0.2); }
 
 
-.compile-status[data-status="error"] { border-color: rgba(180, 35, 24, 0.35); background: var(--danger-weak); color: #7a0b11; }
+.compile-status[data-status="error"] { border-color: rgba(180, 35, 24, 0.35); background: var(--danger-weak); color: #ffd7d2; }
 
 
 .compile-status[data-status="error"]::before { background: #b42318; box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.2); }
@@ -75,20 +75,20 @@
 .pdf-viewer {
   flex: 1;
   min-height: 0;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background: #181818;
+  background: var(--panel);
   position: relative;
   overflow: auto;
   display: block;
   height: 100%;
   contain: layout paint;
   overscroll-behavior: contain;
-  scrollbar-color: #2b2b2b transparent;
+  scrollbar-color: rgba(255, 214, 170, 0.3) transparent;
   transform: translateZ(0);
 }
 .pdf-viewer::-webkit-scrollbar { width: 8px; }
-.pdf-viewer::-webkit-scrollbar-thumb { background: #2b2b2b; border-radius: 10px; }
+.pdf-viewer::-webkit-scrollbar-thumb { background: rgba(255, 214, 170, 0.22); border-radius: 10px; }
 .pdf-viewer::-webkit-scrollbar-track { background: transparent; }
 
 
@@ -105,9 +105,8 @@
 
 
 .pdf-page-wrap {
-  display: flex;
-  justify-content: center;
-  width: 100%;
+  position: relative;
+  margin: 0 auto;
 }
 
 
@@ -117,6 +116,43 @@
   background: #ffffff;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+}
+
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  transform-origin: 0 0;
+  -webkit-text-size-adjust: none;
+  -moz-text-size-adjust: none;
+  text-size-adjust: none;
+  z-index: 1;
+}
+
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+
+.textLayer ::selection {
+  background: rgba(242, 140, 40, 0.25);
+}
+
+.textLayer br::selection {
+  background: transparent;
+}
+
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  cursor: default;
+  user-select: none;
 }
 
 
@@ -181,8 +217,7 @@
   gap: 6px;
   pointer-events: auto;
 }
-.pdf-action-bar .btn,
-.pdf-action-bar .pdf-page-badge { pointer-events: auto; }
+.pdf-action-bar .btn { pointer-events: auto; }
 
 
 .pdf-action-bar .btn {
@@ -197,9 +232,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid #2d2d2d;
-  background: #1c1c1c;
-  color: #e6e6e6;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  color: var(--text);
   box-shadow: none;
   border-radius: 999px;
   padding: 6px 12px;
@@ -207,7 +242,7 @@
 
 
 .compile-btn:hover {
-  background: #222222;
+  background: rgba(255, 214, 170, 0.12);
 }
 
 
@@ -229,9 +264,18 @@
 
 
 .pdf-page-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 4;
   font-size: 12px;
-  color: #bdbdbd;
+  color: #0b0b0b;
+  background: transparent;
+  border: none;
   padding: 4px 6px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
+  pointer-events: none;
 }
 
 
@@ -241,8 +285,8 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border: 1px solid #2a2a2a;
-  background: #1c1c1c;
+  border: 1px solid var(--border);
+  background: var(--panel);
   border-radius: 10px;
   position: sticky;
   top: 0;
@@ -272,8 +316,8 @@
   height: 30px;
   padding: 4px 8px;
   font-size: 12px;
-  background: #1a1a1a;
-  border-color: #2a2a2a;
+  background: var(--panel-strong);
+  border-color: var(--border);
 }
 
 

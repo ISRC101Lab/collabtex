@@ -28,17 +28,17 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11px;
-  border: 1px solid rgba(13, 114, 122, 0.22);
-  background: rgba(13, 114, 122, 0.08);
-  color: #0b4f56;
+  border: 1px solid rgba(242, 140, 40, 0.3);
+  background: rgba(242, 140, 40, 0.14);
+  color: #ffe0c2;
 }
 
 
 
 .diff-chip.user {
-  background: rgba(94, 129, 172, 0.12);
-  border-color: rgba(94, 129, 172, 0.35);
-  color: #35506d;
+  background: rgba(255, 214, 170, 0.12);
+  border-color: rgba(255, 214, 170, 0.35);
+  color: #f1e1cf;
 }
 
 
@@ -65,7 +65,7 @@
   gap: 2px;
   max-height: 60vh;
   overflow: auto;
-  background: #0b0f14;
+  background: var(--panel);
   border-radius: 14px;
   padding: 10px;
   font-family: var(--font-mono);
@@ -85,18 +85,18 @@
   white-space: pre-wrap;
   padding: 4px 8px;
   border-left: 3px solid transparent;
-  background: #0f141b;
-  color: #cbd5e1;
+  background: var(--panel-strong);
+  color: var(--text);
   min-height: 20px;
 }
 
 
 
-.diff-cell.old { border-left-color: rgba(94, 129, 172, 0.4); }
+.diff-cell.old { border-left-color: rgba(255, 214, 170, 0.4); }
 
 
 
-.diff-cell.new { border-left-color: rgba(94, 129, 172, 0.4); }
+.diff-cell.new { border-left-color: rgba(255, 214, 170, 0.4); }
 
 
 

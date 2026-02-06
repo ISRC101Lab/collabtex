@@ -289,7 +289,7 @@
 .view-switch {
   position: absolute;
   inset: 0;
-  background: #2a2a2a;
+  background: rgba(255, 214, 170, 0.18);
   border-radius: 999px;
   transition: background 120ms ease;
 }
@@ -301,22 +301,22 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #bdbdbd;
+  background: rgba(255, 214, 170, 0.7);
   transition: transform 120ms ease, background 120ms ease;
 }
 .view-switch-wrap input:checked + .view-switch {
-  background: #5a5aff;
+  background: var(--accent);
 }
 .view-switch-wrap input:checked + .view-switch::after {
   transform: translateX(16px);
-  background: #ffffff;
+  background: #fff4e6;
 }
 
 .studio-page .input,
 .studio-page .textarea {
-  background: #202020;
-  border-color: #2f2f2f;
-  color: #e6e6e6;
+  background: var(--panel-strong);
+  border-color: var(--border);
+  color: var(--text);
 }
 
 @media (max-width: 900px) {

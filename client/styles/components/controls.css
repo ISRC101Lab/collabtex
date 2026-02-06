@@ -23,8 +23,8 @@
 
 
 .toggle-btn {
-  border: 1px solid rgba(13, 114, 122, 0.2);
-  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(242, 140, 40, 0.25);
+  background: rgba(255, 214, 170, 0.14);
   color: var(--muted);
   font-size: 11px;
   padding: 4px 8px;
@@ -33,7 +33,7 @@
 
 
 .toggle-btn.active {
-  border-color: rgba(13, 114, 122, 0.45);
-  background: rgba(13, 114, 122, 0.12);
-  color: var(--accent-strong);
+  border-color: rgba(242, 140, 40, 0.5);
+  background: rgba(242, 140, 40, 0.2);
+  color: #ffffff;
 }

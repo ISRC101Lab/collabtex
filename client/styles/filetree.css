@@ -443,7 +443,7 @@
 .file-tab:hover .file-tab-close { opacity: 1; }
 
 
-.file-tab-close:hover { background: rgba(13, 114, 122, 0.12); color: var(--accent-strong); }
+.file-tab-close:hover { background: rgba(242, 140, 40, 0.16); color: #fff4e6; }
 
 
 
@@ -471,8 +471,8 @@
 
 
 .file-item.active {
-  border-color: rgba(14, 99, 156, 0.35);
-  background: rgba(14, 99, 156, 0.12);
+  border-color: rgba(242, 140, 40, 0.45);
+  background: rgba(242, 140, 40, 0.18);
 }
 
 
