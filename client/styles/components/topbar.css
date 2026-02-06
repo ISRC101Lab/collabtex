@@ -4,7 +4,7 @@
   justify-content: space-between;
   height: var(--topbarH);
   padding: 0 12px;
-  background: linear-gradient(180deg, var(--panel), var(--panel-strong));
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.08), rgba(0, 0, 0, 0)) , var(--panel);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
   position: sticky;
@@ -21,7 +21,7 @@
 
 .brand {
   font-weight: 600;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.5px;
   font-family: var(--font-display);
 }
 
@@ -29,7 +29,7 @@
 
 .title {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 12.5px;
   text-transform: none;
   letter-spacing: 0.02em;
   overflow: hidden;

@@ -10,10 +10,10 @@
   content-visibility: auto;
   contain-intrinsic-size: 640px;
   overscroll-behavior: contain;
-  scrollbar-color: #2b2b2b transparent;
+  scrollbar-color: rgba(255, 214, 170, 0.35) transparent;
 }
 .filetree::-webkit-scrollbar { width: 8px; }
-.filetree::-webkit-scrollbar-thumb { background: #2b2b2b; border-radius: 10px; }
+.filetree::-webkit-scrollbar-thumb { background: rgba(255, 214, 170, 0.2); border-radius: 10px; }
 .filetree::-webkit-scrollbar-track { background: transparent; }
 
 
@@ -69,10 +69,7 @@
 }
 
 
-.tree-row.file.selected {
-  background: rgba(14, 99, 156, 0.12);
-  border-color: transparent;
-}
+.tree-row.file.selected { background: rgba(242, 140, 40, 0.16); border-color: transparent; }
 
 
 .tree-check {
@@ -83,7 +80,7 @@
 
 
 .tree-row.dir {
-  color: #cfd3da;
+  color: #e2d6c7;
   background: transparent;
   grid-template-columns: 14px minmax(0, 1fr) auto;
   cursor: pointer;
@@ -91,7 +88,7 @@
 
 
 .tree-row.dir.group {
-  color: #7f8793;
+  color: rgba(255, 214, 170, 0.55);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -106,30 +103,27 @@
 }
 
 
-.tree-row.dir:hover {
-  background: rgba(13, 114, 122, 0.06);
-  border-color: rgba(13, 114, 122, 0.12);
-}
+.tree-row.dir:hover { background: rgba(242, 140, 40, 0.08); border-color: rgba(242, 140, 40, 0.2); }
 
 
-.tree-row.file:hover { background: rgba(255, 255, 255, 0.04); border-color: transparent; }
+.tree-row.file:hover { background: rgba(255, 214, 170, 0.08); border-color: transparent; }
 
 
 .tree-row.file.active {
-  background: rgba(58, 131, 190, 0.18);
+  background: rgba(242, 140, 40, 0.22);
   border-color: transparent;
-  box-shadow: inset 2px 0 0 rgba(58, 131, 190, 0.95);
+  box-shadow: inset 2px 0 0 rgba(242, 140, 40, 0.9);
 }
 
 
 .tree-row.file.pinned {
-  background: rgba(13, 114, 122, 0.1);
+  background: rgba(242, 140, 40, 0.12);
   border-color: transparent;
-  box-shadow: inset 2px 0 0 rgba(13, 114, 122, 0.7);
+  box-shadow: inset 2px 0 0 rgba(242, 140, 40, 0.65);
 }
 
 
-.tree-name { color: #d9dde3; font-size: 13px; }
+.tree-name { color: #f1e6d8; font-size: 13px; }
 
 
 .tree-indent { width: 18px; }
@@ -141,7 +135,7 @@
   border-radius: 3px;
   border: none;
   background: transparent;
-  color: #9aa2ad;
+  color: rgba(255, 214, 170, 0.55);
   cursor: pointer;
   font-size: 11px;
   line-height: 1;
@@ -175,8 +169,8 @@
   width: 10px;
   height: 10px;
   border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 214, 170, 0.18);
+  background: rgba(255, 214, 170, 0.08);
   box-shadow: none;
   display: inline-flex;
   align-items: center;
@@ -184,7 +178,7 @@
   font-size: 6px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: #8a94a1;
+  color: rgba(255, 214, 170, 0.55);
   opacity: 0.6;
 }
 
@@ -195,7 +189,7 @@
 .tree-icon::after { content: ""; }
 
 
-.tree-icon[data-kind="tex"] { background: linear-gradient(135deg, rgba(31, 106, 112, 0.16), rgba(31, 106, 112, 0.28)); border-color: rgba(31, 106, 112, 0.3); }
+.tree-icon[data-kind="tex"] { background: linear-gradient(135deg, rgba(242, 140, 40, 0.16), rgba(242, 140, 40, 0.28)); border-color: rgba(242, 140, 40, 0.3); }
 
 
 .tree-icon[data-kind="bib"],
@@ -204,7 +198,7 @@
 .tree-icon[data-kind="bbx"] { background: linear-gradient(135deg, rgba(199, 106, 45, 0.18), rgba(199, 106, 45, 0.3)); border-color: rgba(199, 106, 45, 0.32); }
 
 
-.tree-icon[data-kind="pdf"] { background: linear-gradient(135deg, rgba(180, 35, 24, 0.16), rgba(180, 35, 24, 0.28)); border-color: rgba(180, 35, 24, 0.3); }
+.tree-icon[data-kind="pdf"] { background: linear-gradient(135deg, rgba(226, 93, 74, 0.16), rgba(226, 93, 74, 0.28)); border-color: rgba(226, 93, 74, 0.3); }
 
 
 .tree-icon[data-kind="png"],
@@ -212,12 +206,12 @@
 .tree-icon[data-kind="jpeg"],
 .tree-icon[data-kind="svg"],
 .tree-icon[data-kind="gif"],
-.tree-icon[data-kind="webp"] { background: linear-gradient(135deg, rgba(84, 140, 0, 0.18), rgba(84, 140, 0, 0.32)); color: #2f4a11; border-color: rgba(84, 140, 0, 0.35); }
+.tree-icon[data-kind="webp"] { background: linear-gradient(135deg, rgba(134, 90, 24, 0.18), rgba(134, 90, 24, 0.32)); color: #5a3b16; border-color: rgba(134, 90, 24, 0.35); }
 
 
 .tree-row.file.active .tree-icon {
-  background: rgba(13, 114, 122, 0.35);
-  border-color: rgba(13, 114, 122, 0.45);
+  background: rgba(242, 140, 40, 0.35);
+  border-color: rgba(242, 140, 40, 0.45);
 }
 
 
@@ -270,9 +264,9 @@
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #0e4d53;
-  background: rgba(13, 114, 122, 0.12);
-  border: 1px solid rgba(13, 114, 122, 0.28);
+  color: #8f4c12;
+  background: rgba(242, 140, 40, 0.12);
+  border: 1px solid rgba(242, 140, 40, 0.28);
 }
 
 
@@ -284,15 +278,15 @@
   font-size: 9px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(13, 114, 122, 0.95);
-  background: rgba(13, 114, 122, 0.16);
-  border: 1px solid rgba(13, 114, 122, 0.28);
+  color: rgba(242, 140, 40, 0.95);
+  background: rgba(242, 140, 40, 0.16);
+  border: 1px solid rgba(242, 140, 40, 0.28);
 }
 
 
 .tree-subpath {
   font-size: 10px;
-  color: #8a929d;
+  color: rgba(255, 214, 170, 0.55);
   opacity: 0.8;
   white-space: nowrap;
   overflow: hidden;
@@ -304,15 +298,15 @@
 
 .tree-count {
   font-size: 10px;
-  color: #9aa3ad;
+  color: rgba(255, 214, 170, 0.65);
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 214, 170, 0.08);
+  border: 1px solid rgba(255, 214, 170, 0.18);
 }
 
 
-.tree-filebtn:hover { background: rgba(13, 114, 122, 0.08); }
+.tree-filebtn:hover { background: rgba(242, 140, 40, 0.08); }
 
 
 .tree-dirname { font-weight: 600; }
@@ -332,9 +326,9 @@
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1px solid #2a2a2a;
+  border: 1px solid rgba(255, 214, 170, 0.18);
   background: transparent;
-  color: #9a9a9a;
+  color: rgba(255, 214, 170, 0.6);
   cursor: pointer;
   line-height: 1;
   display: inline-flex;
@@ -347,8 +341,8 @@
 
 
 .tree-menu-btn:hover {
-  background: #1f1f1f;
-  border-color: #343434;
+  background: rgba(255, 214, 170, 0.12);
+  border-color: rgba(255, 214, 170, 0.3);
   color: #ffffff;
 }
 

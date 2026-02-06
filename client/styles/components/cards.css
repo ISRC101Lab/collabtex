@@ -1,5 +1,5 @@
 .card {
-  background: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(160deg, rgba(255, 214, 170, 0.1), rgba(255, 255, 255, 0.02));
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow);
