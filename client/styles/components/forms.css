@@ -5,22 +5,22 @@
   padding: 7px 10px;
   background: var(--panel-strong);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 
 .input:focus {
   outline: none;
-  border-color: rgba(242, 140, 40, 0.5);
+  border-color: rgba(107, 150, 255, 0.5);
   box-shadow: var(--ring);
-  background: rgba(255, 214, 170, 0.08);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 
 
 .input.compact {
   padding: 6px 8px;
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 
@@ -54,7 +54,7 @@
   border-radius: 12px;
   padding: 12px;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.5;
   background: var(--panel-strong);
   color: var(--text);

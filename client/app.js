@@ -1,26 +1,58 @@
-import * as Y from "yjs";
-import { HocuspocusProvider } from "@hocuspocus/provider";
+import { snippetCompletion } from "@codemirror/autocomplete";
 
-import { EditorView, basicSetup } from "codemirror";
-import { EditorState } from "@codemirror/state";
-import { StreamLanguage, foldService, syntaxHighlighting, HighlightStyle } from "@codemirror/language";
-import { autocompletion, snippetCompletion } from "@codemirror/autocomplete";
-import { stex } from "@codemirror/legacy-modes/mode/stex";
-// @ts-ignore
-import { yCollab } from "y-codemirror.next";
-import { tags as hl } from "@lezer/highlight";
-
+import { safeStorage as localStorage } from "./utils/storage.js";
 import { api } from "./services/api.js";
 import { t, getLang, setLang as setI18nLang } from "./i18n.js";
 import { clampNumber } from "./utils/numbers.js";
 import { escapeRegExp } from "./utils/strings.js";
 import { fileExt } from "./utils/paths.js";
+import { formatDuration, formatTime, formatMb, formatBytes } from "./utils/format.js";
+import {
+  diffLines,
+  buildDiffSnippet,
+  dedupeParagraphs,
+} from "./utils/diff.js";
+import {
+  parseTable,
+  generatePgfplots,
+  buildFigureSnippet,
+} from "./utils/chart.js";
+import {
+  showChartBuilderDialog,
+  showImageInsertDialog,
+} from "./features/insert_dialogs.js";
+import {
+  showQuickOutlineDialog,
+  showQuickOpenDialog,
+  showProjectSearchDialog,
+} from "./features/search_tools.js";
+import { renderFileTreePanel } from "./features/file_tree_panel.js";
+import { renderHistoryPanel } from "./features/history_panel.js";
+import { renderLoginPage } from "./features/login_page.js";
+import { renderProjectsPage } from "./features/projects_page.js";
+import { renderProjectPage } from "./features/project_page.js";
+import { buildCompileMonitorBody } from "./features/compile_monitor.js";
+import { buildProjectSettingsPanelView } from "./features/project_settings_panel.js";
+import { renderFileTabsView } from "./features/file_tabs.js";
+import { renderRecentFilesPanel, renderPinnedFilesPanel } from "./features/file_sidebar_panels.js";
+import {
+  isPathUnderPrefix,
+  remapPathPrefix,
+  remapPathList,
+  filterPathList,
+  remapPathSet,
+  filterPathSet,
+  normalizeTagList,
+  formatTagList,
+  projectMatchesFilter,
+  projectMatchesScope,
+  formatProjectAge,
+} from "./utils/project_helpers.js";
 import {
   extractIncludePaths,
   extractBibPaths,
   extractLabels,
   extractBibKeys,
-  computeDocStats,
   latexFoldService,
 } from "./utils/latex.js";
 import {
@@ -28,6 +60,10 @@ import {
   clearFlashLineEffect,
   flashLineField,
 } from "./editor/effects.js";
+import { extractOutline, sameOutline } from "./editor/outline.js";
+import { createDocStatsCache, hashTextFast, readTextForWork } from "./editor/doc_stats.js";
+import { openFileSession } from "./editor/open_file_session.js";
+import { compileProjectController } from "./compile/compile_controller.js";
 
 const root = document.getElementById("app");
 
@@ -44,39 +80,16 @@ const ICONS = {
   files: '<path d="M4 7a1 1 0 0 1 1-1h5l2 2h7a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" />',
   chat: '<path d="M6 5h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 4v-4H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />',
   list: '<path d="M6 7h12M6 12h12M6 17h12" />',
+  search: '<circle cx="11" cy="11" r="6.5" /><path d="M16.2 16.2L20 20" />',
   grid: '<rect x="4" y="4" width="7" height="7" rx="1" /><rect x="13" y="4" width="7" height="7" rx="1" /><rect x="4" y="13" width="7" height="7" rx="1" /><rect x="13" y="13" width="7" height="7" rx="1" />',
   settings: '<path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5z" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.54V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1-1.54 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.54-1H3a2 2 0 0 1 0-4h.06a1.7 1.7 0 0 0 1.54-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.54V3a2 2 0 0 1 4 0v.06a1.7 1.7 0 0 0 1 1.54 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.73 0 1.4.42 1.74 1.08.14.27.22.57.22.88a2 2 0 0 1-2 2h-.06a1.7 1.7 0 0 0-1.54 1z" />',
 };
 
-const WARM_HIGHLIGHT = HighlightStyle.define([
-  { tag: hl.comment, color: "#8ec07c" },
-  { tag: hl.number, color: "#f4a261" },
-  { tag: hl.string, color: "#ffe9cc" },
-  { tag: hl.link, color: "#e76f51" },
-  { tag: hl.url, color: "#e76f51" },
-  { tag: hl.keyword, color: "#ffd166" },
-  { tag: hl.controlKeyword, color: "#ffd166" },
-  { tag: hl.definitionKeyword, color: "#ffd166" },
-  { tag: hl.modifier, color: "#ffd166" },
-  { tag: hl.operatorKeyword, color: "#ffedd4" },
-  { tag: hl.atom, color: "#ffe3be" },
-  { tag: hl.bool, color: "#ffdcb0" },
-  { tag: hl.null, color: "#ffdcb0" },
-  { tag: hl.name, color: "#fff2de" },
-  { tag: hl.typeName, color: "#ffe6c8" },
-  { tag: hl.className, color: "#ffe6c8" },
-  { tag: hl.propertyName, color: "#ffe0bf" },
-  { tag: hl.attributeName, color: "#ffe0bf" },
-  { tag: hl.tagName, color: "#ffd9b6" },
-  { tag: hl.function(hl.variableName), color: "#fff2de" },
-  { tag: hl.labelName, color: "#ffe6c8" },
-  { tag: hl.quote, color: "#e76f51" },
-  { tag: hl.heading, color: "#ffe6c8" },
-  { tag: hl.emphasis, color: "#ffe6c8", fontStyle: "italic" },
-  { tag: hl.strong, color: "#ffe6c8", fontWeight: "700" },
-  { tag: hl.literal, color: "#ffdcb0" },
-  { tag: hl.unit, color: "#ffdcb0" },
-]);
+let editorVendorPromise = null;
+function loadEditorVendor() {
+  if (!editorVendorPromise) editorVendorPromise = import("./editor/vendor.js");
+  return editorVendorPromise;
+}
 
 function h(tag, attrs = {}, children = []) {
   const el = document.createElement(tag);
@@ -275,15 +288,23 @@ function wsUrl() {
   const u = new URL(location.href);
   const override = u.searchParams.get("wsUrl");
   const token = localStorage.getItem("ct_session_token") || "";
-  if (override) {
-    if (!token) return override;
+  const isLoopbackHost = (host) => {
+    const h = String(host || "").toLowerCase();
+    return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]";
+  };
+  const appendToken = (raw) => {
+    if (!token) return raw;
     try {
-      const ov = new URL(override, location.href);
-      if (!ov.searchParams.get("token")) ov.searchParams.set("token", token);
-      return ov.toString();
+      const ws = new URL(raw, location.href);
+      if (!ws.searchParams.get("token")) ws.searchParams.set("token", token);
+      return ws.toString();
     } catch {
-      return override;
+      return raw;
     }
+  };
+
+  if (override) {
+    return appendToken(override);
   }
   const wsPort = u.searchParams.get("wsPort");
   const wsPathParam = u.searchParams.get("wsPath");
@@ -293,27 +314,31 @@ function wsUrl() {
     const portPart = `:${wsPort}`;
     const pathPart = path === "/" ? "" : path.startsWith("/") ? path : `/${path}`;
     const base = `${scheme}://${location.hostname}${portPart}${pathPart}`;
-    if (!token) return base;
-    try {
-      const ws = new URL(base, location.href);
-      if (!ws.searchParams.get("token")) ws.searchParams.set("token", token);
-      return ws.toString();
-    } catch {
-      return base;
-    }
+    return appendToken(base);
   }
 
   const stored = localStorage.getItem("ct_ws_url");
   if (stored) {
-    if (!token) return stored;
+    let skipStored = false;
     try {
       const ws = new URL(stored, location.href);
-      if (!ws.searchParams.get("token")) ws.searchParams.set("token", token);
-      return ws.toString();
+      const wsHost = ws.hostname || "";
+      const pageHost = location.hostname || "";
+      // Ignore stale localhost override when page is opened from remote host/port-forward URL.
+      if (isLoopbackHost(wsHost) && !isLoopbackHost(pageHost)) {
+        skipStored = true;
+      }
     } catch {
-      return stored;
+      // Keep non-standard values for backward compatibility.
+      skipStored = false;
     }
+
+    if (!skipStored) {
+      return appendToken(stored);
+    }
+    try { localStorage.removeItem("ct_ws_url"); } catch {}
   }
+
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   let port = "";
   let path = "/";
@@ -335,14 +360,7 @@ function wsUrl() {
   const portPart = port ? `:${port}` : "";
   const pathPart = path === "/" ? "" : path;
   const base = `${scheme}://${location.hostname}${portPart}${pathPart}`;
-  if (!token) return base;
-  try {
-    const ws = new URL(base, location.href);
-    if (!ws.searchParams.get("token")) ws.searchParams.set("token", token);
-    return ws.toString();
-  } catch {
-    return base;
-  }
+  return appendToken(base);
 }
 
 function getPdfTargetFile(projectId) {
@@ -1136,12 +1154,7 @@ function isFocusFile(filePath) {
 }
 
 function hashText(text) {
-  let h = 0;
-  const str = String(text || "");
-  for (let i = 0; i < str.length; i += 1) {
-    h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  }
-  return String(h);
+  return hashTextFast(text);
 }
 
 function openFilesKey(projectId) {
@@ -1162,6 +1175,40 @@ function isFolderPlaceholder(path) {
   if (!raw) return false;
   const parts = raw.split("/");
   return parts[parts.length - 1] === FOLDER_PLACEHOLDER;
+}
+
+function revealActiveFile() {
+  const file = app.current && app.current.openFile ? String(app.current.openFile) : "";
+  if (!file) return;
+
+  const next = new Set(app.ui && app.ui.openFolders ? app.ui.openFolders : [""]);
+  next.add("");
+
+  const parts = file.split("/").filter(Boolean);
+  let cur = "";
+  for (let i = 0; i < Math.max(0, parts.length - 1); i += 1) {
+    cur = cur ? `${cur}/${parts[i]}` : parts[i];
+    next.add(cur);
+  }
+
+  if (app.ui && app.ui.fileView !== "all") {
+    const ext = fileExt(file);
+    let group = "other";
+    if (ext === ".tex") group = "tex";
+    else if (ext === ".bib") group = "bib";
+    else if (isAssetFile(file)) group = "fig";
+    else if (STYLE_EXTS.has(ext)) group = "style";
+    next.add(`@group/${group}`);
+  }
+
+  app.ui.openFolders = next;
+  app.ui.groupTreeInit = true;
+  if (app.ui.refreshFileTree) app.ui.refreshFileTree();
+
+  setTimeout(() => {
+    const row = document.querySelector(".tree-row.file.active");
+    if (row) row.scrollIntoView({ block: "center" });
+  }, 0);
 }
 
 function loadPinnedFiles(projectId, tree) {
@@ -1251,6 +1298,14 @@ function setOpenFiles(list) {
   const projectId = app.current.project && app.current.project.id;
   if (!projectId) return;
   localStorage.setItem(openFilesKey(projectId), JSON.stringify(list));
+}
+
+function toggleFileSelection(path) {
+  if (!path) return;
+  if (!app.ui.selectedFiles) app.ui.selectedFiles = new Set();
+  if (app.ui.selectedFiles.has(path)) app.ui.selectedFiles.delete(path);
+  else app.ui.selectedFiles.add(path);
+  if (app.ui.refreshFileTree) app.ui.refreshFileTree();
 }
 
 function fileBaseName(filePath) {
@@ -1355,7 +1410,7 @@ const app = {
     selectedFiles: new Set(),
     openFiles: [],
     pinnedFiles: [],
-    fileView: "all",
+    fileView: localStorage.getItem("ct_fileView") === "focus" ? "focus" : "all",
     pendingOpenFile: null,
     pdfTargetFile: null,
     pdfPage: null,
@@ -1381,6 +1436,8 @@ const app = {
     refreshFileTabs: null,
     lang: getLang(),
     wsUrlOverride: localStorage.getItem("ct_ws_url") || "",
+    collabBackoffUntil: 0,
+    collabFailStreak: 0,
     compileOverview: null,
     monitorTimer: null,
     monitorLast: 0,
@@ -1481,13 +1538,13 @@ function updateSplitRatios() {
 function normalizeSplitWidths() {
   const w = Math.max(640, window.innerWidth || 0);
   const minLeft = 180;
-  const minRight = 360;
+  const minRight = 300;
   const minEditor = 320;
   const maxLeft = Math.min(520, Math.max(minLeft, Math.floor(w * 0.35)));
-  const maxRight = Math.min(900, Math.max(minRight, Math.floor(w * 0.45)));
+  const maxRight = Math.min(760, Math.max(minRight, Math.floor(w * 0.4)));
 
-  let left = clampNumber(app.ui.leftW, minLeft, maxLeft, 200);
-  let right = clampNumber(app.ui.rightW, minRight, maxRight, 600);
+  let left = clampNumber(app.ui.leftW, minLeft, maxLeft, 220);
+  let right = clampNumber(app.ui.rightW, minRight, maxRight, 520);
   if (app.ui.splitAuto) {
     const leftRatio = Number.isFinite(app.ui.leftRatio) ? app.ui.leftRatio : left / w;
     const rightRatio = Number.isFinite(app.ui.rightRatio) ? app.ui.rightRatio : right / w;
@@ -1592,6 +1649,13 @@ function setLeftCollapsed(next) {
   localStorage.setItem("ct_left_collapsed", app.ui.leftCollapsed ? "1" : "0");
   applyLayoutClass();
   updateTopbarButtons();
+  const restoreBtn = document.getElementById("sidebarRestoreBtn");
+  if (restoreBtn) {
+    restoreBtn.classList.toggle("is-hidden", !app.ui.leftCollapsed);
+    const title = app.ui.leftCollapsed ? t("打开侧边栏") : t("侧边栏已打开");
+    restoreBtn.setAttribute("title", title);
+    restoreBtn.setAttribute("aria-label", title);
+  }
   refreshEditorView();
 }
 
@@ -1693,7 +1757,15 @@ function applyLayoutClass() {
 
 function updateTopbarButtons() {
   const sidebarBtn = document.getElementById("toggleSidebarBtn");
-  if (sidebarBtn) sidebarBtn.textContent = app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏");
+  if (sidebarBtn) {
+    const label = app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏");
+    sidebarBtn.setAttribute("title", label);
+    sidebarBtn.setAttribute("aria-label", label);
+    if (!sidebarBtn.querySelector("svg") && !sidebarBtn.querySelector(".icon")) {
+      sidebarBtn.textContent = label;
+    }
+    sidebarBtn.classList.toggle("active", !app.ui.leftCollapsed);
+  }
   const layoutBtn = document.getElementById("layoutCycleBtn");
   if (layoutBtn) {
     layoutBtn.textContent =
@@ -1898,9 +1970,13 @@ function setWsUrlOverride(value) {
 }
 
 function setFileView(view) {
-  const v = "all";
+  const v = view === "focus" ? "focus" : "all";
+  if (app.ui.fileView === v) return;
   app.ui.fileView = v;
   localStorage.setItem("ct_fileView", v);
+  if (!app.ui.openFolders || !(app.ui.openFolders instanceof Set)) app.ui.openFolders = new Set([""]);
+  app.ui.openFolders.add("");
+  if (v !== "all") app.ui.groupTreeInit = false;
   if (app.ui.refreshFileTree) app.ui.refreshFileTree();
 }
 
@@ -2088,6 +2164,11 @@ function cleanupEditor() {
   if (app.editor.ydoc) app.editor.ydoc.destroy();
   app.editor.ydoc = null;
   app.editor.syncStatus = null;
+  lastPdfSyncKey = "";
+  pdfSyncInFlight = false;
+  pdfSyncPending = false;
+  pdfSyncBlockUntil = 0;
+  pdfSyncLastFailureKey = "";
   if (app.ui.autoCompileArmTimer) {
     clearTimeout(app.ui.autoCompileArmTimer);
     app.ui.autoCompileArmTimer = null;
@@ -2122,40 +2203,16 @@ function trackOpenFile(filePath) {
   if (projectId) localStorage.setItem(lastOpenFileKey(projectId), filePath);
 }
 
-let outlineTimer = null;
-let outlineText = "";
-let statusTimer = null;
+const docStatsCache = createDocStatsCache({ maxChars: 1_500_000 });
+let lastPdfSyncKey = "";
+let pdfSyncInFlight = false;
+let pdfSyncPending = false;
+let pdfSyncBlockUntil = 0;
+let pdfSyncLastFailureKey = "";
 
-function extractOutline(text) {
-  const items = [];
-  const lines = String(text || "").split(/\r?\n/);
-  const re =
-    /^\\(chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?(?:\\[[^\\]]*\\])?\\s*{([^}]*)}/;
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i];
-    if (!raw) continue;
-    const trimmed = raw.trim();
-    if (!trimmed || trimmed.startsWith("%")) continue;
-    const m = trimmed.match(re);
-    if (!m) continue;
-    const kind = m[1];
-    const title = (m[2] || "").trim() || "(untitled)";
-    const level =
-      kind === "chapter"
-        ? 0
-        : kind === "section"
-          ? 1
-          : kind === "subsection"
-            ? 2
-            : kind === "subsubsection"
-              ? 3
-              : kind === "paragraph"
-                ? 4
-                : 5;
-    items.push({ title, level, line: i + 1, kind });
-  }
-  return items;
-}
+let outlineTimer = null;
+let outlineDoc = null;
+let statusTimer = null;
 
 function outlineNodes() {
   if (!app.current.openFile) {
@@ -2188,16 +2245,19 @@ function renderOutlineList() {
 }
 
 function updateOutlineFromText(text) {
-  app.current.outline = extractOutline(text);
+  const parsed = extractOutline(text, { maxChars: 1_500_000 });
+  if (!parsed || !Array.isArray(parsed.items)) return;
+  if (sameOutline(app.current.outline, parsed.items)) return;
+  app.current.outline = parsed.items;
   renderOutlineList();
 }
 
-function scheduleOutline(text) {
-  outlineText = text;
+function scheduleOutline(docOrText) {
+  outlineDoc = docOrText;
   if (outlineTimer) clearTimeout(outlineTimer);
   outlineTimer = setTimeout(() => {
     outlineTimer = null;
-    updateOutlineFromText(outlineText);
+    updateOutlineFromText(outlineDoc);
   }, 240);
 }
 
@@ -2214,8 +2274,7 @@ function updateEditorStatus(view) {
   const doc = view.state.doc;
   const line = doc.lineAt(sel.head);
   const col = sel.head - line.from + 1;
-  const text = doc.toString();
-  const stats = computeDocStats(text);
+  const stats = docStatsCache.get(doc);
   const words = stats.words;
   const chars = stats.chars;
   const selChars = sel.empty ? 0 : sel.to - sel.from;
@@ -2237,6 +2296,7 @@ function updateEditorStatus(view) {
       connecting: t("连接中"),
       connected: t("已连接"),
       disconnected: t("已断开"),
+      local: t("本地模式"),
     };
     const label = syncMap[app.editor.syncStatus] || app.editor.syncStatus;
     const pill = h("span", {
@@ -2246,6 +2306,16 @@ function updateEditorStatus(view) {
     });
     host.appendChild(pill);
   }
+}
+
+function setEditorError(message) {
+  const host = document.getElementById("editorStatus");
+  if (!host) return;
+  host.innerHTML = "";
+  host.appendChild(h("span", {
+    class: "hint error",
+    html: t("文件打开失败: {msg}", { msg: String(message || "unknown") }),
+  }));
 }
 
 function scheduleStatus(view) {
@@ -2336,6 +2406,8 @@ async function loadProjects() {
 }
 
 async function loadProject(projectId, { resetTab = false } = {}) {
+  docStatsCache.clear();
+  lastPdfSyncKey = "";
   const res = await api(`/api/projects/${projectId}/tree`);
   app.current.project = app.projects.find((p) => p.id === projectId) || { id: projectId, name: projectId };
   app.current.tree = res.tree;
@@ -2377,6 +2449,14 @@ async function loadProject(projectId, { resetTab = false } = {}) {
   app.ui.pdfMarker = null;
   app.ui.pdfMarkerFocus = false;
   app.ui.pdfMarkerPulse = false;
+  if (app.ui.pdfLoadingTask) {
+    try { await app.ui.pdfLoadingTask.destroy(); } catch {}
+    app.ui.pdfLoadingTask = null;
+  }
+  if (app.ui.pdfDoc) {
+    try { await app.ui.pdfDoc.destroy(); } catch {}
+    app.ui.pdfDoc = null;
+  }
   app.ui.selectedFiles = new Set();
   app.ui.fileMultiSelect = false;
   if (app.ui.openFiles.length) setOpenFiles(app.ui.openFiles.filter((p) => app.current.tree.includes(p)));
@@ -2407,22 +2487,25 @@ async function loadProject(projectId, { resetTab = false } = {}) {
     const preferred =
       initOpenFiles[0] ||
       loadLastOpenFile(projectId, app.current.tree) ||
-      pickDefaultOpenFile(app.current.tree, app.current.mainFile);
+      pickDefaultOpenFile(app.current.tree, app.current.mainFile) ||
+      app.current.mainFile ||
+      (Array.isArray(app.current.tree) && app.current.tree.length ? app.current.tree[0] : "");
     if (preferred) app.ui.pendingOpenFile = preferred;
   }
 }
 
 async function openProjectById(projectId, { pushHash = true, resetTab = true, seedProject = null } = {}) {
   if (!projectId) return false;
-  cleanupEditor();
-  app.view = "project";
-  app.current.openFile = null;
-  app.ui.openFiles = [];
-  app.ui.fileFilter = "";
-  app.ui.openFolders = new Set([""]);
-  app.current.project = seedProject || app.projects.find((p) => p.id === projectId) || { id: projectId, name: projectId };
-  mount(render());
   try {
+    cleanupEditor();
+    app.view = "project";
+    app.current.openFile = null;
+    app.ui.openFiles = [];
+    app.ui.fileFilter = "";
+    app.ui.openFolders = new Set([""]);
+    app.current.project = seedProject || app.projects.find((p) => p.id === projectId) || { id: projectId, name: projectId };
+    mount(render());
+
     await loadProject(projectId, { resetTab });
     app.view = "project";
     if (pushHash) history.pushState({}, "", `#project/${projectId}`);
@@ -2432,7 +2515,11 @@ async function openProjectById(projectId, { pushHash = true, resetTab = true, se
     app.view = "projects";
     const msg = e && e.message ? e.message : String(e);
     alert(`无法打开项目：${msg}`);
-    await loadProjects();
+    try {
+      await loadProjects();
+    } catch {
+      // ignore recovery reload errors
+    }
     mount(render());
     return false;
   }
@@ -2554,419 +2641,61 @@ function applyDropdownState() {
 }
 
 function buildProjectSettingsPanel(project, { onDelete } = {}) {
-  if (!project) return;
-  const nameInput = input({ value: project.name || "" });
-  const isEditing = app.ui.projectRenameId === project.id;
-
-  const body = h("div", { class: "dropdown-panel project-actions-panel" }, []);
-  if (isEditing) {
-    body.appendChild(h("div", { class: "label", html: t("名称") }));
-    body.appendChild(nameInput);
-  }
-
-  const saveBtn = btn(t("保存"), {
-    kind: "primary menu-inline",
-    onClick: async (ev) => {
-      ev.stopPropagation();
-      const payload = {
-        name: nameInput.value.trim() || project.name,
-      };
-      await api(`/api/projects/${project.id}/meta`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      project.name = payload.name;
-      await loadProjects();
-      if (app.current.project && app.current.project.id === project.id) {
-        app.current.project = app.projects.find((p) => p.id === project.id) || project;
-      }
-      clearDropdowns();
-      mount(render());
-    },
-  });
-
-  const renameBtn = btn(t("重命名"), {
-    kind: "menu-item",
-    onClick: (ev) => {
-      ev.stopPropagation();
-      app.ui.projectRenameId = project.id;
-      app.ui.projectDeleteArmed = "";
-      mount(render());
-    },
-  });
-
-  const cancelBtn = btn(t("取消"), {
-    kind: "menu-inline",
-    onClick: (ev) => {
-      ev.stopPropagation();
-      app.ui.projectRenameId = "";
-      mount(render());
-    },
-  });
-
-  const isArmed = app.ui.projectDeleteArmed === project.id;
-  const delBtn = btn(isArmed ? t("确认删除") : t("删除项目"), {
-    kind: isArmed ? "menu-item danger" : "menu-item",
-    onClick: async (ev) => {
-      ev.stopPropagation();
-      if (!isArmed) {
-        app.ui.projectDeleteArmed = project.id;
-        mount(render());
-        return;
-      }
-      await api(`/api/projects/${project.id}`, { method: "DELETE" });
-      clearDropdowns();
-      if (onDelete) {
-        await onDelete();
-        return;
-      }
-      await loadProjects();
-      mount(render());
-    },
-  });
-
-  if (isEditing) {
-    body.appendChild(h("div", { class: "menu-inline" }, [saveBtn, cancelBtn]));
-  } else {
-    body.appendChild(renameBtn);
-  }
-  body.appendChild(delBtn);
-  return body;
+  return buildProjectSettingsPanelView(project, {
+    input,
+    app,
+    h,
+    t,
+    btn,
+    api,
+    loadProjects,
+    clearDropdowns,
+    mount,
+    render,
+  }, { onDelete });
 }
-
 async function openFile(filePath) {
-  if (isFolderPlaceholder(filePath)) return;
-  const projectId = app.current.project && app.current.project.id;
-  if (projectId && isAssetFile(filePath)) {
-    let url = `/api/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`;
-    const token = localStorage.getItem("ct_session_token") || "";
-    if (token) url += `&token=${encodeURIComponent(token)}`;
-    window.open(url, "_blank");
-    return;
-  }
-  if (filePath === app.current.openFile && app.editor.view) {
-    if (app.ui.refreshFileTabs) app.ui.refreshFileTabs();
-    if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-    return;
-  }
-  app.current.openFile = filePath;
-  if (app.ui.layoutMode === "pdf") setLayoutMode("balanced");
-  trackOpenFile(filePath);
-  cleanupEditor();
-  app.ui.autoCompileDirty = false;
-  app.ui.autoCompileDirtyAt = 0;
-  app.ui.lastEditAt = 0;
-  app.ui.autoCompileReady = false;
-  if (app.ui.autoCompileArmTimer) clearTimeout(app.ui.autoCompileArmTimer);
-  app.ui.autoCompileArmTimer = setTimeout(() => {
-    app.ui.autoCompileReady = true;
-    app.ui.autoCompileArmTimer = null;
-    if (app.ui.autoCompileDirty) scheduleCompile();
-  }, 1500);
-  let host = document.getElementById("editorHost");
-  if (!host) {
-    mount(render());
-    host = document.getElementById("editorHost");
-  } else {
-    if (app.ui.refreshFileTabs) app.ui.refreshFileTabs();
-    if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-    const titleEl = document.getElementById("editorTitle");
-    if (titleEl) {
-      titleEl.textContent = filePath ? fileBaseName(filePath) : t("编辑器");
-      titleEl.title = filePath || "";
-    }
-    const statusEl = document.getElementById("editorStatus");
-    if (statusEl) statusEl.textContent = "";
-  }
-  if (!host) return;
-
-  const docName = `${projectId}:${encodeURIComponent(filePath)}`;
-
-  const ydoc = new Y.Doc();
-  const provider = new HocuspocusProvider({ url: wsUrl(), name: docName, document: ydoc });
-  let providerStatus = "connecting";
-  let prefillTimer = null;
-  let prefilled = false;
-  let syncedOnce = false;
-
-  const c = pickColor(app.me.username);
-  provider.awareness.setLocalStateField("user", {
-    name: app.me.username,
-    color: c.color,
-    colorLight: c.light,
+  const editorVendor = await loadEditorVendor();
+  return openFileSession(filePath, {
+    app,
+    document,
+    window,
+    localStorage,
+    mount,
+    render,
+    t,
+    h,
+    fileBaseName,
+    flashEditorLine,
+    isFolderPlaceholder,
+    isAssetFile,
+    setLayoutMode,
+    trackOpenFile,
+    cleanupEditor,
+    scheduleCompile,
+    scheduleOutline,
+    scheduleStatus,
+    scheduleHistorySnapshot,
+    schedulePdfSync,
+    updateOutlineFromText,
+    updateDocCaches,
+    updateEditorStatus,
+    loadHistory,
+    readTextForWork,
+    hashText,
+    api,
+    wsUrl,
+    pickColor,
+    ...editorVendor,
+    imageCompletionSource,
+    latexCompletionSource,
+    latexFoldService,
+    flashLineField,
+    setTimeout,
+    clearTimeout,
+    requestAnimationFrame,
+    cancelAnimationFrame,
   });
-
-  const ytext = ydoc.getText("content");
-  const undoManager = new Y.UndoManager(ytext);
-  const latexMode = StreamLanguage.define(stex);
-
-  const isUserEdit = (u) =>
-    u.transactions.some((tr) => {
-      if (!tr.isUserEvent) return false;
-      return (
-        tr.isUserEvent("input") ||
-        tr.isUserEvent("delete") ||
-        tr.isUserEvent("paste") ||
-        tr.isUserEvent("move") ||
-        tr.isUserEvent("undo") ||
-        tr.isUserEvent("redo")
-      );
-    });
-
-  const autoCompileListener = EditorView.updateListener.of((u) => {
-    if (!u.docChanged || !app.ui.autoCompile) return;
-    if (!isUserEdit(u)) return;
-    const now = Date.now();
-    app.ui.lastEditAt = now;
-    if (!app.ui.autoCompileDirtyAt) app.ui.autoCompileDirtyAt = now;
-    app.ui.autoCompileDirty = true;
-    if (!app.ui.autoCompileReady) return;
-    scheduleCompile();
-  });
-
-  const outlineListener = EditorView.updateListener.of((u) => {
-    if (u.docChanged) scheduleOutline(u.state.doc.toString());
-  });
-
-  const statusListener = EditorView.updateListener.of((u) => {
-    if (u.docChanged || u.selectionSet) scheduleStatus(u.view);
-  });
-
-  const historyListener = EditorView.updateListener.of((u) => {
-    if (u.docChanged) scheduleHistorySnapshot(u.view);
-  });
-
-  const cacheListener = EditorView.updateListener.of((u) => {
-    if (!u.docChanged) return;
-    if (app.current.openFile) {
-      updateDocCaches(app.current.openFile, u.state.doc.toString());
-    }
-  });
-
-  const syncListener = EditorView.updateListener.of((u) => {
-    if (app.ui.autoSyncPdf && u.selectionSet) schedulePdfSync();
-  });
-
-  let typewriterRaf = null;
-  const typewriterListener = EditorView.updateListener.of((u) => {
-    if (!app.ui.typewriterMode) return;
-    if (!u.selectionSet) return;
-    if (typewriterRaf) cancelAnimationFrame(typewriterRaf);
-    typewriterRaf = requestAnimationFrame(() => {
-      typewriterRaf = null;
-      if (app.editor.view !== u.view) return;
-      try {
-        u.view.dispatch({
-          effects: EditorView.scrollIntoView(u.state.selection.main.head, { y: "center" }),
-        });
-      } catch {
-        // ignore scroll failures
-      }
-    });
-  });
-
-  const state = EditorState.create({
-    doc: ytext.toString(),
-    extensions: [
-      basicSetup,
-      latexMode,
-      autocompletion({ override: [imageCompletionSource, latexCompletionSource] }),
-      foldService.of(latexFoldService),
-      EditorView.lineWrapping,
-      EditorView.contentAttributes.of({ spellcheck: "true" }),
-      EditorView.theme(
-        {
-          "&": { height: "100%" },
-          ".cm-scroller": {
-            fontFamily: "var(--font-mono)",
-            fontSize: "var(--editor-font-size)",
-          },
-          ".cm-content": { padding: "var(--editor-pad-y) var(--editor-pad-x)" },
-          ".cm-line": { lineHeight: "var(--editor-line-height)" },
-          ".cm-gutters": {
-            backgroundColor: "var(--panel-strong)",
-            color: "var(--muted)",
-            borderRight: "1px solid var(--border)",
-          },
-          ".cm-activeLine": { backgroundColor: "rgba(14, 99, 156, 0.08)" },
-          ".cm-selectionBackground": { backgroundColor: "rgba(14, 99, 156, 0.2)" },
-          ".cm-cursor": { borderLeftColor: "var(--accent)" },
-          ".cm-matchingBracket": {
-            backgroundColor: "rgba(214, 122, 31, 0.2)",
-            outline: "1px solid rgba(214, 122, 31, 0.4)",
-          },
-        },
-        { dark: false }
-      ),
-      flashLineField,
-      yCollab(ytext, provider.awareness, { undoManager }),
-      syntaxHighlighting(WARM_HIGHLIGHT),
-      autoCompileListener,
-      outlineListener,
-      statusListener,
-      historyListener,
-      cacheListener,
-      syncListener,
-      typewriterListener,
-    ],
-  });
-
-  const view = new EditorView({ state, parent: host });
-  updateOutlineFromText(view.state.doc.toString());
-  updateDocCaches(filePath, view.state.doc.toString());
-  updateEditorStatus(view);
-
-  const onlineEl = document.getElementById("onlineUsers");
-  const updateOnline = () => {
-    if (!onlineEl) return;
-    const states = Array.from(provider.awareness.getStates().values());
-    const users = new Map();
-    for (const s of states) {
-      if (!s || !s.user || !s.user.name) continue;
-      const name = s.user.name;
-      if (users.has(name)) continue;
-      let line = null;
-      let pos = null;
-      if (s.cursor && s.cursor.head && ydoc) {
-        try {
-          const head = Y.createAbsolutePositionFromRelativePosition(s.cursor.head, ydoc);
-          if (head && head.type === ytext) {
-            pos = head.index;
-            if (view && view.state && Number.isFinite(pos)) {
-              line = view.state.doc.lineAt(pos).number;
-            }
-          }
-        } catch {
-          // ignore cursor conversion errors
-        }
-      }
-      users.set(name, { name, color: s.user.color, light: s.user.colorLight, line, pos });
-    }
-    onlineEl.innerHTML = "";
-    if (users.size === 0) {
-      onlineEl.textContent = t("(无人)");
-      return;
-    }
-    const list = h("span", { class: "presence-list" });
-    for (const u of users.values()) {
-      const chip = h("span", { class: "presence-chip" });
-      chip.style.borderColor = u.color || "#0d727a";
-      chip.style.background = u.light || "rgba(13, 114, 122, 0.12)";
-      const dot = h("span", { class: "presence-dot" });
-      dot.style.background = u.color || "#0d727a";
-      chip.appendChild(dot);
-      chip.appendChild(h("span", { class: "presence-name", html: u.name }));
-      if (u.line) chip.appendChild(h("span", { class: "presence-line", html: `${t("行")}${u.line}` }));
-      if (u.pos !== null && u.pos !== undefined) {
-        chip.classList.add("clickable");
-        chip.title = t("点击跳转到协作者光标");
-        chip.addEventListener("click", () => {
-          if (!view || !Number.isFinite(u.pos)) return;
-          const ln = view.state.doc.lineAt(u.pos).number;
-          view.dispatch({ selection: { anchor: u.pos }, scrollIntoView: true });
-          view.focus();
-          flashEditorLine(view, ln);
-        });
-      }
-      list.appendChild(chip);
-    }
-    onlineEl.appendChild(list);
-  };
-  const syncStatus = (ev) => {
-    providerStatus = ev && ev.status ? ev.status : "disconnected";
-    app.editor.syncStatus = providerStatus;
-    updateEditorStatus(view);
-    if (providerStatus === "connected" && prefillTimer) {
-      clearTimeout(prefillTimer);
-      prefillTimer = null;
-    }
-    if (providerStatus === "connected") {
-      if (app.ui.autoCompileArmTimer) {
-        clearTimeout(app.ui.autoCompileArmTimer);
-        app.ui.autoCompileArmTimer = null;
-      }
-      app.ui.autoCompileReady = true;
-      if (app.ui.autoCompileDirty) scheduleCompile();
-    }
-  };
-
-  const onSynced = (ev) => {
-    if (ev && ev.state === true) {
-      syncedOnce = true;
-      if (prefillTimer) {
-        clearTimeout(prefillTimer);
-        prefillTimer = null;
-      }
-    }
-  };
-
-  provider.on("status", syncStatus);
-  provider.on("synced", onSynced);
-  provider.awareness.on("change", updateOnline);
-  updateOnline();
-
-  const maybePrefill = async () => {
-    if (!projectId || !filePath) return;
-    if (prefilled || syncedOnce) return;
-    if (providerStatus === "connected") return;
-    if (ytext.length > 0) return;
-    try {
-      const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
-      if (typeof text === "string" && text && ytext.length === 0 && !syncedOnce) {
-        ytext.insert(0, text);
-        prefilled = true;
-      }
-    } catch {
-      // ignore prefill errors
-    }
-  };
-  prefillTimer = setTimeout(maybePrefill, 1200);
-
-  app.editor = {
-    provider,
-    ydoc,
-    view,
-    syncStatus: "connecting",
-    cleanup: () => {
-      provider.awareness.off("change", updateOnline);
-      provider.off("status", syncStatus);
-      provider.off("synced", onSynced);
-      if (prefillTimer) clearTimeout(prefillTimer);
-    },
-  };
-  updateEditorStatus(view);
-  loadHistory(filePath)
-    .then(async () => {
-      if (!app.ui.historyEntries.length) {
-        const size = view.state.doc.length || 0;
-        const isLarge = size > 2_000_000;
-        if (!isLarge) {
-          const text = view.state.doc.toString();
-          const hash = hashText(text);
-          app.ui.historyHashByFile[filePath] = hash;
-          try {
-            await api(`/api/projects/${projectId}/history/snapshot`, {
-              method: "POST",
-              body: JSON.stringify({ file: filePath, content: text }),
-            });
-          } catch {
-            // ignore baseline snapshot errors
-          }
-        } else {
-          app.ui.historyLastSnapAt[filePath] = Date.now();
-          try {
-            await api(`/api/projects/${projectId}/history/snapshot`, {
-              method: "POST",
-              body: JSON.stringify({ file: filePath }),
-            });
-          } catch {
-            // ignore baseline snapshot errors
-          }
-        }
-        await loadHistory(filePath, { force: true });
-      }
-    })
-    .catch(console.error);
 }
 
 async function openFileAt(filePath, line, { skipPdfSync = false } = {}) {
@@ -3005,20 +2734,42 @@ async function syncPdfToCursor({ silent = false } = {}) {
     return;
   }
 
+  if (silent) {
+    const openLower = String(app.current.openFile || "").toLowerCase();
+    if (!openLower.endsWith(".tex")) return;
+    const hasPdfReady = !!(
+      (app.current.artifacts && app.current.artifacts.pdf && app.current.artifacts.pdf.exists) ||
+      app.ui.pdfDoc ||
+      app.ui.pdfDocUrl ||
+      app.ui.pdfTs
+    );
+    if (!hasPdfReady) return;
+  }
+
   const sel = view.state.selection.main;
   const line = view.state.doc.lineAt(sel.head);
   const column = sel.head - line.from + 1;
+  const target = getPdfTargetFile(app.current.project.id);
+  const syncKey = `${app.current.project.id}:${app.current.openFile}:${line.number}:${column}:${target || ""}`;
+  if (silent && syncKey === lastPdfSyncKey) return;
+  if (silent && Date.now() < pdfSyncBlockUntil) return;
+  if (silent && syncKey === pdfSyncLastFailureKey) return;
 
   try {
     const res = await api(`/api/projects/${app.current.project.id}/synctex`, {
       method: "POST",
+      timeoutMs: silent ? 1700 : 9000,
       body: JSON.stringify({
         file: app.current.openFile,
         line: line.number,
         column,
-        target: getPdfTargetFile(app.current.project.id),
+        target,
+        fast: !!silent,
       }),
     });
+    lastPdfSyncKey = syncKey;
+    pdfSyncLastFailureKey = "";
+    pdfSyncBlockUntil = 0;
     const page = Number(res && res.page);
     const x = Number(res && res.x);
     const y = Number(res && res.y);
@@ -3040,6 +2791,13 @@ async function syncPdfToCursor({ silent = false } = {}) {
     setPdfView({ projectId: app.current.project.id, page, refresh: needsRefresh });
     if (!silent && app.ui.selectRightTab) app.ui.selectRightTab("pdf");
   } catch (e) {
+    if (silent) {
+      const status = Number(e && e.status ? e.status : 0);
+      const cooldown = status === 400 || status === 404 ? 14000 : 7000;
+      pdfSyncLastFailureKey = syncKey;
+      pdfSyncBlockUntil = Date.now() + cooldown;
+      return;
+    }
     if (!silent) alert(e && e.message ? `${t("同步失败")}: ${e.message}` : t("同步失败"));
   }
 }
@@ -3056,16 +2814,74 @@ async function syncPdfFocus() {
 let pdfSyncTimer = null;
 function schedulePdfSync() {
   if (!app.ui.autoSyncPdf) return;
+  if (app.view !== "project" || !app.current.openFile) return;
+  const hasPdfReady = !!(
+    (app.current.artifacts && app.current.artifacts.pdf && app.current.artifacts.pdf.exists) ||
+    app.ui.pdfDoc ||
+    app.ui.pdfDocUrl ||
+    app.ui.pdfTs
+  );
+  if (!hasPdfReady) return;
   if (pdfSyncTimer) clearTimeout(pdfSyncTimer);
   pdfSyncTimer = setTimeout(() => {
     pdfSyncTimer = null;
-    if (!app.compile.inFlight) {
-      syncPdfToCursor({ silent: true }).catch(() => {});
+    if (app.compile.inFlight) return;
+    if (pdfSyncInFlight) {
+      pdfSyncPending = true;
+      return;
     }
+    pdfSyncInFlight = true;
+    syncPdfToCursor({ silent: true })
+      .catch(() => {})
+      .finally(() => {
+        pdfSyncInFlight = false;
+        if (pdfSyncPending) {
+          pdfSyncPending = false;
+          schedulePdfSync();
+        }
+      });
   }, 400);
 }
 
 let historySnapshotTimer = null;
+
+async function loadHistory(filePath, { force = false, limit = 50 } = {}) {
+  const projectId = app.current.project && app.current.project.id;
+  const file = String(filePath || "").trim();
+  if (!projectId || !file) {
+    app.ui.historyFile = file || null;
+    app.ui.historyEntries = [];
+    app.ui.historyError = "";
+    app.ui.historyLoading = false;
+    if (app.ui.refreshHistory) app.ui.refreshHistory();
+    return [];
+  }
+
+  if (!force && app.ui.historyFile === file && app.ui.historyLoading) {
+    return Array.isArray(app.ui.historyEntries) ? app.ui.historyEntries : [];
+  }
+
+  app.ui.historyFile = file;
+  app.ui.historyLoading = true;
+  app.ui.historyError = "";
+  if (app.ui.refreshHistory) app.ui.refreshHistory();
+
+  try {
+    const maxLimit = Math.max(1, Math.min(200, Number(limit) || 50));
+    const res = await api(`/api/projects/${projectId}/history?file=${encodeURIComponent(file)}&limit=${maxLimit}`);
+    const entries = Array.isArray(res && res.entries) ? res.entries : [];
+    app.ui.historyEntries = entries;
+    return entries;
+  } catch (e) {
+    app.ui.historyEntries = [];
+    app.ui.historyError = e && e.message ? e.message : String(e);
+    return [];
+  } finally {
+    app.ui.historyLoading = false;
+    if (app.ui.refreshHistory) app.ui.refreshHistory();
+  }
+}
+
 function scheduleHistorySnapshot(view) {
   if (!app.current.project || !app.current.openFile) return;
   if (!view) return;
@@ -3086,7 +2902,7 @@ function scheduleHistorySnapshot(view) {
     let text = "";
     let hash = null;
     if (!isLarge) {
-      text = view.state.doc.toString();
+      text = readTextForWork(view.state.doc).text;
       hash = hashText(text);
       if (app.ui.historyHashByFile[file] === hash) return;
       app.ui.historyHashByFile[file] = hash;
@@ -3244,130 +3060,6 @@ function updateProblems(diagnostics) {
   if (summaryBox) summaryBox.style.display = summaryText ? "" : "none";
 }
 
-function formatDuration(ms) {
-  if (!Number.isFinite(ms)) return "-";
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  const sec = ms / 1000;
-  if (sec < 60) return `${sec.toFixed(1)}s`;
-  const min = Math.floor(sec / 60);
-  const rem = Math.floor(sec % 60);
-  if (min < 60) return `${min}m${rem}s`;
-  const hr = Math.floor(min / 60);
-  const remMin = min % 60;
-  return `${hr}h${remMin}m`;
-}
-
-function formatTime(iso) {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleTimeString();
-}
-
-function formatMb(mb) {
-  if (!Number.isFinite(mb)) return "-";
-  return `${Math.round(mb)}MB`;
-}
-
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes)) return "-";
-  if (bytes < 1024) return `${bytes}B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)}KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb.toFixed(1)}MB`;
-  return `${(mb / 1024).toFixed(1)}GB`;
-}
-
-function diffLines(aText, bText) {
-  const a = String(aText || "").split(/\r?\n/);
-  const b = String(bText || "").split(/\r?\n/);
-  const max = 2000;
-  if (a.length > max || b.length > max) return { tooLarge: true };
-
-  const n = a.length;
-  const m = b.length;
-  const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
-  for (let i = n - 1; i >= 0; i -= 1) {
-    for (let j = m - 1; j >= 0; j -= 1) {
-      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-
-  const out = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      out.push({ type: "eq", line: a[i] });
-      i += 1;
-      j += 1;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      out.push({ type: "del", line: a[i] });
-      i += 1;
-    } else {
-      out.push({ type: "add", line: b[j] });
-      j += 1;
-    }
-  }
-  while (i < n) out.push({ type: "del", line: a[i++] });
-  while (j < m) out.push({ type: "add", line: b[j++] });
-  return { tooLarge: false, diff: out };
-}
-
-function buildDiffSnippet(diff, { context = 2, maxLines = 400 } = {}) {
-  const out = [];
-  let pre = [];
-  let after = 0;
-  let skipped = false;
-  const pushSkip = () => {
-    if (out.length && out[out.length - 1].type !== "skip") out.push({ type: "skip" });
-  };
-  for (const row of diff) {
-    if (row.type === "eq") {
-      if (after > 0) {
-        out.push(row);
-        after -= 1;
-      } else {
-        pre.push(row);
-        if (pre.length > context) {
-          pre.shift();
-          skipped = true;
-        }
-      }
-      continue;
-    }
-    if (skipped) {
-      pushSkip();
-      skipped = false;
-    }
-    if (pre.length) {
-      for (const r of pre) out.push(r);
-      pre = [];
-    }
-    out.push(row);
-    after = context;
-    if (out.length > maxLines) break;
-  }
-  if (out.length > maxLines) {
-    out.length = maxLines;
-    out.push({ type: "skip" });
-  }
-  return out;
-}
-
-function jobRuntime(job) {
-  const now = Date.now();
-  if (job.status === "running" && job.startedAt) {
-    return formatDuration(now - Date.parse(job.startedAt));
-  }
-  if (job.status === "queued" && job.requestedAt) {
-    return formatDuration(now - Date.parse(job.requestedAt));
-  }
-  if (Number.isFinite(job.durationMs)) return formatDuration(job.durationMs);
-  return "-";
-}
-
 async function loadCompileOverview({ silent = false } = {}) {
   if (!app.me || !app.me.isAdmin) return null;
   try {
@@ -3383,54 +3075,15 @@ async function loadCompileOverview({ silent = false } = {}) {
 }
 
 function buildMonitorBody() {
-  if (!app.me || !app.me.isAdmin) return h("div", { class: "hint", html: t("管理员可见") });
-  const data = app.ui.compileOverview;
-  if (!data) return h("div", { class: "hint", html: t("暂无监控数据") });
-
-  const cap = data.capacity || {};
-  const sys = data.system || {};
-  const usage = data.usage || {};
-  const running = Array.isArray(data.running) ? data.running : [];
-  const queued = Array.isArray(data.queued) ? data.queued : [];
-  const recent = Array.isArray(data.recent) ? data.recent : [];
-
-  const metric = (title, value, sub) =>
-    h("div", { class: "metric-card" }, [
-      h("div", { class: "metric-title", html: title }),
-      h("div", { class: "metric-value", html: value }),
-      sub ? h("div", { class: "metric-sub", html: sub }) : h("div"),
-    ]);
-
-  const jobRow = (job) =>
-    h("div", { class: "job-row", "data-status": job.status || "" }, [
-      h("div", { class: "job-project", html: job.projectId || "-" }),
-      h("div", { class: "job-status", html: compileStatusLabel(job.status || "") }),
-      h("div", { class: "job-mode", html: job.mode || "-" }),
-      h("div", { class: "job-compiler", html: job.compiler || "-" }),
-      h("div", { class: "job-time", html: jobRuntime(job) }),
-    ]);
-
-  return h("div", { class: "monitor-body-inner" }, [
-    sectionTitle(t("编译资源")),
-    h("div", { class: "monitor-grid" }, [
-      metric(t("CPU 核心"), String(cap.cpuCount || "-"), t("最大并行") + ` ${cap.maxJobs || "-"}`),
-      metric(t("内存"), formatMb(cap.totalMemMB), t("空闲内存") + ` ${formatMb(sys.freeMemMB)}`),
-      metric(t("队列"), `${usage.activeCount || 0}/${cap.maxJobs || "-"}`, t("等待中") + ` ${usage.queuedCount || 0}`),
-      metric(t("负载"), (sys.loadavg && sys.loadavg.length ? sys.loadavg.slice(0, 3).map((n) => n.toFixed(2)).join(" ") : "-"), t("运行时长") + ` ${formatDuration((sys.uptimeSec || 0) * 1000)}`),
-    ]),
-    sectionTitle(t("运行中")),
-    h("div", { class: "job-table" }, [
-      ...(running.length ? running.map(jobRow) : [h("div", { class: "hint", html: t("(无)") })]),
-    ]),
-    sectionTitle(t("等待中")),
-    h("div", { class: "job-table" }, [
-      ...(queued.length ? queued.map(jobRow) : [h("div", { class: "hint", html: t("(无)") })]),
-    ]),
-    sectionTitle(t("最近任务")),
-    h("div", { class: "job-table" }, [
-      ...(recent.length ? recent.slice(0, 8).map(jobRow) : [h("div", { class: "hint", html: t("(无)") })]),
-    ]),
-  ]);
+  return buildCompileMonitorBody({
+    app,
+    t,
+    h,
+    formatMb,
+    formatDuration,
+    compileStatusLabel,
+    sectionTitle,
+  });
 }
 
 function updateMonitorView() {
@@ -3457,344 +3110,28 @@ function stopMonitorPolling() {
 }
 
 async function compileProject({ clean = false, mode = "full", origin = "manual" } = {}) {
-  if (app.compile.inFlight) {
-    app.compile.pending = true;
-    app.compile.pendingClean = app.compile.pendingClean || clean;
-    if (mode === "full" || app.compile.pendingMode !== "full") app.compile.pendingMode = mode;
-    if (origin === "manual" || app.compile.pendingOrigin !== "manual") app.compile.pendingOrigin = origin;
-    return;
-  }
-  app.compile.inFlight = true;
-  if (origin !== "auto") {
-    app.ui.autoCompileDirty = false;
-    app.ui.autoCompileDirtyAt = 0;
-    app.ui.lastAutoCompileAt = Date.now();
-  }
-  app.compile.pending = false;
-  app.compile.pendingClean = false;
-  app.compile.pendingMode = "full";
-  app.compile.pendingOrigin = "manual";
-  app.compile.diagnostics = [];
-  app.compile.status = "running";
-  updateProblems([]);
-
-  const projectId = app.current.project.id;
-  await flushActiveFileToDisk();
-  const logEl = document.getElementById("compileLog");
-  const btnEl = document.getElementById("compileBtn");
-  const statusEl = document.getElementById("compileStatus");
-
-  const setStatus = (s) => {
-    app.compile.status = s;
-    if (statusEl) {
-      statusEl.textContent = compileStatusLabel(s);
-      statusEl.dataset.status = s;
-    }
-    if (s === "queued") setCompileStage(t("排队"));
-    if (s === "running") setCompileStage(t("编译中"));
-    if (s === "success") setCompileStage(t("成功"));
-    if (s === "error") setCompileStage(t("失败"));
-  };
-  setStatus("running");
-  app.compile.lastMode = mode;
-  app.compile.lastEngine = app.current.compiler || "";
-  app.compile.lastQueueMs = 0;
-  app.compile.lastDurationMs = 0;
-  app.compile.lastFinishedAt = "";
-  updateCompileMetaView();
-
-  const setBtnRunning = (running) => {
-    if (!btnEl) return;
-    btnEl.disabled = !!running;
-    btnEl.classList.toggle("running", !!running);
-    const labelEl = btnEl.querySelector(".compile-label");
-    if (labelEl) labelEl.textContent = running ? t("编译中") : t("编译");
-  };
-
-  const appendLog = (s) => {
-    if (logEl) {
-      logEl.textContent += s;
-      if (logEl.textContent.length > 2000000) logEl.textContent = logEl.textContent.slice(-2000000);
-      logEl.scrollTop = logEl.scrollHeight;
-    }
-    const bottomLog = document.getElementById("bottomLog");
-    if (bottomLog && app.ui.bottomMode === "log") {
-      bottomLog.textContent += s;
-      if (bottomLog.textContent.length > 2000000) bottomLog.textContent = bottomLog.textContent.slice(-2000000);
-      bottomLog.scrollTop = bottomLog.scrollHeight;
-    }
-    updateCompileStageFromLog(s);
-  };
-
-  const noteDiagnostics = (job) => {
-    const diags = job && Array.isArray(job.diagnostics) ? job.diagnostics : [];
-    if (!diags.length) return false;
-    const first = diags[0] || {};
-    const fp = String(first.file || "");
-    const line = first.line || 1;
-    const msg = first.message || t("错误");
-    appendLog(`${t("[错误] {msg}", { msg: `${fp}:${line} ${msg}` })}\n`);
-    if (diags.length > 1) {
-      appendLog(`${t("[错误] 还有 {n} 条", { n: diags.length - 1 })}\n`);
-    }
-    return true;
-  };
-
-  const focusErrorTab = (job) => {
-    if (!app.ui.selectRightTab) return;
-    if (job && job.status === "error") {
-      const hasDiag = job.diagnostics && job.diagnostics.length > 0;
-      app.ui.selectRightTab(hasDiag ? "problems" : "logs");
-    }
-  };
-  const focusSuccessTab = (job) => {
-    if (!app.ui.selectRightTab) return;
-    if (job && job.status === "success") {
-      app.ui.selectRightTab("pdf");
-    }
-  };
-
-  const refreshPreview = async () => {
-    await refreshPdfArtifacts(projectId, { refresh: true });
-  };
-
-  const pollJob = async (jobId) => {
-    let lastLen = 0;
-    for (let i = 0; i < 600; i++) {
-      const { job } = await api(`/api/jobs/${jobId}`);
-      const log = job && job.log ? String(job.log) : "";
-      if (log && log.length > lastLen) {
-        appendLog(log.slice(lastLen));
-        lastLen = log.length;
-      } else if (log && lastLen === 0) {
-        appendLog(log);
-        lastLen = log.length;
-      }
-      if (job && job.diagnostics) updateProblems(job.diagnostics);
-      if (job && job.status) setStatus(job.status);
-      if (job && job.status && job.status !== "running" && job.status !== "queued") {
-        if (typeof job.queueMs === "number") {
-          appendLog(`${t("[排队耗时] {sec}s", { sec: (job.queueMs / 1000).toFixed(2) })}\n`);
-          app.compile.lastQueueMs = job.queueMs;
-        }
-        if (typeof job.durationMs === "number") {
-          appendLog(`${t("[耗时] {sec}s", { sec: (job.durationMs / 1000).toFixed(2) })}\n`);
-          app.compile.lastDurationMs = job.durationMs;
-        }
-        app.compile.lastFinishedAt = job.finishedAt || "";
-        updateCompileMetaView();
-        noteDiagnostics(job);
-        focusErrorTab(job);
-        focusSuccessTab(job);
-        if (job && job.status === "success") syncPdfTargetToJob(job);
-        if (job && job.status === "error" && app.ui.autoJumpError && job.diagnostics && job.diagnostics.length) {
-          const first = job.diagnostics[0];
-          if (first && first.file) {
-            setTimeout(() => {
-              openFileAt(first.file, first.line || 1).catch(console.error);
-            }, 0);
-          }
-        }
-        await refreshPreview();
-        if (app.ui.autoSyncPdf) schedulePdfSync();
-        return;
-      }
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    throw new Error(t("编译超时(轮询)"));
-  };
-
-  if (app.ui.selectRightTab) app.ui.selectRightTab("logs");
-  setBtnRunning(true);
-  if (logEl) logEl.textContent = "";
-  appendLog(`${t("[开始] 编译中...")}\n`);
-
-  try {
-    const { jobId } = await api(`/api/projects/${projectId}/compile`, {
-      method: "POST",
-      body: JSON.stringify({ clean, mode, origin, mainFile: getPdfTargetFile(projectId) }),
-    });
-    if (app.compile.es) {
-      try { app.compile.es.close(); } catch {}
-      app.compile.es = null;
-    }
-
-    if (typeof EventSource === "undefined") {
-      appendLog(`${t("[提示] EventSource 不可用，改用轮询。")}\n`);
-      await pollJob(jobId);
-      return;
-    }
-
-    const es = new EventSource(`/api/jobs/${jobId}/stream`);
-    app.compile.es = es;
-
-    await new Promise((resolve, reject) => {
-      let finished = false;
-      let jobLogLen = 0;
-      let pollStarted = false;
-      const finalize = async (job) => {
-        if (finished) return;
-        finished = true;
-        setStatus(job.status || "idle");
-        app.compile.diagnostics = job.diagnostics || [];
-        updateProblems(app.compile.diagnostics);
-        if (typeof job.queueMs === "number") {
-          appendLog(`${t("[排队耗时] {sec}s", { sec: (job.queueMs / 1000).toFixed(2) })}\n`);
-          app.compile.lastQueueMs = job.queueMs;
-        }
-        if (typeof job.durationMs === "number") {
-          appendLog(`${t("[耗时] {sec}s", { sec: (job.durationMs / 1000).toFixed(2) })}\n`);
-          app.compile.lastDurationMs = job.durationMs;
-        }
-        app.compile.lastFinishedAt = job.finishedAt || "";
-        updateCompileMetaView();
-        noteDiagnostics(job);
-        focusErrorTab(job);
-        focusSuccessTab(job);
-        if (job && job.status === "error" && app.ui.autoJumpError && job.diagnostics && job.diagnostics.length) {
-          const first = job.diagnostics[0];
-          if (first && first.file) {
-            setTimeout(() => {
-              openFileAt(first.file, first.line || 1).catch(console.error);
-            }, 0);
-          }
-        }
-        await refreshPreview();
-        if (app.ui.autoSyncPdf) schedulePdfSync();
-        try { es.close(); } catch {}
-        app.compile.es = null;
-        resolve();
-      };
-
-      const startPoll = () => {
-        if (pollStarted) return;
-        pollStarted = true;
-        (async () => {
-          for (let i = 0; i < 600 && !finished; i++) {
-            const { job } = await api(`/api/jobs/${jobId}`);
-            if (finished) return;
-            const log = job && job.log ? String(job.log) : "";
-            if (log && log.length > jobLogLen) {
-              appendLog(log.slice(jobLogLen));
-              jobLogLen = log.length;
-            }
-            if (job && job.diagnostics) updateProblems(job.diagnostics);
-            if (job && job.status) setStatus(job.status);
-            if (job && job.status && job.status !== "running" && job.status !== "queued") {
-              await finalize(job);
-              return;
-            }
-            await new Promise((r) => setTimeout(r, 700));
-          }
-          if (!finished) throw new Error(t("编译超时(轮询)"));
-        })().catch(reject);
-      };
-
-      // Fallback watchdog: if SSE is blocked or buffered, start polling.
-      const watchdog = setTimeout(startPoll, 2500);
-
-      es.addEventListener("init", (ev) => {
-        try {
-          const job = JSON.parse(ev.data);
-          if (job.log) {
-            appendLog(job.log);
-            jobLogLen = Math.max(jobLogLen, String(job.log).length);
-          }
-          if (job.diagnostics) updateProblems(job.diagnostics);
-          if (job.status) setStatus(job.status);
-          if (job.status && job.status !== "running" && job.status !== "queued") {
-            finalize(job).catch(reject);
-          }
-        } catch {
-          // ignore
-        }
-      });
-
-      es.addEventListener("status", (ev) => {
-        try {
-          const job = JSON.parse(ev.data);
-          if (job && job.status) setStatus(job.status);
-        } catch {
-          // ignore
-        }
-      });
-
-      es.addEventListener("append", (ev) => {
-        try {
-          const { chunk } = JSON.parse(ev.data);
-          if (chunk) {
-            appendLog(chunk);
-            jobLogLen += String(chunk).length;
-          }
-        } catch {
-          // ignore
-        }
-      });
-
-      es.addEventListener("done", async (ev) => {
-        try {
-          const job = JSON.parse(ev.data);
-          await finalize(job);
-        } catch {
-          // ignore
-        }
-      });
-
-      es.onerror = async () => {
-        try { es.close(); } catch {}
-        app.compile.es = null;
-        clearTimeout(watchdog);
-        try {
-          appendLog(`\n${t("[提示] 流连接断开，改用轮询...")}\n`);
-          startPoll();
-        } catch (e) {
-          reject(e);
-        }
-      };
-
-      es.onopen = () => {
-        clearTimeout(watchdog);
-        // Still start polling in the background if nothing arrives soon.
-        setTimeout(() => {
-          if (!finished && jobLogLen === 0) startPoll();
-        }, 3000);
-      };
-    });
-  } catch (e) {
-    const msg = e && e.message ? String(e.message) : String(e);
-    if (e && e.status === 404 && /main file not found/i.test(msg || "")) {
-      const now = Date.now();
-      if (!app.compile.mainRepairTriedAt || now - app.compile.mainRepairTriedAt > 5000) {
-        app.compile.mainRepairTriedAt = now;
-        appendLog(`\n[fix] ${t("主文件未找到，正在重新选择...")}\n`);
-        try {
-          await loadProject(projectId);
-          if (app.current && app.current.mainFile) {
-            appendLog(`[fix] ${t("已切换主文件")}: ${app.current.mainFile}\n`);
-          }
-          app.compile.pending = true;
-          app.compile.pendingClean = clean;
-          app.compile.pendingMode = mode;
-          app.compile.pendingOrigin = origin;
-          return;
-        } catch {
-          // fall through to error
-        }
-      }
-    }
-    setStatus("error");
-    appendLog(msg ? `\n[error] ${msg}\n` : `\n[error] ${String(e)}\n`);
-  } finally {
-    app.compile.inFlight = false;
-    setBtnRunning(false);
-    if (app.compile.pending) {
-      compileProject({
-        clean: app.compile.pendingClean,
-        mode: app.compile.pendingMode,
-        origin: app.compile.pendingOrigin || "manual",
-      }).catch(console.error);
-    }
-  }
+  return compileProjectController({ clean, mode, origin }, {
+    app,
+    updateProblems,
+    flushActiveFileToDisk,
+    compileStatusLabel,
+    setCompileStage,
+    t,
+    updateCompileMetaView,
+    updateCompileStageFromLog,
+    refreshPdfArtifacts,
+    syncPdfTargetToJob,
+    openFileAt,
+    schedulePdfSync,
+    getPdfTargetFile,
+    loadProject,
+    api,
+    document,
+    EventSource,
+    setTimeout,
+    clearTimeout,
+    console,
+  });
 }
 
 function getEditorSelection() {
@@ -3860,36 +3197,6 @@ function cleanDuplicateParagraphs() {
   view.dispatch({ changes: { from, to, insert: text } });
   view.focus();
   alert(t("已清理重复段落 {n} 处", { n: removed }));
-}
-
-function normalizeWhitespace(text) {
-  return String(text || "")
-    .replace(/\r/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function dedupeParagraphs(text) {
-  const raw = String(text || "");
-  const blocks = raw.split(/\n{2,}/);
-  const out = [];
-  let removed = 0;
-  let lastNorm = null;
-  for (const block of blocks) {
-    const norm = normalizeWhitespace(block);
-    if (!norm) {
-      out.push(block);
-      lastNorm = null;
-      continue;
-    }
-    if (norm === lastNorm) {
-      removed += 1;
-      continue;
-    }
-    out.push(block);
-    lastNorm = norm;
-  }
-  return { text: out.join("\n\n"), removed };
 }
 
 async function compareHistoryItem(entry) {
@@ -3958,70 +3265,19 @@ async function compareHistoryItem(entry) {
 }
 
 function renderHistoryView() {
-  const container = h("div", { class: "history-panel", id: "historyPanel" });
-
-  const draw = () => {
-    container.innerHTML = "";
-    const file = app.ui.historyFile || app.current.openFile;
-
-    const header = h("div", { class: "history-header" }, [
-      h("div", { class: "history-title", html: t("历史") }),
-      h("div", { class: "history-file", html: file || t("请先打开文件。"), title: file || "" }),
-      btn(t("刷新"), {
-        kind: "tiny",
-        onClick: () => {
-          if (!file) return;
-          loadHistory(file, { force: true }).catch(console.error);
-        },
-      }),
-    ]);
-
-    container.appendChild(header);
-
-    if (!file) {
-      container.appendChild(h("div", { class: "hint history-empty", html: t("请先打开文件。") }));
-      return;
-    }
-    if (app.ui.historyLoading) {
-      container.appendChild(h("div", { class: "hint history-empty", html: t("加载中...") }));
-      return;
-    }
-    const entries = Array.isArray(app.ui.historyEntries) ? app.ui.historyEntries : [];
-    if (app.ui.historyError) {
-      container.appendChild(h("div", { class: "hint history-empty", html: `${t("历史记录加载失败")}: ${app.ui.historyError}` }));
-      return;
-    }
-    if (!entries.length) {
-      container.appendChild(h("div", { class: "hint history-empty", html: t("暂无历史记录") }));
-      return;
-    }
-
-    const list = h("div", { class: "history-list" });
-    for (const entry of entries.slice(0, 60)) {
-      const meta = h("div", { class: "history-meta" }, [
-        h("div", { class: "history-time", html: entry.ts ? new Date(entry.ts).toLocaleString() : "-" }),
-        h("div", {
-          class: "history-sub",
-          html: `${entry.user || "-"} · ${formatBytes(entry.size || 0)}`,
-        }),
-      ]);
-      const row = h("div", { class: "history-row" }, [
-        meta,
-        h("div", { class: "history-actions" }, [
-          btn(t("查看"), { kind: "tiny", onClick: () => viewHistoryItem(entry) }),
-          btn(t("对比"), { kind: "tiny", onClick: () => compareHistoryItem(entry) }),
-          btn(t("恢复"), { kind: "tiny", onClick: () => restoreHistoryItem(entry) }),
-        ]),
-      ]);
-      list.appendChild(row);
-    }
-    container.appendChild(list);
-  };
-
-  draw();
-  app.ui.refreshHistory = draw;
-  return container;
+  return renderHistoryPanel({
+    h,
+    app,
+    t,
+    btn,
+    loadHistory,
+    viewHistoryItem,
+    compareHistoryItem,
+    restoreHistoryItem,
+    formatBytes,
+  });
 }
+
 
 function showGoToLine() {
   if (app.view !== "project") return;
@@ -4054,1271 +3310,133 @@ function showGoToLine() {
 }
 
 function showQuickOutline() {
-  if (app.view !== "project") return;
-  if (!app.current.openFile) return alert(t("请先打开文件。"));
-  const outline = Array.isArray(app.current.outline) ? app.current.outline.slice() : [];
-  if (!outline.length) return alert(t("(未找到章节)"));
-
-  const query = h("input", { class: "input", placeholder: t("大纲跳转") });
-  query.autocomplete = "off";
-  const list = h("div", { class: "quick-list" });
-  const hint = h("div", { class: "quick-hint", html: t("回车打开，Esc 关闭") });
-
-  let results = [];
-  let selected = 0;
-
-  const appendHighlighted = (el, text, q) => {
-    if (!q) {
-      el.textContent = text;
-      return;
-    }
-    const lower = text.toLowerCase();
-    const idx = lower.indexOf(q.toLowerCase());
-    if (idx === -1) {
-      el.textContent = text;
-      return;
-    }
-    el.appendChild(document.createTextNode(text.slice(0, idx)));
-    const mark = h("span", { class: "quick-mark" });
-    mark.textContent = text.slice(idx, idx + q.length);
-    el.appendChild(mark);
-    el.appendChild(document.createTextNode(text.slice(idx + q.length)));
-  };
-
-  const renderResults = () => {
-    const q = query.value.trim().toLowerCase();
-    const scored = outline
-      .map((item, idx) => {
-        const hay = `${item.title} ${item.kind}`.toLowerCase();
-        const pos = q ? hay.indexOf(q) : 0;
-        if (q && pos === -1) return null;
-        return { item, score: q ? pos : idx };
-      })
-      .filter(Boolean)
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 40);
-
-    results = scored.map((x) => x.item);
-    if (selected >= results.length) selected = results.length - 1;
-    if (selected < 0) selected = 0;
-
-    list.innerHTML = "";
-    if (!results.length) {
-      list.appendChild(h("div", { class: "hint", html: t("(无结果)") }));
-      return;
-    }
-
-    results.forEach((item, idx) => {
-      const row = h("div", { class: `quick-item ${idx === selected ? "active" : ""}`.trim() });
-      const meta = h("div", { class: "quick-meta" });
-      const name = h("div", { class: "quick-name" });
-      appendHighlighted(name, item.title || "(untitled)", query.value.trim());
-      meta.appendChild(name);
-      meta.appendChild(h("div", { class: "quick-path", html: `${item.kind} · ${t("行")} ${item.line}` }));
-      row.appendChild(meta);
-      row.addEventListener("click", async () => {
-        closeModal();
-        await openFileAt(app.current.openFile, item.line);
-      });
-      list.appendChild(row);
-    });
-  };
-
-  const moveSelection = (delta) => {
-    if (!results.length) return;
-    selected = Math.max(0, Math.min(results.length - 1, selected + delta));
-    const items = list.querySelectorAll(".quick-item");
-    items.forEach((el, idx) => el.classList.toggle("active", idx === selected));
-    const active = items[selected];
-    if (active) active.scrollIntoView({ block: "nearest" });
-  };
-
-  query.addEventListener("input", () => {
-    selected = 0;
-    renderResults();
+  showQuickOutlineDialog({
+    app,
+    h,
+    t,
+    showModal,
+    closeModal,
+    openFileAt,
   });
-  query.addEventListener("keydown", (ev) => {
-    if (ev.key === "ArrowDown") {
-      ev.preventDefault();
-      moveSelection(1);
-    } else if (ev.key === "ArrowUp") {
-      ev.preventDefault();
-      moveSelection(-1);
-    } else if (ev.key === "Enter") {
-      ev.preventDefault();
-      const item = results[selected];
-      if (item) {
-        closeModal();
-        openFileAt(app.current.openFile, item.line).catch(console.error);
-      }
-    } else if (ev.key === "Escape") {
-      ev.preventDefault();
-      closeModal();
-    }
-  });
-
-  const body = h("div", { class: "quick-body" }, [query, list, hint]);
-  showModal({ title: t("大纲跳转"), bodyEl: body, actions: [] });
-  renderResults();
-  setTimeout(() => query.focus(), 0);
 }
+
 
 function showQuickOpen() {
-  if (app.view !== "project") return;
-  const allFiles = Array.isArray(app.current.tree)
-    ? app.current.tree.filter((p) => !isFolderPlaceholder(p))
-    : [];
-  const recents = Array.isArray(app.ui.openFiles) ? app.ui.openFiles : [];
-
-  const query = h("input", { class: "input", placeholder: t("输入过滤文件...") });
-  query.autocomplete = "off";
-  const list = h("div", { class: "quick-list" });
-  const hint = h("div", { class: "quick-hint", html: t("回车打开，Esc 关闭") });
-
-  let results = [];
-  let selected = 0;
-
-  const scorePath = (path, q) => {
-    if (!q) return 0;
-    const p = path.toLowerCase();
-    const qq = q.toLowerCase();
-    const idx = p.indexOf(qq);
-    if (idx !== -1) return idx;
-    let pi = 0;
-    let qi = 0;
-    let score = 0;
-    while (pi < p.length && qi < qq.length) {
-      if (p[pi] === qq[qi]) {
-        score += pi;
-        qi += 1;
-      }
-      pi += 1;
-    }
-    if (qi !== qq.length) return Number.POSITIVE_INFINITY;
-    return 1000 + score;
-  };
-
-  const appendHighlighted = (el, text, q) => {
-    if (!q) {
-      el.textContent = text;
-      return;
-    }
-    const lower = text.toLowerCase();
-    const idx = lower.indexOf(q.toLowerCase());
-    if (idx === -1) {
-      el.textContent = text;
-      return;
-    }
-    el.appendChild(document.createTextNode(text.slice(0, idx)));
-    const mark = h("span", { class: "quick-mark" });
-    mark.textContent = text.slice(idx, idx + q.length);
-    el.appendChild(mark);
-    el.appendChild(document.createTextNode(text.slice(idx + q.length)));
-  };
-
-  const renderResults = () => {
-    const q = query.value.trim();
-    const scored = allFiles
-      .map((p) => {
-        const s = scorePath(p, q);
-        const boost = recents.includes(p) ? -50 : 0;
-        return { path: p, score: s + boost };
-      })
-      .filter((x) => Number.isFinite(x.score))
-      .sort((a, b) => a.score - b.score)
-      .slice(0, 30);
-
-    results = scored.map((x) => x.path);
-    if (selected >= results.length) selected = results.length - 1;
-    if (selected < 0) selected = 0;
-
-    list.innerHTML = "";
-    if (results.length === 0) {
-      list.appendChild(h("div", { class: "hint", html: t("(无结果)") }));
-      return;
-    }
-
-    results.forEach((fp, idx) => {
-      const base = fp.split("/").pop() || fp;
-      const dir = fp.includes("/") ? fp.slice(0, fp.lastIndexOf("/")) : "";
-      const row = h("div", { class: `quick-item ${idx === selected ? "active" : ""}`.trim() });
-      const meta = h("div", { class: "quick-meta" });
-      const name = h("div", { class: "quick-name" });
-      appendHighlighted(name, base, q);
-      meta.appendChild(name);
-      if (dir) meta.appendChild(h("div", { class: "quick-path", html: dir }));
-      row.appendChild(meta);
-      if (recents.includes(fp)) row.appendChild(h("div", { class: "quick-tag", html: t("已打开") }));
-      row.addEventListener("click", async () => {
-        closeModal();
-        await openFile(fp);
-      });
-      list.appendChild(row);
-    });
-  };
-
-  const moveSelection = (delta) => {
-    if (!results.length) return;
-    selected = Math.max(0, Math.min(results.length - 1, selected + delta));
-    const items = list.querySelectorAll(".quick-item");
-    items.forEach((el, idx) => el.classList.toggle("active", idx === selected));
-    const active = items[selected];
-    if (active) active.scrollIntoView({ block: "nearest" });
-  };
-
-  query.addEventListener("input", () => {
-    selected = 0;
-    renderResults();
+  showQuickOpenDialog({
+    app,
+    h,
+    t,
+    isFolderPlaceholder,
+    showModal,
+    closeModal,
+    openFile,
   });
-  query.addEventListener("keydown", (ev) => {
-    if (ev.key === "ArrowDown") {
-      ev.preventDefault();
-      moveSelection(1);
-    } else if (ev.key === "ArrowUp") {
-      ev.preventDefault();
-      moveSelection(-1);
-    } else if (ev.key === "Enter") {
-      ev.preventDefault();
-      const fp = results[selected];
-      if (fp) {
-        closeModal();
-        openFile(fp).catch(console.error);
-      }
-    } else if (ev.key === "Escape") {
-      ev.preventDefault();
-      closeModal();
-    }
-  });
-
-  const body = h("div", { class: "quick-body" }, [query, list, hint]);
-  showModal({ title: t("快速打开"), bodyEl: body, actions: [] });
-  renderResults();
-  setTimeout(() => query.focus(), 0);
 }
+
 
 function showProjectSearch() {
-  if (app.view !== "project") return;
-  const projectId = app.current.project && app.current.project.id;
-  if (!projectId) return;
-
-  const query = h("input", { class: "input", placeholder: t("搜索关键词...") });
-  query.autocomplete = "off";
-
-  const regexToggle = h("label", { class: "toggle" }, [
-    h("input", { type: "checkbox" }),
-    h("span", { html: t("正则") }),
-  ]);
-  const regexInput = regexToggle.querySelector("input");
-  const caseToggle = h("label", { class: "toggle" }, [
-    h("input", { type: "checkbox" }),
-    h("span", { html: t("大小写敏感") }),
-  ]);
-  const caseInput = caseToggle.querySelector("input");
-
-  const scopeSelect = h(
-    "select",
-    { class: "input search-scope", value: "tex" },
-    [
-      h("option", { value: "tex", html: t("仅 TeX") }),
-      h("option", { value: "texbib", html: t("TeX + 参考文献") }),
-      h("option", { value: "texbibstyle", html: t("TeX + Bib + 样式") }),
-      h("option", { value: "all", html: t("全部文件") }),
-    ]
-  );
-
-  const meta = h("div", { class: "search-meta hint" });
-  const results = h("div", { class: "search-results" });
-
-  const scopeToExts = (scope) => {
-    if (scope === "tex") return [".tex"];
-    if (scope === "texbib") return [".tex", ".bib"];
-    if (scope === "texbibstyle") return [".tex", ".bib", ".sty", ".cls", ".bst", ".bbx", ".cbx", ".dbx"];
-    return [];
-  };
-
-  const appendHighlighted = (el, text, q, useRegex, cs) => {
-    if (!q) {
-      el.textContent = text;
-      return;
-    }
-    let re = null;
-    try {
-      const flags = cs ? "g" : "gi";
-      re = new RegExp(useRegex ? q : escapeRegExp(q), flags);
-    } catch {
-      el.textContent = text;
-      return;
-    }
-    let last = 0;
-    let m;
-    while ((m = re.exec(text))) {
-      if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
-      const mark = h("span", { class: "search-mark" });
-      mark.textContent = m[0] || "";
-      el.appendChild(mark);
-      last = m.index + (m[0] || "").length;
-      if (m.index === re.lastIndex) re.lastIndex += 1;
-      if (last >= text.length) break;
-    }
-    if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
-  };
-
-  let token = 0;
-  const runSearch = async () => {
-    const q = query.value.trim();
-    if (!q) {
-      meta.textContent = t("搜索关键词...");
-      results.innerHTML = "";
-      return;
-    }
-    const myToken = ++token;
-    meta.textContent = t("正在搜索...");
-    results.innerHTML = "";
-    try {
-      const payload = {
-        query: q,
-        regex: regexInput && regexInput.checked,
-        caseSensitive: caseInput && caseInput.checked,
-        exts: scopeToExts(scopeSelect.value),
-        limit: 300,
-      };
-      const res = await api(`/api/projects/${projectId}/search`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      if (myToken !== token) return;
-      const list = Array.isArray(res && res.results) ? res.results : [];
-      if (!list.length) {
-        results.appendChild(h("div", { class: "hint", html: t("未找到结果") }));
-      } else {
-        for (const r of list) {
-          const row = h("div", { class: "search-row" });
-          const left = h("div", { class: "search-main" });
-          const title = h("div", { class: "search-title" });
-          title.textContent = `${r.file}:${r.line}`;
-          const snippet = h("div", { class: "search-snippet" });
-          appendHighlighted(snippet, r.preview || "", q, payload.regex, payload.caseSensitive);
-          left.appendChild(title);
-          left.appendChild(snippet);
-          row.appendChild(left);
-          row.appendChild(
-            btn(t("打开"), {
-              kind: "tiny",
-              onClick: async () => {
-                closeModal();
-                await openFileAt(r.file, r.line);
-              },
-            })
-          );
-          results.appendChild(row);
-        }
-      }
-      const msg = t("搜索完成：{n} 条结果 / 扫描 {m} 个文件", {
-        n: list.length,
-        m: res && Number.isFinite(res.scanned) ? res.scanned : 0,
-      });
-      meta.textContent = res && res.truncated ? `${msg} · ${t("搜索被截断")}` : msg;
-    } catch (e) {
-      if (myToken !== token) return;
-      meta.textContent = e && e.message ? e.message : String(e);
-    }
-  };
-
-  query.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") {
-      ev.preventDefault();
-      runSearch();
-    } else if (ev.key === "Escape") {
-      ev.preventDefault();
-      closeModal();
-    }
+  showProjectSearchDialog({
+    app,
+    h,
+    t,
+    escapeRegExp,
+    api,
+    btn,
+    closeModal,
+    showModal,
+    openFileAt,
   });
-
-  const controls = h("div", { class: "search-controls" }, [
-    query,
-    btn(t("搜索"), { kind: "primary", onClick: runSearch }),
-  ]);
-  const options = h("div", { class: "search-options" }, [
-    h("div", { class: "label", html: t("范围") }),
-    scopeSelect,
-    regexToggle,
-    caseToggle,
-  ]);
-
-  const body = h("div", { class: "search-body" }, [controls, options, meta, results]);
-  showModal({ title: t("项目搜索"), bodyEl: body, actions: [] });
-  setTimeout(() => query.focus(), 0);
 }
 
-function detectDelimiter(line) {
-  if (line.includes("\t")) return "\t";
-  if (line.includes(";") && !line.includes(",")) return ";";
-  return ",";
-}
 
-function parseTable(text) {
-  const raw = String(text || "").trim();
-  if (!raw) return [];
-  const lines = raw.split(/\r?\n/).filter((l) => l.trim());
-  if (!lines.length) return [];
-  const delim = detectDelimiter(lines[0]);
-  return lines.map((l) => l.split(delim).map((v) => v.trim()));
-}
-
-function isNumeric(val) {
-  if (val === null || val === undefined) return false;
-  const s = String(val).trim();
-  if (!s) return false;
-  return Number.isFinite(Number(s));
-}
-
-function generatePgfplots({
-  type,
-  table,
-  header,
-  xlabel,
-  ylabel,
-  title,
-  caption,
-  label,
-  theme = "default",
-  smooth = false,
-  stacked = false,
-}) {
-  if (!table.length) return "";
-  let rows = table;
-  let seriesNames = [];
-  if (header) {
-    const head = rows[0];
-    rows = rows.slice(1);
-    seriesNames = head.slice(1).filter(Boolean);
-  }
-  if (!rows.length) return "";
-  const xVals = rows.map((r) => r[0]);
-  const xIsNumeric = xVals.every((x) => isNumeric(x));
-  const seriesCount = Math.max(1, rows[0].length - 1);
-  if (!seriesNames.length) {
-    seriesNames = Array.from({ length: seriesCount }, (_, i) => `Series ${i + 1}`);
-  }
-
-  const palettes = {
-    default: ["blue!70!black", "red!70!black", "green!60!black", "magenta!70!black", "cyan!60!black", "black"],
-    vivid: ["blue", "red", "green", "magenta", "cyan", "black"],
-    mono: ["black", "black!70", "black!55", "black!40", "black!25"],
-  };
-  const palette = palettes[theme] || palettes.default;
-  const pickColor = (idx) => palette[idx % palette.length];
-
-  const axis = [];
-  axis.push("width=0.9\\\\linewidth");
-  axis.push("height=0.55\\\\linewidth");
-  if (xlabel) axis.push(`xlabel={${xlabel}}`);
-  if (ylabel) axis.push(`ylabel={${ylabel}}`);
-  if (title) axis.push(`title={${title}}`);
-  axis.push("grid=both");
-  axis.push("tick style={black!60}");
-  axis.push("label style={font=\\\\small}");
-  axis.push("legend style={font=\\\\small}");
-  if (type === "bar") {
-    axis.push(stacked ? "ybar stacked" : "ybar");
-    axis.push("bar width=12pt");
-    axis.push("enlarge x limits=0.15");
-  }
-  if (!xIsNumeric) {
-    const uniq = [];
-    const seen = new Set();
-    for (const x of xVals) {
-      const s = String(x).trim();
-      if (!s || seen.has(s)) continue;
-      seen.add(s);
-      uniq.push(s);
-    }
-    if (uniq.length) {
-      axis.push(`symbolic x coords={${uniq.join(",")}}`);
-      axis.push("xtick=data");
-    }
-  }
-  if (seriesNames.length > 1) {
-    axis.push("legend style={at={(0.5,-0.22)},anchor=north,legend columns=2}");
-  }
-
-  const lines = [];
-  lines.push("\\\\begin{figure}[t]");
-  lines.push("  \\\\centering");
-  lines.push("  \\\\begin{tikzpicture}");
-  lines.push(`    \\\\begin{axis}[${axis.join(", ")}]`);
-
-  for (let s = 0; s < seriesCount; s += 1) {
-    const coords = [];
-    for (const r of rows) {
-      if (!r.length) continue;
-      const x = r[0];
-      const y = r[s + 1];
-      if (x === undefined || y === undefined || String(y).trim() === "") continue;
-      coords.push(`(${x},${y})`);
-    }
-    const color = pickColor(s);
-    const styleParts = [];
-    if (type === "bar") {
-      styleParts.push(`fill=${color}`, "draw=none");
-      if (stacked) styleParts.push("area legend");
-    } else {
-      styleParts.push(`color=${color}`);
-      if (type === "scatter") {
-        styleParts.push("only marks", "mark=*");
-      } else {
-        styleParts.push("mark=*");
-        if (smooth) styleParts.push("smooth");
-      }
-      styleParts.push("line width=1pt");
-    }
-    const style = styleParts.join(", ");
-    lines.push(`      \\\\addplot+[${style}] coordinates {`);
-    lines.push(`        ${coords.join(" ")}`);
-    lines.push("      };");
-    if (seriesNames[s]) lines.push(`      \\\\addlegendentry{${seriesNames[s]}}`);
-  }
-
-  lines.push("    \\\\end{axis}");
-  lines.push("  \\\\end{tikzpicture}");
-  if (caption) lines.push(`  \\\\caption{${caption}}`);
-  if (label) lines.push(`  \\\\label{${label}}`);
-  lines.push("\\\\end{figure}");
-  return lines.join("\n");
-}
 
 function showChartBuilder() {
-  if (app.view !== "project") return;
-  const typeSelect = h("select", { class: "input" }, [
-    h("option", { value: "line", html: t("折线图") }),
-    h("option", { value: "bar", html: t("柱状图") }),
-    h("option", { value: "scatter", html: t("散点图") }),
-  ]);
-  const styleSelect = h("select", { class: "input" }, [
-    h("option", { value: "default", html: t("默认") }),
-    h("option", { value: "vivid", html: t("鲜明") }),
-    h("option", { value: "mono", html: t("灰度") }),
-  ]);
-  const headerToggle = h("label", { class: "toggle" }, [
-    h("input", { type: "checkbox" }),
-    h("span", { html: t("首行标题") }),
-  ]);
-  const smoothInput = h("input", { type: "checkbox" });
-  const smoothToggle = h("label", { class: "toggle" }, [
-    smoothInput,
-    h("span", { html: t("平滑曲线") }),
-  ]);
-  const stackedInput = h("input", { type: "checkbox" });
-  const stackedToggle = h("label", { class: "toggle" }, [
-    stackedInput,
-    h("span", { html: t("堆叠柱") }),
-  ]);
-  const dataInput = h("textarea", {
-    class: "textarea",
-    placeholder: "x,SeriesA,SeriesB\n1,2,3\n2,4,5\n3,6,7",
+  showChartBuilderDialog({
+    isProjectView: app.view === "project",
+    h,
+    t,
+    btn,
+    showModal,
+    closeModal,
+    insertSnippet,
+    parseTable,
+    generatePgfplots,
   });
-  const xlabelInput = h("input", { class: "input", placeholder: t("X 轴") });
-  const ylabelInput = h("input", { class: "input", placeholder: t("Y 轴") });
-  const titleInput = h("input", { class: "input", placeholder: t("图标题") });
-  const captionInput = h("input", { class: "input", placeholder: t("图注") });
-  const labelInput = h("input", { class: "input", placeholder: "fig:chart" });
-  const output = h("textarea", { class: "textarea", placeholder: t("输出将显示在这里...") });
-  output.readOnly = true;
-
-  const generate = () => {
-    const table = parseTable(dataInput.value);
-    const code = generatePgfplots({
-      type: typeSelect.value,
-      table,
-      header: !!headerToggle.querySelector("input").checked,
-      theme: styleSelect.value,
-      smooth: !!smoothInput.checked,
-      stacked: !!stackedInput.checked,
-      xlabel: xlabelInput.value.trim(),
-      ylabel: ylabelInput.value.trim(),
-      title: titleInput.value.trim(),
-      caption: captionInput.value.trim(),
-      label: labelInput.value.trim(),
-    });
-    output.value = code;
-  };
-
-  const insertBtn = btn(t("插入"), {
-    kind: "primary",
-    onClick: () => {
-      if (!output.value) generate();
-      if (!output.value) return;
-      insertSnippet(`\n${output.value}\n`);
-      closeModal();
-    },
-  });
-  const copyBtn = btn(t("复制代码"), {
-    kind: "tiny",
-    onClick: async () => {
-      if (!output.value) generate();
-      if (!output.value) return;
-      try {
-        await navigator.clipboard.writeText(output.value);
-      } catch {
-        // ignore
-      }
-    },
-  });
-
-  const updateToggles = () => {
-    smoothInput.disabled = typeSelect.value !== "line";
-    stackedInput.disabled = typeSelect.value !== "bar";
-  };
-  typeSelect.addEventListener("change", updateToggles);
-  updateToggles();
-
-  const body = h("div", { class: "chart-body" }, [
-    h("div", { class: "label", html: t("图表类型") }),
-    typeSelect,
-    h("div", { class: "label", html: t("图表风格") }),
-    styleSelect,
-    h("div", { class: "chart-toggles" }, [headerToggle, smoothToggle, stackedToggle]),
-    h("div", { class: "label", html: t("数据") }),
-    dataInput,
-    h("div", { class: "chart-grid" }, [xlabelInput, ylabelInput, titleInput, captionInput, labelInput]),
-    h("div", { class: "hint", html: t("需要在导言区引入 pgfplots") }),
-    h("div", { class: "chart-actions" }, [
-      btn(t("生成"), { kind: "primary", onClick: generate }),
-      copyBtn,
-    ]),
-    output,
-  ]);
-
-  showModal({ title: t("图表生成"), bodyEl: body, actions: [insertBtn] });
-}
-
-function buildFigureSnippet({ filePath, width, caption, label }) {
-  const widthVal = width && width.trim() ? width.trim() : "0.8\\linewidth";
-  const lines = [
-    "\\begin{figure}[t]",
-    "  \\centering",
-    `  \\includegraphics[width=${widthVal}]{${filePath}}`,
-  ];
-  if (caption && caption.trim()) lines.push(`  \\caption{${caption.trim()}}`);
-  if (label && label.trim()) lines.push(`  \\label{${label.trim()}}`);
-  lines.push("\\end{figure}");
-  return lines.join("\n");
 }
 
 function showImageInsert() {
-  if (app.view !== "project") return;
-  const files = listImageFiles(app.current.tree || []);
-  const filterInput = h("input", { class: "input", placeholder: t("筛选文件...") });
-  const widthInput = h("input", { class: "input", value: "0.8\\linewidth" });
-  const captionInput = h("input", { class: "input", placeholder: t("图注") });
-  const labelInput = h("input", { class: "input", placeholder: "fig:label" });
-  const fileList = h("div", { class: "file-list" });
-  const hint = h("div", { class: "hint", html: files.length ? "" : t("暂无图片文件") });
-  let selected = files[0] || "";
-
-  const renderList = () => {
-    fileList.innerHTML = "";
-    const q = filterInput.value.trim().toLowerCase();
-    const items = q ? files.filter((f) => f.toLowerCase().includes(q)) : files;
-    if (!items.length) {
-      fileList.appendChild(h("div", { class: "hint", html: t("(无匹配文件)") }));
-      return;
-    }
-    for (const fp of items.slice(0, 160)) {
-      const row = h("button", {
-        class: `file-item${fp === selected ? " active" : ""}`.trim(),
-        title: fp,
-        onclick: () => {
-          selected = fp;
-          renderList();
-        },
-      });
-      row.textContent = fp;
-      fileList.appendChild(row);
-    }
-  };
-  filterInput.addEventListener("input", renderList);
-  renderList();
-
-  const body = h("div", { class: "insert-image" }, [
-    h("div", { class: "label", html: t("选择图片") }),
-    filterInput,
-    fileList,
-    hint,
-    h("div", { class: "label", html: t("插入设置") }),
-    h("div", { class: "chart-grid" }, [widthInput, captionInput, labelInput]),
-  ]);
-
-  const insertBtn = btn(t("插入"), {
-    kind: "primary",
-    onClick: () => {
-      if (!selected) return;
-      const snippet = buildFigureSnippet({
-        filePath: selected,
-        width: widthInput.value,
-        caption: captionInput.value,
-        label: labelInput.value,
-      });
-      insertSnippet(`\n${snippet}\n`);
-      closeModal();
-    },
+  showImageInsertDialog({
+    isProjectView: app.view === "project",
+    files: listImageFiles(app.current.tree || []),
+    h,
+    t,
+    btn,
+    showModal,
+    closeModal,
+    insertSnippet,
+    buildFigureSnippet,
   });
-
-  showModal({ title: t("插入图片"), bodyEl: body, actions: [insertBtn] });
 }
 
 function renderRecentFiles() {
-  const list = Array.isArray(app.ui.openFiles) ? app.ui.openFiles.slice(0, 6) : [];
-  if (!list.length) return null;
-  const wrap = h("div", { class: "recent-files" });
-  wrap.appendChild(h("div", { class: "recent-title", html: t("最近文件") }));
-  const items = h("div", { class: "recent-list" });
-  for (const fp of list) {
-    const name = fileBaseName(fp);
-    const row = h("button", {
-      class: "recent-item",
-      title: fp,
-      onclick: () => openFile(fp).catch(console.error),
-    });
-    row.appendChild(h("span", { class: "recent-name", html: name }));
-    row.appendChild(h("span", { class: "recent-path", html: fp }));
-    items.appendChild(row);
-  }
-  wrap.appendChild(items);
-  return wrap;
+  return renderRecentFilesPanel({
+    app,
+    h,
+    t,
+    fileBaseName,
+    openFile,
+  });
 }
+
 
 function renderPinnedFiles() {
-  const list = Array.isArray(app.ui.pinnedFiles) ? app.ui.pinnedFiles.slice(0, 10) : [];
-  if (!list.length) return null;
-  const wrap = h("div", { class: "pinned-files", id: "pinnedFiles" });
-  wrap.appendChild(h("div", { class: "recent-title", html: t("置顶文件") }));
-  const items = h("div", { class: "recent-list" });
-  for (const fp of list) {
-    const name = fileBaseName(fp);
-    const row = h("div", { class: "pinned-item" }, [
-      h("button", {
-        class: "recent-item",
-        title: fp,
-        onclick: () => openFile(fp).catch(console.error),
-      }, [
-        h("span", { class: "recent-name", html: name }),
-        h("span", { class: "recent-path", html: fp }),
-      ]),
-      btn(t("取消置顶"), { kind: "tiny", onClick: () => togglePinnedFile(fp) }),
-    ]);
-    items.appendChild(row);
-  }
-  wrap.appendChild(items);
-  app.ui.refreshPinnedFiles = () => {
-    const next = renderPinnedFiles();
-    if (!next) {
-      wrap.remove();
-      return;
-    }
-    wrap.replaceWith(next);
-  };
-  return wrap;
+  return renderPinnedFilesPanel({
+    app,
+    h,
+    t,
+    btn,
+    fileBaseName,
+    openFile,
+    togglePinnedFile,
+  });
 }
 
-function isPathUnderPrefix(path, prefix) {
-  if (!path || !prefix) return false;
-  if (path === prefix) return true;
-  return path.startsWith(`${prefix}/`);
-}
-
-function remapPathPrefix(path, fromPrefix, toPrefix) {
-  const from = String(fromPrefix || "").replace(/\/+$/, "");
-  const to = String(toPrefix || "").replace(/\/+$/, "");
-  if (!from) return path;
-  if (path === from) return to;
-  if (path.startsWith(`${from}/`)) return to + path.slice(from.length);
-  return path;
-}
-
-function remapPathList(list, fromPrefix, toPrefix) {
-  const out = [];
-  const seen = new Set();
-  for (const p of list || []) {
-    const next = remapPathPrefix(p, fromPrefix, toPrefix);
-    if (!next || seen.has(next)) continue;
-    seen.add(next);
-    out.push(next);
-  }
-  return out;
-}
-
-function filterPathList(list, prefix) {
-  return (list || []).filter((p) => !isPathUnderPrefix(p, prefix));
-}
-
-function remapPathSet(set, fromPrefix, toPrefix) {
-  const out = new Set();
-  for (const p of set || []) {
-    const next = remapPathPrefix(p, fromPrefix, toPrefix);
-    if (next) out.add(next);
-  }
-  return out;
-}
-
-function filterPathSet(set, prefix) {
-  const out = new Set();
-  for (const p of set || []) {
-    if (!isPathUnderPrefix(p, prefix)) out.add(p);
-  }
-  return out;
-}
-
-function normalizeTagList(value) {
-  if (Array.isArray(value)) {
-    return Array.from(new Set(value.map((v) => String(v || "").trim()).filter(Boolean)));
-  }
-  if (!value) return [];
-  const raw = String(value || "");
-  const parts = raw.split(/[,，;；]/).map((v) => v.trim()).filter(Boolean);
-  return Array.from(new Set(parts)).slice(0, 20);
-}
-
-function formatTagList(tags) {
-  const list = Array.isArray(tags) ? tags : normalizeTagList(tags || "");
-  return list.filter(Boolean);
-}
-
-function projectMatchesFilter(project, filterText, category) {
-  if (!project) return false;
-  const cat = String(category || "all");
-  if (cat && cat !== "all") {
-    if (String(project.category || "") !== cat) return false;
-  }
-  const q = String(filterText || "").trim().toLowerCase();
-  if (!q) return true;
-  const tags = formatTagList(project.tags || []).join(" ").toLowerCase();
-  const hay = [
-    project.name,
-    project.id,
-    project.owner,
-    project.category,
-    tags,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return hay.includes(q);
-}
-
-function projectMatchesScope(project, scope, me) {
-  if (!project) return false;
-  const mode = String(scope || "all");
-  if (mode === "mine") return !!me && project.owner === me.username;
-  if (mode === "shared") return !!me && project.owner !== me.username;
-  return true;
-}
-
-function formatProjectAge(project) {
-  const stamp = project && (project.updatedAt || project.createdAt);
-  const ts = stamp ? Date.parse(stamp) : NaN;
-  if (!Number.isFinite(ts)) return "";
-  const diff = Math.max(0, Date.now() - ts);
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return t("刚刚");
-  if (mins < 60) return t("{n}分钟", { n: mins });
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return t("{n}小时", { n: hours });
-  const days = Math.floor(hours / 24);
-  if (days < 30) return t("{n}天", { n: days });
-  const months = Math.floor(days / 30);
-  if (months < 12) return t("{n}月", { n: months });
-  const years = Math.floor(months / 12);
-  return t("{n}年", { n: years });
-}
 
 function renderFileTree() {
-  const container = h("div", { class: "filetree", id: "fileTree" });
-
-  const draw = () => {
-    container.innerHTML = "";
-    const frag = document.createDocumentFragment();
-    const filter = app.ui.fileFilter.trim().toLowerCase();
-    const baseList = app.current.tree || [];
-    const viewList = app.ui.fileView === "all" ? baseList : baseList.filter((p) => isFocusFile(p));
-    const list = filter ? viewList.filter((p) => p.toLowerCase().includes(filter)) : viewList;
-    if (viewList.length === 0 && app.ui.fileView !== "all") {
-      frag.appendChild(h("div", { class: "hint", html: t("暂无文稿文件") }));
-      container.replaceChildren(frag);
-      return;
-    }
-    if (list.length === 0) {
-      frag.appendChild(h("div", { class: "hint", html: t("(无匹配文件)") }));
-      container.replaceChildren(frag);
-      return;
-    }
-    const getExt = (p) => {
-      const lower = String(p || "").toLowerCase();
-      const idx = lower.lastIndexOf(".");
-      return idx === -1 ? "" : lower.slice(idx);
-    };
-    const groupDefs = [
-      { key: "tex", label: t("TeX 文稿"), order: 1, match: (p) => getExt(p) === ".tex" },
-      { key: "fig", label: t("图片/图表"), order: 2, match: (p) => isAssetFile(p) },
-      { key: "bib", label: t("参考文献"), order: 3, match: (p) => getExt(p) === ".bib" },
-      { key: "style", label: t("样式文件"), order: 4, match: (p) => STYLE_EXTS.has(getExt(p)) },
-      { key: "other", label: t("其他"), order: 5, match: (_p) => true },
-    ];
-
-    const buildGroupedTree = (paths) => {
-      const buckets = new Map();
-      for (const def of groupDefs) buckets.set(def.key, []);
-      for (const p of paths) {
-        const def = groupDefs.find((d) => d.match(p)) || groupDefs[groupDefs.length - 1];
-        buckets.get(def.key).push(p);
-      }
-      const root = { type: "dir", name: "", path: "", children: new Map() };
-      for (const def of groupDefs) {
-        const items = buckets.get(def.key) || [];
-        if (!items.length) continue;
-        const groupTree = buildTree(items);
-        const node = {
-          type: "dir",
-          name: def.label,
-          path: `@group/${def.key}`,
-          group: true,
-          order: def.order,
-          children: groupTree.children,
-        };
-        root.children.set(def.key, node);
-      }
-      return root;
-    };
-
-    const tree = app.ui.fileView === "all" ? buildTree(list) : buildGroupedTree(list);
-    const countCache = new Map();
-    const countFiles = (node) => {
-      if (!node) return 0;
-      if (node.type === "file") return isFolderPlaceholder(node.path || node.name) ? 0 : 1;
-      if (countCache.has(node)) return countCache.get(node);
-      let total = 0;
-      for (const child of node.children.values()) total += countFiles(child);
-      countCache.set(node, total);
-      return total;
-    };
-
-    const renderNode = (node, prefix, depth) => {
-      for (const child of sortedChildren(node)) {
-        const full = child.path || (prefix ? `${prefix}/${child.name}` : child.name);
-        const rowStyle = `--indent:${Math.max(0, depth)}`;
-
-        if (child.type === "dir") {
-          const isGroup = !!child.group;
-          const open =
-            filter ? true : app.ui.openFolders.has(full) || (isGroup && !app.ui.groupTreeInit && !app.ui.openFolders.has(full));
-          const toggleDir = () => {
-            if (app.ui.openFolders.has(full)) app.ui.openFolders.delete(full);
-            else app.ui.openFolders.add(full);
-            draw();
-          };
-          const fileCount = countFiles(child);
-          const countEl = fileCount > 0 ? h("span", { class: "tree-count", html: String(fileCount) }) : null;
-          const actions = !isGroup
-            ? (() => {
-                const menuId = `tree:${encodeURIComponent(full)}`;
-                const menuBtn = h("button", {
-                  class: "tree-menu-btn",
-                  title: t("操作"),
-                  onclick: (ev) => toggleDropdown(menuId, ev),
-                });
-                menuBtn.appendChild(iconSvg("more", { size: 12 }));
-                const menu = dropdownMenu(
-                  menuId,
-                  h("div", { class: "dropdown-panel tree-action-panel" }, [
-                    btn(t("新文件夹"), {
-                      kind: "menu-item",
-                      onClick: async (ev) => {
-                        ev.stopPropagation();
-                        const rel = prompt(t("文件夹路径"), full ? `${full}/assets` : "assets");
-                        const clean = String(rel || "").trim().replace(/\/+$/, "");
-                        if (!clean) return;
-                        await api(`/api/projects/${app.current.project.id}/file`, {
-                          method: "POST",
-                          body: JSON.stringify({ path: `${clean}/${FOLDER_PLACEHOLDER}`, content: "" }),
-                        });
-                        await loadProject(app.current.project.id);
-                        cleanupEditor();
-                        clearDropdowns();
-                        mount(render());
-                      },
-                    }),
-                    btn(t("重命名"), {
-                      kind: "menu-item",
-                      onClick: async (ev) => {
-                        ev.stopPropagation();
-                        const np = prompt(t("重命名为"), full);
-                        if (!np || np === full) return;
-                        const projectId = app.current.project && app.current.project.id;
-                        const nextOpenFiles = remapPathList(app.ui.openFiles, full, np);
-                        const nextSelected = remapPathSet(app.ui.selectedFiles, full, np);
-                        const nextPinned = remapPathList(app.ui.pinnedFiles, full, np);
-                        const nextOpenFile = app.current.openFile ? remapPathPrefix(app.current.openFile, full, np) : null;
-                        await api(`/api/projects/${app.current.project.id}/rename`, {
-                          method: "POST",
-                          body: JSON.stringify({ oldPath: full, newPath: np }),
-                        });
-                        if (projectId) {
-                          setOpenFiles(nextOpenFiles);
-                          setPinnedFiles(nextPinned);
-                          if (nextOpenFile) localStorage.setItem(lastOpenFileKey(projectId), nextOpenFile);
-                        }
-                        await loadProject(app.current.project.id);
-                        app.ui.selectedFiles = nextSelected;
-                        const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
-                        if (filtered.length) setOpenFiles(filtered);
-                        clearDropdowns();
-                        if (nextOpenFile && app.current.tree.includes(nextOpenFile)) {
-                          await openFile(nextOpenFile);
-                          return;
-                        }
-                        cleanupEditor();
-                        mount(render());
-                      },
-                    }),
-                    btn(t("删除"), {
-                      kind: "menu-item danger",
-                      onClick: async (ev) => {
-                        ev.stopPropagation();
-                        if (!confirm(t("确认删除 {name} ?", { name: full }))) return;
-                        const projectId = app.current.project && app.current.project.id;
-                        const nextOpenFiles = filterPathList(app.ui.openFiles, full);
-                        const nextSelected = filterPathSet(app.ui.selectedFiles, full);
-                        const nextPinned = filterPathList(app.ui.pinnedFiles, full);
-                        const wasOpen = app.current.openFile && isPathUnderPrefix(app.current.openFile, full);
-                        await api(`/api/projects/${app.current.project.id}/file`, {
-                          method: "DELETE",
-                          body: JSON.stringify({ path: full }),
-                        });
-                        if (projectId) {
-                          setOpenFiles(nextOpenFiles);
-                          setPinnedFiles(nextPinned);
-                          const last = localStorage.getItem(lastOpenFileKey(projectId)) || "";
-                          if (last && isPathUnderPrefix(last, full)) localStorage.removeItem(lastOpenFileKey(projectId));
-                        }
-                        await loadProject(app.current.project.id);
-                        app.ui.selectedFiles = nextSelected;
-                        if (nextOpenFiles.length) {
-                          const filtered = nextOpenFiles.filter((p) => app.current.tree.includes(p));
-                          if (filtered.length) setOpenFiles(filtered);
-                        }
-                        clearDropdowns();
-                        if (wasOpen) {
-                          app.current.openFile = null;
-                          cleanupEditor();
-                          mount(render());
-                          return;
-                        }
-                        cleanupEditor();
-                        mount(render());
-                      },
-                    }),
-                  ])
-                );
-                return h(
-                  "div",
-                  { class: "dropdown dropdown-right tree-action-wrap", "data-dropdown-id": menuId },
-                  [menuBtn, menu]
-                );
-              })()
-            : null;
-          const metaChildren = [];
-          if (countEl) metaChildren.push(countEl);
-          if (actions) metaChildren.push(actions);
-          const meta = metaChildren.length ? h("div", { class: "tree-meta" }, metaChildren) : null;
-          const row = h(
-            "div",
-            { class: `tree-row dir ${isGroup ? "group" : ""}`.trim(), style: rowStyle, onclick: toggleDir, title: full },
-            [
-            h("button", {
-              class: `tree-toggle ${open ? "open" : ""}`.trim(),
-              title: open ? t("收起") : t("展开"),
-              html: "",
-              onclick: (ev) => {
-                ev.stopPropagation();
-                toggleDir();
-              },
-            }),
-            h("div", { class: "tree-text" }, [
-              h("button", {
-                class: "tree-filebtn tree-dirname",
-                html: child.name,
-                title: full,
-                onclick: (ev) => {
-                  ev.stopPropagation();
-                  toggleDir();
-                },
-              }),
-            ]),
-            meta,
-          ]);
-          frag.appendChild(row);
-          if (open) renderNode(child, full, depth + 1);
-          continue;
-        }
-
-          if (isFolderPlaceholder(full)) continue;
-          const active = full === app.current.openFile;
-          const multi = !!app.ui.fileMultiSelect;
-          const selected = multi && app.ui.selectedFiles && app.ui.selectedFiles.has(full);
-          const pinned = Array.isArray(app.ui.pinnedFiles) && app.ui.pinnedFiles.includes(full);
-          const ext = child.name.includes(".") ? child.name.split(".").pop() : "";
-          const extLower = String(ext || "").toLowerCase();
-          const extLabel = ext ? ext.slice(0, 4).toUpperCase() : "FILE";
-          const nameBtn = h("button", {
-            class: "tree-filebtn",
-            html: child.name,
-            title: full,
-            onclick: async (ev) => {
-              ev.stopPropagation();
-              await openFile(full);
-            },
-          });
-          const badgeEls = [];
-          if (full === app.current.mainFile) {
-            badgeEls.push(h("span", { class: "tree-badge", html: t("主") }));
-          }
-          if (pinned) {
-            badgeEls.push(h("span", { class: "tree-pin-ind", html: "PIN", title: t("置顶") }));
-          }
-          const nameRow = h("div", { class: "tree-name-row" }, [nameBtn, ...badgeEls]);
-          const textChildren = [nameRow];
-          const slashIdx = full.lastIndexOf("/");
-          if (slashIdx > 0) {
-            const sub = full.slice(0, slashIdx);
-            if (sub) textChildren.push(h("div", { class: "tree-subpath", html: sub, title: sub }));
-          }
-
-          const menuId = `tree:${encodeURIComponent(full)}`;
-          const menuBtn = h("button", {
-            class: "tree-menu-btn",
-            title: t("操作"),
-            onclick: (ev) => toggleDropdown(menuId, ev),
-          });
-          menuBtn.appendChild(iconSvg("more", { size: 12 }));
-          const fileMenu = dropdownMenu(
-            menuId,
-            h("div", { class: "dropdown-panel tree-action-panel" }, [
-              btn(pinned ? t("取消置顶") : t("置顶"), {
-                kind: "menu-item",
-                onClick: async (ev) => {
-                  ev.stopPropagation();
-                  togglePinnedFile(full);
-                  clearDropdowns();
-                },
-              }),
-              btn(t("重命名"), {
-                kind: "menu-item",
-                onClick: async (ev) => {
-                  ev.stopPropagation();
-                  const np = prompt(t("重命名为"), full);
-                  if (!np || np === full) return;
-                  const wasOpen = app.current.openFile === full;
-                  const nextPinned = remapPathList(app.ui.pinnedFiles, full, np);
-                  await api(`/api/projects/${app.current.project.id}/rename`, {
-                    method: "POST",
-                    body: JSON.stringify({ oldPath: full, newPath: np }),
-                  });
-                  await loadProject(app.current.project.id);
-                  if (wasOpen) app.current.openFile = np;
-                  setOpenFiles(app.ui.openFiles.map((p) => (p === full ? np : p)));
-                  setPinnedFiles(nextPinned);
-                  clearDropdowns();
-                  if (wasOpen) {
-                    await openFile(np);
-                    return;
-                  }
-                  cleanupEditor();
-                  mount(render());
-                },
-              }),
-              btn(t("删除"), {
-                kind: "menu-item danger",
-                onClick: async (ev) => {
-                  ev.stopPropagation();
-                  if (!confirm(t("确认删除 {name} ?", { name: full }))) return;
-                  await api(`/api/projects/${app.current.project.id}/file`, {
-                    method: "DELETE",
-                    body: JSON.stringify({ path: full }),
-                  });
-                  if (app.current.openFile === full) {
-                    app.current.openFile = null;
-                    cleanupEditor();
-                  }
-                  setOpenFiles(app.ui.openFiles.filter((p) => p !== full));
-                  setPinnedFiles(app.ui.pinnedFiles.filter((p) => p !== full));
-                  await loadProject(app.current.project.id);
-                  clearDropdowns();
-                  cleanupEditor();
-                  mount(render());
-                },
-              }),
-            ])
-          );
-          const actionWrap = h(
-            "div",
-            { class: "dropdown dropdown-right tree-action-wrap", "data-dropdown-id": menuId },
-            [menuBtn, fileMenu]
-          );
-          const row = h(
-            "div",
-            {
-              class: `tree-row file ${active ? "active" : ""} ${multi ? "multi" : ""} ${selected ? "selected" : ""} ${
-                pinned ? "pinned" : ""
-              }`.trim(),
-              style: rowStyle,
-              onclick: async (ev) => {
-                if (multi) {
-                  if (
-                    ev.target.closest(".tree-filebtn") ||
-                  ev.target.closest(".tree-actions") ||
-                  ev.target.closest(".tree-check")
-                ) {
-                  return;
-                }
-                toggleFileSelection(full);
-                return;
-              }
-              await openFile(full);
-            },
-          },
-          [
-            ...(multi
-              ? [
-                  h("input", {
-                    class: "tree-check",
-                    type: "checkbox",
-                    checked: selected,
-                    onclick: (ev) => {
-                      ev.stopPropagation();
-                      toggleFileSelection(full);
-                    },
-                  }),
-                ]
-              : []),
-            h("span", { class: "tree-icon", "data-ext": extLabel, "data-kind": extLower }),
-            h("div", { class: "tree-text" }, textChildren),
-            actionWrap,
-          ]
-        );
-        frag.appendChild(row);
-      }
-    };
-
-    renderNode(tree, "", 0);
-    container.replaceChildren(frag);
-    if (app.ui.fileView !== "all" && !app.ui.groupTreeInit) {
-      app.ui.groupTreeInit = true;
-    }
-  };
-
-  draw();
-  app.ui.refreshFileTree = draw;
-  return container;
+  return renderFileTreePanel({
+    app,
+    h,
+    t,
+    isFocusFile,
+    isAssetFile,
+    STYLE_EXTS,
+    buildTree,
+    sortedChildren,
+    isFolderPlaceholder,
+    toggleDropdown,
+    iconSvg,
+    dropdownMenu,
+    btn,
+    api,
+    FOLDER_PLACEHOLDER,
+    loadProject,
+    cleanupEditor,
+    clearDropdowns,
+    mount,
+    render,
+    remapPathList,
+    remapPathSet,
+    remapPathPrefix,
+    filterPathList,
+    filterPathSet,
+    setOpenFiles,
+    setPinnedFiles,
+    lastOpenFileKey,
+    openFile,
+    isPathUnderPrefix,
+    toggleFileSelection,
+    setEditorError,
+  });
 }
 
 function closeTab(filePath) {
@@ -5338,1356 +3456,137 @@ function closeTab(filePath) {
 }
 
 function renderFileTabs() {
-  const container = h("div", { class: "file-tabs" });
-
-  const draw = () => {
-    container.innerHTML = "";
-    const list = Array.isArray(app.ui.openFiles) ? app.ui.openFiles : [];
-    if (list.length === 0) {
-      container.appendChild(h("div", { class: "hint", html: t("打开文件开始编辑。") }));
-      return;
-    }
-    for (const fp of list) {
-      const active = fp === app.current.openFile;
-      const name = fp.split("/").pop() || fp;
-      const tab = h("div", { class: `file-tab ${active ? "active" : ""}`.trim() });
-      const tabBtn = h("button", {
-        class: "file-tab-btn",
-        title: fp,
-        onclick: () => {
-          if (fp === app.current.openFile) return;
-          openFile(fp).catch(console.error);
-        },
-      });
-      tabBtn.textContent = name;
-      const closeBtn = h("button", {
-        class: "file-tab-close",
-        title: t("关闭"),
-        onclick: (ev) => {
-          ev.stopPropagation();
-          closeTab(fp);
-        },
-      });
-      closeBtn.textContent = "x";
-      tab.appendChild(tabBtn);
-      tab.appendChild(closeBtn);
-      container.appendChild(tab);
-    }
-  };
-
-  draw();
-  app.ui.refreshFileTabs = draw;
-  return container;
+  return renderFileTabsView({
+    h,
+    app,
+    t,
+    openFile,
+    closeTab,
+  });
 }
+
 
 function renderLogin() {
-  const user = input({ placeholder: t("用户名 (admin / user01..user09)") });
-  const pass = input({ placeholder: t("密码"), type: "password" });
-  const err = h("div", { class: "hint error" });
-
-  setTimeout(() => {
-    applyLayoutClass();
-    updateTopbarButtons();
-    updateToolbarCollapsed();
-    updateBottomConsoleVisibility();
-    updateRightPaneFloat();
-  }, 0);
-
-  return h("div", { class: "page" }, [
-    topbar(t("内网协作 LaTeX"), []),
-    h("div", { class: "center" }, [
-      h("div", { class: "card auth" }, [
-        h("div", { class: "h1", html: t("登录") }),
-        h("div", { class: "hint", html: t("不开放注册，账号由服务器本地创建。") }),
-        h("div", { class: "form" }, [
-          h("div", { class: "label", html: t("用户名") }),
-          user,
-          h("div", { class: "label", html: t("密码") }),
-          pass,
-          btn(t("登录"), {
-            kind: "primary",
-            onClick: async () => {
-              err.textContent = "";
-              try {
-                const loginRes = await api("/api/login", {
-                  method: "POST",
-                  body: JSON.stringify({ username: user.value.trim(), password: pass.value }),
-                });
-                if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
-                localStorage.setItem("ct_last_user", user.value.trim() || "admin");
-                await loadMe();
-                await loadProjects();
-                app.view = "projects";
-                mount(render());
-              } catch (e) {
-                err.textContent = e && e.message ? e.message : String(e);
-              }
-            },
-          }),
-          err,
-        ]),
-      ]),
-    ]),
-  ]);
+  return renderLoginPage({
+    input,
+    t,
+    h,
+    applyLayoutClass,
+    updateTopbarButtons,
+    updateToolbarCollapsed,
+    updateBottomConsoleVisibility,
+    updateRightPaneFloat,
+    topbar,
+    btn,
+    api,
+    loadMe,
+    loadProjects,
+    app,
+    mount,
+    render,
+  });
 }
+
 
 function renderProjects() {
-  const importZip = input({ type: "file", id: "projectImportInput" });
-  importZip.accept = ".zip";
-  importZip.style.display = "none";
-  importZip.onchange = async (ev) => {
-    const file = ev.target.files && ev.target.files[0];
-    if (!file) return;
-    if (app.ui.guestMode) {
-      app.ui.importError = t("请先切换用户");
-      mount(render());
-      ev.target.value = "";
-      return;
-    }
-    const baseName = file.name.replace(/\.[^.]+$/, "").trim();
-    const fd = new FormData();
-    if (baseName) fd.append("name", baseName);
-    fd.append("mainFile", "main.tex");
-    fd.append("zip", file);
-    app.ui.importError = "";
-    try {
-      const res = await api("/api/projects/import", { method: "POST", body: fd });
-      await loadProjects();
-      clearDropdowns();
-      const created = res && res.project ? res.project : null;
-      if (created && created.id) {
-        await openProject(created);
-      } else {
-        mount(render());
-      }
-    } catch (e) {
-      app.ui.importError = e && e.message ? e.message : String(e);
-      mount(render());
-    } finally {
-      importZip.value = "";
-    }
-  };
-
-  if (app.ui.projectCategory !== "all") {
-    app.ui.projectCategory = "all";
-    localStorage.setItem("ct_project_category", "all");
-  }
-  if (!["all", "mine", "shared"].includes(app.ui.projectScope)) {
-    app.ui.projectScope = "mine";
-    localStorage.setItem("ct_project_scope", "mine");
-  }
-  if (!["list", "grid"].includes(app.ui.projectView)) {
-    app.ui.projectView = "list";
-    localStorage.setItem("ct_project_view", "list");
-  }
-
-  const scopeLabel = (scope) => {
-    if (scope === "all") return t("所有项目");
-    if (scope === "shared") return t("与你共享");
-    return t("你的项目");
-  };
-
-  const openProject = async (p) => {
-    if (!p || !p.id) return;
-    const hash = `#project/${p.id}`;
-    if (location.hash !== hash) history.pushState({}, "", hash);
-    await openProjectById(p.id, { pushHash: false, resetTab: true, seedProject: p });
-  };
-
-  const createProject = async () => {
-    if (app.ui.guestMode) {
-      app.ui.importError = t("请先切换用户");
-      mount(render());
-      return;
-    }
-    try {
-      const res = await api("/api/projects", {
-        method: "POST",
-        body: JSON.stringify({
-          mainFile: "main.tex",
-          template: "blank",
-        }),
-      });
-      await loadProjects();
-      clearDropdowns();
-      const created = res && res.project ? res.project : null;
-      if (created && created.id) {
-        await openProject(created);
-      } else {
-        mount(render());
-      }
-    } catch (e) {
-      app.ui.importError = e && e.message ? e.message : String(e);
-      mount(render());
-    }
-  };
-
-  const list = h("div", { class: "project-rows", id: "projectList" });
-
-  const drawList = () => {
-    const frag = document.createDocumentFragment();
-    list.classList.toggle("grid", app.ui.projectView === "grid");
-    const filtered = app.projects.filter((p) =>
-      projectMatchesScope(p, app.ui.projectScope, app.me) &&
-      projectMatchesFilter(p, app.ui.projectFilter, app.ui.projectCategory)
-    );
-    if (!filtered.length) {
-      const emptyLabel = app.ui.guestMode ? t("临时用户暂无项目") : t("(无匹配文件)");
-      frag.appendChild(h("div", { class: "hint", html: emptyLabel }));
-      list.replaceChildren(frag);
-      return;
-    }
-    const sorted = filtered.slice().sort((a, b) => {
-      const ta = Date.parse(a.updatedAt || a.createdAt || 0);
-      const tb = Date.parse(b.updatedAt || b.createdAt || 0);
-      return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0);
-    });
-    for (const p of sorted) {
-      const menuId = `project:${p.id}`;
-      const actionsMenu = dropdownMenu(menuId, buildProjectSettingsPanel(p));
-      const actionsBtn = h("button", {
-        class: "project-item-more",
-        onclick: (ev) => toggleDropdown(menuId, ev),
-      });
-      actionsBtn.appendChild(iconSvg("more", { size: 14 }));
-      const actionsWrap = h("div", {
-        class: "dropdown dropdown-right",
-        "data-dropdown-id": menuId,
-        onclick: (ev) => ev.stopPropagation(),
-      }, [
-        actionsBtn,
-        actionsMenu,
-      ]);
-
-      const row = h("div", {
-        class: "project-item",
-        role: "button",
-        tabindex: "0",
-        onclick: (ev) => {
-          if (
-            ev.target.closest(".project-item-actions") ||
-            ev.target.closest(".project-item-more") ||
-            ev.target.closest(".dropdown-menu")
-          ) {
-            return;
-          }
-          openProject(p);
-        },
-        onkeydown: (ev) => {
-          if (ev.key === "Enter" || ev.key === " ") {
-            ev.preventDefault();
-            openProject(p);
-          }
-        },
-        title: p.name || p.id,
-      }, [
-        h("div", { class: "project-item-icon" }, [
-          h("img", { class: "project-item-thumb", src: PROJECT_THUMB_URL, alt: "PDF" }),
-        ]),
-        h("div", { class: "project-item-main" }, [
-          h("div", { class: "project-item-name", html: p.name || p.id }),
-        h("div", {
-          class: "project-item-sub",
-          html: app.me && p.owner === app.me.username ? "" : (p.owner || ""),
-        }),
-        ]),
-        h("div", { class: "project-item-actions" }, [
-          h("div", { class: "project-item-time", html: formatProjectAge(p) }),
-          actionsWrap,
-        ]),
-      ]);
-      frag.appendChild(row);
-    }
-    list.replaceChildren(frag);
-  };
-  drawList();
-  app.ui.refreshProjectList = drawList;
-
-  const scopeButtons = {};
-  const setProjectScope = (scope) => {
-    app.ui.projectScope = scope;
-    localStorage.setItem("ct_project_scope", scope);
-    for (const [k, b] of Object.entries(scopeButtons)) b.classList.toggle("active", k === scope);
-    titleEl.textContent = scopeLabel(scope);
-    drawList();
-  };
-  const setProjectView = (view) => {
-    const next = view === "grid" ? "grid" : "list";
-    app.ui.projectView = next;
-    localStorage.setItem("ct_project_view", next);
-    listBtn.classList.toggle("active", next === "list");
-    gridBtn.classList.toggle("active", next === "grid");
-    drawList();
-  };
-
-  const projectFilterInput = h("input", {
-    class: "projects-search-input",
-    placeholder: t("搜索项目..."),
-    value: app.ui.projectFilter,
-    oninput: (ev) => {
-      app.ui.projectFilter = ev.target.value || "";
-      localStorage.setItem("ct_project_filter", app.ui.projectFilter);
-      drawList();
-    },
+  return renderProjectsPage({
+    input,
+    app,
+    t,
+    mount,
+    render,
+    api,
+    loadProjects,
+    clearDropdowns,
+    openProjectById,
+    h,
+    projectMatchesScope,
+    projectMatchesFilter,
+    dropdownMenu,
+    buildProjectSettingsPanel,
+    toggleDropdown,
+    iconSvg,
+    PROJECT_THUMB_URL,
+    formatProjectAge,
+    pickColor,
+    cleanupEditor,
+    enterGuestMode,
+    loadMe,
+    btn,
   });
-
-  const listBtn = h("button", {
-    class: `view-toggle ${app.ui.projectView !== "grid" ? "active" : ""}`.trim(),
-    title: t("列表视图"),
-    onclick: () => setProjectView("list"),
-  });
-  listBtn.appendChild(iconSvg("list", { size: 14 }));
-  const gridBtn = h("button", {
-    class: `view-toggle ${app.ui.projectView === "grid" ? "active" : ""}`.trim(),
-    title: t("网格视图"),
-    onclick: () => setProjectView("grid"),
-  });
-  gridBtn.appendChild(iconSvg("grid", { size: 14 }));
-
-  const titleEl = h("div", { class: "projects-title", html: scopeLabel(app.ui.projectScope) });
-
-  const navItem = (scope, label) => {
-    const b = h("button", {
-      class: `projects-nav-item ${app.ui.projectScope === scope ? "active" : ""}`.trim(),
-      onclick: () => setProjectScope(scope),
-      html: label,
-    });
-    scopeButtons[scope] = b;
-    return b;
-  };
-
-  const user = app.me || { username: "User", isAdmin: false };
-  const color = pickColor(user.username || "U");
-  const userCard = h("button", {
-    class: "user-card dropdown-trigger",
-    onclick: (ev) => toggleDropdown("user", ev),
-  }, [
-    h("div", { class: "user-avatar", html: (user.username || "U").charAt(0).toUpperCase() }),
-    h("div", { class: "user-meta" }, [
-      h("div", { class: "user-name", html: user.username || "User" }),
-    ]),
-    h("div", { class: "user-caret", html: "▾" }),
-  ]);
-  userCard.style.setProperty("--user-accent", color.color);
-
-  const doLogout = async () => {
-    try { await api("/api/logout", { method: "POST" }); } catch {}
-    localStorage.removeItem("ct_session_token");
-    cleanupEditor();
-    app.current.openFile = null;
-    app.ui.openFiles = [];
-    app.ui.fileFilter = "";
-    enterGuestMode();
-    await loadProjects();
-    mount(render());
-  };
-
-  const doSwitchUser = async (username, password) => {
-    const clean = String(username || "").trim();
-    const pass = String(password || "").trim();
-    if (!clean || !pass) {
-      app.ui.switchError = t("请输入用户名和密码");
-      mount(render());
-      return;
-    }
-    app.ui.switchError = "";
-    try {
-      const loginRes = await api("/api/login", {
-        method: "POST",
-        body: JSON.stringify({ username: clean, password: pass }),
-      });
-      if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
-      localStorage.setItem("ct_last_user", clean);
-      await loadMe();
-      await loadProjects();
-      clearDropdowns();
-      app.view = "projects";
-      mount(render());
-    } catch (e) {
-      app.ui.switchError = e && e.message ? e.message : String(e);
-      mount(render());
-    }
-  };
-
-  const switchUserInput = input({ placeholder: t("用户名") });
-  const switchPassInput = input({ placeholder: t("密码"), type: "password" });
-  const userMenu = dropdownMenu("user", h("div", { class: "user-menu" }, [
-    h("div", { class: "user-menu-title", html: t("切换用户") }),
-    h("div", { class: "user-menu-row" }, [
-      switchUserInput,
-      switchPassInput,
-      btn(t("切换"), {
-        kind: "primary",
-        onClick: (ev) => {
-          ev.stopPropagation();
-          doSwitchUser(switchUserInput.value, switchPassInput.value);
-        },
-      }),
-    ]),
-    app.ui.switchError ? h("div", { class: "hint error", html: app.ui.switchError }) : null,
-  ]));
-  const sidebar = h("aside", { class: "projects-sidebar" }, [
-    h("div", { class: "dropdown dropdown-left", "data-dropdown-id": "user" }, [userCard, userMenu]),
-    h("div", { class: "projects-nav" }, [
-      navItem("all", t("所有项目")),
-      navItem("mine", t("你的项目")),
-      navItem("shared", t("与你共享")),
-    ]),
-    h("div", { class: "sidebar-spacer" }),
-  ]);
-
-  const canEditProjects = !app.ui.guestMode;
-  const actions = h("div", { class: "projects-actions" }, [
-    h("div", { class: "view-toggle-group" }, [listBtn, gridBtn]),
-    importZip,
-    btn(t("导入"), { kind: "pill", disabled: !canEditProjects, onClick: () => importZip.click() }),
-    btn(`+ ${t("新建")}`, {
-      kind: "pill primary",
-      disabled: !canEditProjects,
-      onClick: (ev) => { ev.stopPropagation(); createProject(); },
-    }),
-  ]);
-
-  const importErrorEl = app.ui.importError
-    ? h("div", { class: "hint error project-import-error", html: app.ui.importError })
-    : null;
-
-  const main = h("div", { class: "projects-main" }, [
-    h("div", { class: "projects-topbar" }, [
-      titleEl,
-      h("div", { class: "projects-search" }, [projectFilterInput]),
-      actions,
-    ]),
-    h("div", { class: "projects-content" }, [importErrorEl, list]),
-  ]);
-
-  return h("div", { class: "page projects-page" }, [
-    h("div", { class: "projects-shell" }, [sidebar, main]),
-  ]);
 }
 
+
 function renderProject() {
-  const p = app.current.project;
-  if (!p || !p.id) return renderLoading();
-  const me = app.me || { username: "", isAdmin: false };
-  applySplitVars();
-  const isOwnerOrAdmin = me.isAdmin || p.owner === me.username;
-
-  const goProjects = async () => {
-    cleanupEditor();
-    stopMonitorPolling();
-    app.ui.selectRightTab = null;
-    app.current.project = null;
-    app.current.openFile = null;
-    app.ui.openFiles = [];
-    app.ui.fileFilter = "";
-    app.view = "projects";
-    app.ui.dropdownOpen = "";
-    app.ui.projectRenameId = "";
-    app.ui.projectDeleteArmed = "";
-    if (location.hash !== "#projects") location.hash = "#projects";
-    try {
-      await loadProjects();
-    } catch (e) {
-      console.error(e);
-    }
-    mount(render());
-  };
-
-  const doLogout = async () => {
-    try { await api("/api/logout", { method: "POST" }); } catch {}
-    localStorage.removeItem("ct_session_token");
-    cleanupEditor();
-    stopMonitorPolling();
-    app.ui.selectRightTab = null;
-    app.ui.openFiles = [];
-    app.ui.fileFilter = "";
-    enterGuestMode();
-    await loadProjects();
-    mount(render());
-  };
-
-  const exportProjectZip = () => {
-    if (!app.current.project) return;
-    const token = localStorage.getItem("ct_session_token") || "";
-    const qs = token ? `?token=${encodeURIComponent(token)}` : "";
-    const baseName = String(app.current.project.name || `project-${app.current.project.id.slice(0, 8)}`)
-      .trim()
-      .replace(/[\\/:*?"<>|]+/g, "_")
-      .replace(/\s+/g, "_")
-      .replace(/_+/g, "_");
-    const name = baseName || "collabtex-project";
-    const url = `/api/projects/${app.current.project.id}/export.zip${qs}`;
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${name}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  };
-
-
-  const uploadFile = async (file, targetPath) => {
-    if (!file) return;
-    const fd = new FormData();
-    fd.append("path", targetPath);
-    fd.append("file", file);
-    await api(`/api/projects/${p.id}/upload`, { method: "POST", body: fd });
-  };
-
-  const uploadInput = h("input", {
-    id: "uploadInput",
-    type: "file",
-    style: "display:none",
-    onchange: async (ev) => {
-      const file = ev.target.files && ev.target.files[0];
-      if (!file) return;
-      const target = prompt(t("上传到路径"), file.name);
-      if (!target) return;
-      await uploadFile(file, target);
-      ev.target.value = "";
-      await loadProject(p.id);
-      cleanupEditor();
-      mount(render());
+  return renderProjectPage({
+    api,
+    app,
+    FOLDER_PLACEHOLDER,
+    appendBottomTerminal,
+    applySplitVars,
+    btn,
+    buildDiagnosticSummary,
+    cleanupEditor,
+    clearBottomTerminal,
+    clearDropdowns,
+    closeModal,
+    compileProject,
+    computeLayoutClass,
+    dropdownMenu,
+    enterGuestMode,
+    fileBaseName,
+    formatPdfPageInfo,
+    getPdfTargetFile,
+    h,
+    handlePdfScroll,
+    iconSvg,
+    input,
+    isFolderPlaceholder,
+    loadProject,
+    loadProjects,
+    mount,
+    openFile,
+    openFileAt,
+    pdfScrollRef: {
+      get current() { return pdfScrollRaf; },
+      set current(value) { pdfScrollRaf = value; },
     },
+    pdfUrl,
+    pickColor,
+    pickDefaultOpenFile,
+    placePdfMarker,
+    pulsePdfMarker,
+    render,
+    renderFileTree,
+    renderLoading,
+    renderPdfPages,
+    renderPinnedFiles,
+    revealActiveFile,
+    schedulePdfSync,
+    setBottomConsole,
+    setBottomMode,
+    setEditorFontSize,
+    setEditorLineHeight,
+    setEditorPaddingX,
+    setEditorPaddingY,
+    setFileView,
+    setLeftCollapsed,
+    setLayoutMode,
+    setPdfTargetFile,
+    setPdfView,
+    setTheme,
+    setTreeDensity,
+    setWsUrlOverride,
+    showModal,
+    startBottomDrag,
+    startDrag,
+    stopMonitorPolling,
+    t,
+    toggleDropdown,
+    toggleLeftPane,
+    updateBottomConsoleMode,
+    zoomStep,
   });
-
-  const openShareModal = () => {
-    const userInput = input({ placeholder: t("分享给 (如 user01)") });
-    const body = h("div", { class: "modal-form" }, [
-      h("div", { class: "label", html: t("分享给 (如 user01)") }),
-      userInput,
-    ]);
-    const shareBtn = btn(t("分享"), {
-      kind: "primary",
-      onClick: async () => {
-        const username = userInput.value.trim();
-        if (!username) return;
-        await api(`/api/projects/${p.id}/share`, {
-          method: "POST",
-          body: JSON.stringify({ username }),
-        });
-        closeModal();
-      },
-    });
-    showModal({ title: t("分享"), bodyEl: body, actions: [shareBtn] });
-  };
-
-  let filterTimer = null;
-  const filterInput = h("input", {
-    class: "left-search-input",
-    placeholder: t("筛选文件..."),
-    value: app.ui.fileFilter,
-    oninput: (ev) => {
-      app.ui.fileFilter = ev.target.value;
-      if (filterTimer) clearTimeout(filterTimer);
-      filterTimer = setTimeout(() => {
-        filterTimer = null;
-        if (app.ui.refreshFileTree) app.ui.refreshFileTree();
-      }, 120);
-    },
-  });
-  const onDrop = async (ev) => {
-    ev.preventDefault();
-    ev.currentTarget.classList.remove("drop-ready");
-    const files = Array.from(ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files : []);
-    if (files.length === 0) return;
-
-    if (files.length === 1) {
-      const target = prompt(t("上传到路径"), files[0].name);
-      if (!target) return;
-      await uploadFile(files[0], target);
-    } else {
-      const base = prompt(t("上传到文件夹 (可选)"), "");
-      if (base === null) return;
-      const prefix = base.trim().replace(/\/+$/, "");
-      for (const file of files) {
-        const target = prefix ? `${prefix}/${file.name}` : file.name;
-        await uploadFile(file, target);
-      }
-    }
-
-    await loadProject(p.id);
-    cleanupEditor();
-    mount(render());
-  };
-
-  if (app.ui.leftRailMode !== "files") app.ui.leftRailMode = "files";
-  if (app.ui.leftPaneTab !== "files") app.ui.leftPaneTab = "files";
-
-  const setLeftRailMode = (mode) => {
-    const next = "files";
-    app.ui.leftRailMode = next;
-    localStorage.setItem("ct_left_rail_mode", next);
-    if (app.ui.leftPaneTab !== "files") {
-      app.ui.leftPaneTab = "files";
-      localStorage.setItem("ct_left_pane_tab", "files");
-    }
-    if (app.ui.leftCollapsed) setLeftCollapsed(false);
-    mount(render());
-  };
-  const setLeftPaneTab = (tab) => {
-    app.ui.leftPaneTab = "files";
-    localStorage.setItem("ct_left_pane_tab", "files");
-    mount(render());
-  };
-
-  const texFiles = Array.isArray(app.current.tree) ? app.current.tree.filter((f) => f.endsWith(".tex")) : [];
-  const mainSelect = h("select", { class: "input", id: "mainSelect" }, []);
-  for (const f of texFiles) {
-    const opt = h("option", { value: f, selected: f === app.current.mainFile ? "" : null, html: f });
-    mainSelect.appendChild(opt);
-  }
-  mainSelect.disabled = !isOwnerOrAdmin;
-
-  const compilerSelect = h("select", { class: "input", id: "compilerSelect" }, [
-    h("option", { value: "pdflatex", selected: app.current.compiler === "pdflatex" ? "" : null, html: "pdfLaTeX" }),
-    h("option", { value: "xelatex", selected: app.current.compiler === "xelatex" ? "" : null, html: "XeLaTeX" }),
-    h("option", { value: "lualatex", selected: app.current.compiler === "lualatex" ? "" : null, html: "LuaLaTeX" }),
-  ]);
-  compilerSelect.disabled = !isOwnerOrAdmin;
-
-  const targetFiles = texFiles.slice();
-  if (app.ui.pdfTargetFile && !targetFiles.includes(app.ui.pdfTargetFile)) targetFiles.unshift(app.ui.pdfTargetFile);
-  if (!targetFiles.length && app.current.mainFile) targetFiles.push(app.current.mainFile);
-  const pdfTargetSelect = h("select", {
-    class: "input pdf-target",
-    id: "pdfTargetSelect",
-    onchange: (ev) => setPdfTargetFile(ev.target.value),
-  });
-  for (const f of targetFiles) {
-    const opt = h("option", { value: f, selected: f === getPdfTargetFile(p.id) ? "" : null, html: f });
-    pdfTargetSelect.appendChild(opt);
-  }
-
-  const pdfZoomSelect = h(
-    "select",
-    {
-      class: "input pdf-zoom",
-      id: "pdfZoomSelect",
-      onchange: (ev) => setPdfView({ projectId: p.id, zoom: ev.target.value }),
-    },
-    [
-      h("option", { value: "page-width", html: t("适合宽度"), selected: app.ui.pdfZoom === "page-width" ? "" : null }),
-      h("option", { value: "page-fit", html: t("适合页面"), selected: app.ui.pdfZoom === "page-fit" ? "" : null }),
-      h("option", { value: "100", html: "100%", selected: app.ui.pdfZoom === "100" ? "" : null }),
-      h("option", { value: "125", html: "125%", selected: app.ui.pdfZoom === "125" ? "" : null }),
-      h("option", { value: "150", html: "150%", selected: app.ui.pdfZoom === "150" ? "" : null }),
-      h("option", { value: "200", html: "200%", selected: app.ui.pdfZoom === "200" ? "" : null }),
-    ]
-  );
-
-  const hasPdf = !!(app.current.artifacts && app.current.artifacts.pdf && app.current.artifacts.pdf.exists);
-  const openPdfMenuBtn = btn(t("打开 PDF"), {
-    kind: "menu-item",
-    disabled: !hasPdf,
-    onClick: (ev) => {
-      ev.stopPropagation();
-      window.open(pdfUrl(p.id, Date.now(), app.ui.pdfPage, app.ui.pdfZoom, getPdfTargetFile(p.id)), "_blank");
-      clearDropdowns();
-    },
-  });
-  openPdfMenuBtn.id = "openPdfBtn";
-
-  const refreshPdfMenuBtn = btn(t("刷新预览"), {
-    kind: "menu-item",
-    onClick: (ev) => {
-      ev.stopPropagation();
-      setPdfView({ projectId: p.id, refresh: true });
-      clearDropdowns();
-    },
-  });
-
-  const applyMainBtn = btn(t("设置"), {
-    kind: "tiny",
-    disabled: !isOwnerOrAdmin,
-    onClick: async (ev) => {
-      ev.stopPropagation();
-      if (!mainSelect.value) return;
-      await api(`/api/projects/${p.id}/main`, {
-        method: "POST",
-        body: JSON.stringify({ mainFile: mainSelect.value }),
-      });
-      await loadProject(p.id);
-      cleanupEditor();
-      mount(render());
-    },
-  });
-
-  const applyCompilerBtn = btn(t("设置"), {
-    kind: "tiny",
-    disabled: !isOwnerOrAdmin,
-    onClick: async (ev) => {
-      ev.stopPropagation();
-      await api(`/api/projects/${p.id}/compiler`, {
-        method: "POST",
-        body: JSON.stringify({ compiler: compilerSelect.value }),
-      });
-      await loadProject(p.id);
-      cleanupEditor();
-      mount(render());
-    },
-  });
-
-  const autoCompileToggle = h("label", { class: "toggle" }, [
-    h("input", {
-      type: "checkbox",
-      checked: app.ui.autoCompile,
-      onchange: (ev) => {
-        app.ui.autoCompile = ev.target.checked;
-        localStorage.setItem("ct_autoCompile", app.ui.autoCompile ? "1" : "0");
-      },
-    }),
-    h("span", { html: t("自动编译") }),
-  ]);
-
-  const autoSyncToggle = h("label", { class: "toggle" }, [
-    h("input", {
-      type: "checkbox",
-      checked: app.ui.autoSyncPdf,
-      onchange: (ev) => {
-        app.ui.autoSyncPdf = ev.target.checked;
-        localStorage.setItem("ct_autoSyncPdf", app.ui.autoSyncPdf ? "1" : "0");
-        if (app.ui.autoSyncPdf) schedulePdfSync();
-      },
-    }),
-    h("span", { html: t("自动同步 PDF") }),
-  ]);
-
-  const settingsMenu = dropdownMenu("panel-settings", h("div", { class: "dropdown-panel settings-panel" }, [
-    h("div", { class: "label", html: t("预览文件") }),
-    pdfTargetSelect,
-    h("div", { class: "label", html: t("缩放") }),
-    pdfZoomSelect,
-    h("div", { class: "menu-sep" }),
-    h("div", { class: "label", html: t("主文件") }),
-    h("div", { class: "row" }, [mainSelect, applyMainBtn]),
-    h("div", { class: "label", html: t("编译器") }),
-    h("div", { class: "row" }, [compilerSelect, applyCompilerBtn]),
-    h("div", { class: "settings-toggles" }, [autoCompileToggle, autoSyncToggle]),
-    h("div", { class: "menu-sep" }),
-    openPdfMenuBtn,
-    refreshPdfMenuBtn,
-  ]));
-
-  const settingsBtn = btn(t("设置"), { kind: "tiny", onClick: (ev) => toggleDropdown("panel-settings", ev) });
-  const settingsWrap = h(
-    "div",
-    { class: "dropdown dropdown-left", "data-dropdown-id": "panel-settings" },
-    [settingsBtn, settingsMenu]
-  );
-
-  const recentFilesEl = null;
-  const pinnedFilesEl = renderPinnedFiles();
-
-  const renameProject = () => {
-    if (!isOwnerOrAdmin) return;
-    const currentName = p.name || p.id;
-    const nameInput = input({ value: currentName, placeholder: t("项目名称") });
-    const save = async () => {
-      const name = String(nameInput.value || "").trim();
-      if (!name || name === currentName) {
-        closeModal();
-        return;
-      }
-      await api(`/api/projects/${p.id}/meta`, {
-        method: "POST",
-        body: JSON.stringify({ name }),
-      });
-      await loadProjects();
-      p.name = name;
-      if (app.current && app.current.project) app.current.project.name = name;
-      closeModal();
-      mount(render());
-    };
-    nameInput.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") save();
-    });
-    const body = h("div", { class: "modal-form" }, [
-      h("div", { class: "label", html: t("新名称") }),
-      nameInput,
-      h("div", { class: "hint", html: t("点击保存后生效") }),
-    ]);
-    showModal({
-      title: t("重命名项目"),
-      bodyEl: body,
-      actions: [btn(t("保存"), { kind: "primary", onClick: save })],
-    });
-    setTimeout(() => {
-      nameInput.focus();
-      nameInput.select();
-    }, 0);
-  };
-
-  const projectBtn = h("button", {
-    class: "project-title-btn",
-    title: p.name || p.id,
-    onclick: renameProject,
-    html: p.name || p.id,
-  });
-  const leftBrandBtn = h("button", {
-    class: "left-brand-btn",
-    title: t("返回项目列表"),
-    onclick: () => goProjects(),
-    html: "CollabTex",
-  });
-  const leftTitleWrap = h("div", { class: "left-title-wrap" }, [leftBrandBtn, projectBtn]);
-  const shareInput = input({ placeholder: t("分享给 (如 user01)") });
-  const shareMenu = dropdownMenu("share", h("div", { class: "dropdown-panel share-panel" }, [
-    h("div", { class: "label", html: t("分享给") }),
-    shareInput,
-    btn(t("分享"), {
-      kind: "primary",
-      onClick: async (ev) => {
-        ev.stopPropagation();
-        const username = shareInput.value.trim();
-        if (!username) return;
-        await api(`/api/projects/${p.id}/share`, {
-          method: "POST",
-          body: JSON.stringify({ username }),
-        });
-        shareInput.value = "";
-        clearDropdowns();
-      },
-    }),
-  ]));
-  const shareBtn = h("button", { class: "share-btn dropdown-trigger", onclick: (ev) => toggleDropdown("share", ev), html: t("分享") });
-  const shareWrap = h("div", { class: "dropdown dropdown-right", "data-dropdown-id": "share" }, [shareBtn, shareMenu]);
-
-  const newFileBtn = h("button", {
-    class: "left-icon-btn",
-    title: t("+ 新文件"),
-    onclick: async () => {
-      const rel = prompt(t("新文件路径"), "main.tex");
-      if (!rel) return;
-      await api(`/api/projects/${p.id}/file`, {
-        method: "POST",
-        body: JSON.stringify({ path: rel, content: "" }),
-      });
-      await loadProject(p.id);
-      cleanupEditor();
-      mount(render());
-    },
-  });
-  newFileBtn.appendChild(iconSvg("plus"));
-  const uploadBtn = h("button", {
-    class: "left-icon-btn",
-    title: t("上传"),
-    onclick: () => uploadInput.click(),
-  });
-  uploadBtn.appendChild(iconSvg("upload"));
-  const exportBtn = h("button", {
-    class: "left-icon-btn",
-    title: t("导出 Zip"),
-    onclick: () => exportProjectZip(),
-  });
-  exportBtn.appendChild(iconSvg("download"));
-
-  const toolsRow = h("div", { class: "left-tools" }, [
-    filterInput,
-    newFileBtn,
-    uploadBtn,
-    exportBtn,
-  ]);
-  const headerActions = h("div", { class: "left-header-actions" }, [shareWrap, settingsWrap]);
-  const headerChildren = [
-    h("div", { class: "left-header-top" }, [leftTitleWrap, headerActions]),
-  ];
-  if (app.ui.leftRailMode === "files") headerChildren.push(toolsRow);
-
-  const leftHeader = h("div", { class: "left-pane-header" }, headerChildren);
-
-  const leftBody = h("div", { class: "left-pane-body" }, []);
-  leftBody.appendChild(renderFileTree());
-
-  const left = h(
-    "div",
-    {
-      class: "pane left",
-      ondragover: (ev) => {
-        ev.preventDefault();
-        ev.currentTarget.classList.add("drop-ready");
-      },
-      ondragleave: (ev) => {
-        ev.currentTarget.classList.remove("drop-ready");
-      },
-      ondrop: onDrop,
-    },
-    [leftHeader, uploadInput, leftBody]
-  );
-
-  const editorToolbar = h("div", { class: "editor-toolbar minimal", id: "editorToolbar" }, []);
-
-  const bottomLog = h("pre", { class: "bottom-log", id: "bottomLog" });
-  bottomLog.textContent = app.ui.bottomMode === "log" ? app.current.lastLog || "" : app.ui.bottomTerminalLog || "";
-  const termBtn = btn(t("终端"), { kind: "tiny", onClick: () => setBottomMode("terminal"), id: "bottomModeTerm" });
-  const logBtn = btn(t("日志"), { kind: "tiny", onClick: () => setBottomMode("log"), id: "bottomModeLog" });
-  if (app.ui.bottomMode === "terminal") termBtn.classList.add("active");
-  if (app.ui.bottomMode === "log") logBtn.classList.add("active");
-  const clearBtn = btn(t("清空"), {
-    kind: "tiny",
-    onClick: () => {
-      if (app.ui.bottomMode === "terminal") clearBottomTerminal();
-      else {
-        app.current.lastLog = "";
-        const logEl = document.getElementById("compileLog");
-        if (logEl) logEl.textContent = "";
-        updateBottomConsoleMode();
-      }
-    },
-  });
-  const bottomHeader = h("div", { class: "bottom-header" }, [
-    h("div", { class: "bottom-title", html: t("控制台") }),
-    h("div", { class: "bottom-actions" }, [termBtn, logBtn, clearBtn, btn(t("关闭"), { kind: "tiny", onClick: () => setBottomConsole(false) })]),
-  ]);
-  const bottomInput = h("input", {
-    class: "input bottom-input",
-    placeholder: t("输入命令，回车执行"),
-  });
-  bottomInput.autocomplete = "off";
-  const runBottomCommand = async (raw) => {
-    const cmd = String(raw || "").trim();
-    if (!cmd) return;
-    appendBottomTerminal(`> ${cmd}`);
-    app.ui.bottomHistory = app.ui.bottomHistory || [];
-    app.ui.bottomHistory.push(cmd);
-    if (app.ui.bottomHistory.length > 50) app.ui.bottomHistory = app.ui.bottomHistory.slice(-50);
-    app.ui.bottomHistoryIndex = app.ui.bottomHistory.length;
-    const parts = cmd.split(/\s+/);
-    const head = parts.shift().toLowerCase();
-    const rest = parts.join(" ");
-    if (head === "help") {
-      appendBottomTerminal(
-        "commands: help, compile, quick, clean, open <file>, reveal, mode <terminal|log>, clear, ls"
-      );
-      return;
-    }
-    if (head === "mode") {
-      if (parts[0] === "log") setBottomMode("log");
-      else setBottomMode("terminal");
-      return;
-    }
-    if (head === "clear") {
-      clearBottomTerminal();
-      return;
-    }
-    if (head === "ls") {
-      const files = (app.current.tree || []).filter((p) => !isFolderPlaceholder(p));
-      const slice = files.slice(0, 40);
-      appendBottomTerminal(slice.join("\n"));
-      if (files.length > slice.length) appendBottomTerminal(`... +${files.length - slice.length}`);
-      return;
-    }
-    if (head === "open") {
-      if (!rest) {
-        appendBottomTerminal("usage: open <file>");
-        return;
-      }
-      openFile(rest).catch((e) => appendBottomTerminal(e && e.message ? e.message : String(e)));
-      return;
-    }
-    if (head === "reveal") {
-      revealActiveFile();
-      return;
-    }
-    if (head === "compile" || head === "build") {
-      compileProject({ mode: "full", origin: "manual" }).catch((e) =>
-        appendBottomTerminal(e && e.message ? e.message : String(e))
-      );
-      return;
-    }
-    if (head === "quick") {
-      compileProject({ mode: "quick", origin: "manual" }).catch((e) =>
-        appendBottomTerminal(e && e.message ? e.message : String(e))
-      );
-      return;
-    }
-    if (head === "clean") {
-      compileProject({ mode: "full", clean: true, origin: "manual" }).catch((e) =>
-        appendBottomTerminal(e && e.message ? e.message : String(e))
-      );
-      return;
-    }
-    appendBottomTerminal(`unknown command: ${head}`);
-  };
-  bottomInput.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") {
-      ev.preventDefault();
-      const v = bottomInput.value;
-      bottomInput.value = "";
-      runBottomCommand(v);
-    } else if (ev.key === "ArrowUp") {
-      ev.preventDefault();
-      const idx = app.ui.bottomHistoryIndex ?? app.ui.bottomHistory.length;
-      const next = Math.max(0, idx - 1);
-      app.ui.bottomHistoryIndex = next;
-      bottomInput.value = app.ui.bottomHistory[next] || "";
-    } else if (ev.key === "ArrowDown") {
-      ev.preventDefault();
-      const idx = app.ui.bottomHistoryIndex ?? app.ui.bottomHistory.length;
-      const next = Math.min(app.ui.bottomHistory.length, idx + 1);
-      app.ui.bottomHistoryIndex = next;
-      bottomInput.value = app.ui.bottomHistory[next] || "";
-    }
-  });
-  const runBtn = btn(t("执行"), {
-    kind: "tiny",
-    onClick: () => {
-      const v = bottomInput.value;
-      bottomInput.value = "";
-      runBottomCommand(v);
-    },
-  });
-  const bottomInputRow = h("div", { class: "bottom-input-row" }, [
-    h("span", { class: "bottom-prompt", html: "&gt;" }),
-    bottomInput,
-    runBtn,
-  ]);
-  const bottomConsole = h(
-    "div",
-    { class: "bottom-console", id: "bottomConsole", style: app.ui.bottomConsole ? "" : "display:none" },
-    [bottomHeader, bottomInputRow, bottomLog]
-  );
-  const bottomGutter = h("div", {
-    class: "bottom-gutter",
-    id: "bottomGutter",
-    style: app.ui.bottomConsole ? "" : "display:none",
-    onmousedown: (ev) => startBottomDrag(ev),
-  });
-  const bottomCollapsed = h(
-    "div",
-    {
-      class: "bottom-collapsed",
-      id: "bottomCollapsed",
-      style: app.ui.bottomConsole ? "display:none" : "",
-      onclick: () => setBottomConsole(true),
-    },
-    [
-      h("div", { class: "bottom-collapsed-title", html: t("控制台") }),
-      h("div", { class: "bottom-collapsed-hint", html: t("点击展开控制台") }),
-    ]
-  );
-
-  const editor = h("div", { class: "pane editor-pane" }, [
-    h("div", { class: "pane-header" }, [
-      h("div", {
-        class: "pane-title",
-        id: "editorTitle",
-        title: app.current.openFile || "",
-        html: app.current.openFile ? fileBaseName(app.current.openFile) : t("编辑器"),
-      }),
-    ]),
-    editorToolbar,
-    h("div", { class: "editor", id: "editorHost" }),
-    h("div", { class: "editor-status", id: "editorStatus" }, [
-      h("span", { class: "hint", html: t("打开文件开始编辑。") }),
-    ]),
-  ]);
-
-  const themeSelect = h(
-    "select",
-    {
-      class: "input",
-      onchange: (ev) => {
-        setTheme(ev.target.value);
-      },
-    },
-    [
-      h("option", { value: "default", html: t("默认"), selected: app.ui.theme === "default" ? "" : null }),
-      h("option", { value: "vscode-dark", html: t("VSCode 深色"), selected: app.ui.theme === "vscode-dark" ? "" : null }),
-      h("option", { value: "vscode-light", html: t("VSCode 浅色"), selected: app.ui.theme === "vscode-light" ? "" : null }),
-    ]
-  );
-
-  const fontSizeInput = input({ type: "number", value: String(app.ui.editorFontSize) });
-  fontSizeInput.classList.add("compact");
-  fontSizeInput.setAttribute("min", "11");
-  fontSizeInput.setAttribute("max", "22");
-  fontSizeInput.setAttribute("step", "0.5");
-  fontSizeInput.onchange = (ev) => setEditorFontSize(ev.target.value);
-
-  const lineHeightInput = input({ type: "number", value: String(app.ui.editorLineHeight) });
-  lineHeightInput.classList.add("compact");
-  lineHeightInput.setAttribute("min", "1.2");
-  lineHeightInput.setAttribute("max", "2.4");
-  lineHeightInput.setAttribute("step", "0.05");
-  lineHeightInput.onchange = (ev) => setEditorLineHeight(ev.target.value);
-
-  const padYInput = input({ type: "number", value: String(app.ui.editorPadY) });
-  padYInput.classList.add("compact");
-  padYInput.setAttribute("min", "8");
-  padYInput.setAttribute("max", "32");
-  padYInput.setAttribute("step", "1");
-  padYInput.onchange = (ev) => setEditorPaddingY(ev.target.value);
-
-  const padXInput = input({ type: "number", value: String(app.ui.editorPadX) });
-  padXInput.classList.add("compact");
-  padXInput.setAttribute("min", "8");
-  padXInput.setAttribute("max", "32");
-  padXInput.setAttribute("step", "1");
-  padXInput.onchange = (ev) => setEditorPaddingX(ev.target.value);
-
-  const treeDensitySelect = h(
-    "select",
-    {
-      class: "input",
-      onchange: (ev) => setTreeDensity(ev.target.value),
-    },
-    [
-      h("option", { value: "comfortable", html: t("舒适"), selected: app.ui.treeDensity !== "compact" ? "" : null }),
-      h("option", { value: "compact", html: t("紧凑"), selected: app.ui.treeDensity === "compact" ? "" : null }),
-    ]
-  );
-  treeDensitySelect.classList.add("compact");
-
-  const compileBtn = btn("", { kind: "", onClick: () => compileProject({ mode: "full" }), id: "compileBtn" });
-  compileBtn.title = t("编译 (Ctrl/Cmd+S)");
-  compileBtn.classList.add("compile-btn");
-  const compileIcon = iconSvg("compile", { size: 14, className: "compile-icon" });
-  const compileLabel = h("span", { class: "compile-label", html: t("编译") });
-  compileBtn.appendChild(compileIcon);
-  compileBtn.appendChild(compileLabel);
-
-  const wsInput = h("input", {
-    class: "input",
-    placeholder: t("WebSocket 地址 (可选)"),
-    value: app.ui.wsUrlOverride || "",
-    oninput: (ev) => setWsUrlOverride(ev.target.value),
-  });
-  const wsClearBtn = btn(t("清除"), {
-    kind: "tiny",
-    onClick: () => {
-      wsInput.value = "";
-      setWsUrlOverride("");
-    },
-  });
-  const wsPortGuess = (() => {
-    const u = new URL(location.href);
-    const param = u.searchParams.get("wsPort");
-    if (param) return param;
-    if (app.ui.wsUrlOverride) {
-      try {
-        const parsed = new URL(app.ui.wsUrlOverride);
-        if (parsed.port) return parsed.port;
-      } catch {
-        // ignore parse errors
-      }
-    }
-    const basePort = Number(location.port);
-    if (Number.isFinite(basePort) && basePort > 0) return String(basePort + 1);
-    return "";
-  })();
-  const wsPortInput = h("input", {
-    class: "input",
-    placeholder: t("WS 端口"),
-    value: wsPortGuess,
-    oninput: (ev) => {
-      const v = ev.target.value.replace(/[^\d]/g, "");
-      if (v !== ev.target.value) ev.target.value = v;
-    },
-  });
-  const wsPortApplyBtn = btn(t("应用"), {
-    kind: "tiny",
-    onClick: () => {
-      const port = wsPortInput.value.trim();
-      if (!port) return;
-      const scheme = location.protocol === "https:" ? "wss" : "ws";
-      const url = `${scheme}://${location.hostname}:${port}`;
-      setWsUrlOverride(url);
-      wsInput.value = url;
-    },
-  });
-
-  const pdfHint = h("div", {
-    class: "hint",
-    id: "pdfHint",
-    html: hasPdf ? "" : t("暂无 PDF，请点击编译生成。"),
-    style: hasPdf ? "display:none" : null,
-  });
-
-  const pdfPages = h("div", { class: "pdf-pages", id: "pdfPages" });
-  const pdfMarker = h("div", { class: "pdf-marker", id: "pdfMarker" });
-  const pdfViewer = h("div", { class: "pdf-viewer", id: "pdfViewer" }, [pdfPages, pdfMarker, pdfHint]);
-  pdfViewer.ondblclick = async (ev) => {
-    if (!app.current.project) return;
-    const target = ev.target;
-    let canvas = target && target.closest ? target.closest("canvas.pdf-canvas") : null;
-    if (!canvas && target && target.closest) {
-      const wrap = target.closest(".pdf-page-wrap");
-      if (wrap) canvas = wrap.querySelector("canvas.pdf-canvas");
-    }
-    if (!canvas) return;
-    const page = Number(canvas.getAttribute("data-page") || canvas.dataset.page || app.ui.pdfPage || 1);
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
-    const xCss = ev.clientX - rect.left;
-    const yCss = ev.clientY - rect.top;
-    if (xCss < 0 || yCss < 0 || xCss > rect.width || yCss > rect.height) return;
-    const scale = app.ui.pdfScale || 1;
-    const x = xCss / scale;
-    const y = yCss / scale;
-    const pageHeight = app.ui.pdfPageHeights ? app.ui.pdfPageHeights[page] : null;
-    app.ui.pdfPage = page;
-    const pageInput = document.getElementById("pdfPageInput");
-    if (pageInput) pageInput.value = String(page);
-    app.ui.pdfMarker = { page, x, y };
-    app.ui.pdfMarkerFocus = false;
-    app.ui.pdfMarkerPulse = true;
-    placePdfMarker();
-    pulsePdfMarker();
-    try {
-      const res = await api(`/api/projects/${p.id}/synctex/edit`, {
-        method: "POST",
-        body: JSON.stringify({
-          page,
-          x,
-          y,
-          pageHeight,
-          target: getPdfTargetFile(p.id),
-        }),
-      });
-      if (res && res.file && res.line) {
-        await openFileAt(res.file, res.line, { skipPdfSync: true });
-      }
-    } catch {
-      // ignore failed click mapping
-    }
-  };
-  pdfViewer.addEventListener(
-    "wheel",
-    (ev) => {
-      if (!(ev.ctrlKey || ev.metaKey)) return;
-      ev.preventDefault();
-      if (ev.deltaY < 0) zoomStep(1);
-      else zoomStep(-1);
-    },
-    { passive: false }
-  );
-  pdfViewer.addEventListener("scroll", () => {
-    if (pdfScrollRaf) cancelAnimationFrame(pdfScrollRaf);
-    pdfScrollRaf = requestAnimationFrame(() => {
-      pdfScrollRaf = null;
-      handlePdfScroll();
-    });
-  });
-  if (hasPdf) {
-    const shouldRefresh = !app.ui.pdfDoc;
-    if (shouldRefresh) app.ui.pdfTs = Date.now();
-    setTimeout(() => {
-      renderPdfPages({ projectId: p.id, refresh: shouldRefresh }).catch(() => {});
-    }, 0);
-  }
-  compileBtn.classList.add("pdf-action");
-  const pageInfo = h("div", {
-    class: "pdf-page-badge",
-    id: "pdfPageInfo",
-    html: formatPdfPageInfo(app.ui.pdfPage || 1, app.ui.pdfPageCount || 1),
-  });
-  const pdfActions = h("div", { class: "pdf-action-bar" }, [
-    h("div", { class: "pdf-action-left" }, [compileBtn]),
-  ]);
-
-  const logDiv = h("div", { class: "log", id: "compileLog" });
-  logDiv.textContent = app.current.lastLog || "";
-
-  const logHeader = h("div", { class: "log-header" }, [
-    h("div", { class: "log-group" }, [
-      h("div", { class: "log-title", html: t("编译") }),
-    ]),
-  ]);
-
-  const summaryText = buildDiagnosticSummary();
-  const summaryTextEl = h("pre", { class: "summary-text", id: "compileSummaryText" });
-  summaryTextEl.textContent = summaryText || "";
-  const summaryBox = h(
-    "div",
-    { class: "log-summary", id: "compileSummaryBox", style: summaryText ? "" : "display:none" },
-    [h("div", { class: "summary-title", html: t("诊断摘要") }), summaryTextEl]
-  );
-
-  const pdfPane = h("div", { class: "pdf-pane" }, [pdfViewer, pdfActions, pageInfo]);
-  const tabPages = {
-    pdf: h("div", { class: "tab-page pdf-page", id: "tab_pdf" }, [pdfPane]),
-    logs: h("div", { class: "tab-page log-page", id: "tab_logs" }, [logHeader, summaryBox, logDiv]),
-  };
-
-  const selectTab = () => {
-    const key = "pdf";
-    app.ui.rightTab = key;
-    localStorage.setItem("ct_rightTab", key);
-    for (const [k, el] of Object.entries(tabPages)) el.style.display = k === key ? "" : "none";
-    stopMonitorPolling();
-  };
-  app.ui.selectRightTab = selectTab;
-  selectTab();
-
-  const right = h("div", { class: "pane right-pane", id: "rightPane" }, [
-    h("div", { class: "tab-body" }, Object.values(tabPages)),
-  ]);
-
-  if (app.ui.pendingOpenFile && app.ui.pendingOpenFile !== app.current.openFile) {
-    const target = app.ui.pendingOpenFile;
-    app.ui.pendingOpenFile = null;
-    setTimeout(() => {
-      openFile(target).catch(console.error);
-    }, 0);
-  }
-  if (!app.current.openFile && !app.ui.pendingOpenFile) {
-    const fallback = app.current.mainFile && app.current.tree.includes(app.current.mainFile)
-      ? app.current.mainFile
-      : pickDefaultOpenFile(app.current.tree, app.current.mainFile);
-    if (fallback) {
-      app.ui.pendingOpenFile = fallback;
-      setTimeout(() => {
-        const target = app.ui.pendingOpenFile;
-        app.ui.pendingOpenFile = null;
-        if (target) openFile(target).catch(console.error);
-      }, 0);
-    }
-  }
-
-  const layout = h("div", { class: computeLayoutClass(), id: "layoutRoot" }, [
-    left,
-    h("div", { class: "gutter gutter-left", onmousedown: (ev) => startDrag("left", ev) }),
-    editor,
-    h("div", { class: "gutter gutter-right", onmousedown: (ev) => startDrag("right", ev) }),
-    right,
-  ]);
-
-  const railUser = me || { username: "User" };
-  const railColor = pickColor(railUser.username || "U");
-  const railAvatar = h("div", { class: "rail-avatar", html: (railUser.username || "U").charAt(0).toUpperCase() });
-  railAvatar.style.setProperty("--user-accent", railColor.color);
-  const railIconBtn = (icon, title, onClick, { active = false, kind = "" } = {}) => {
-    const cls = `rail-btn ${kind} ${active ? "active" : ""}`.trim();
-    const btnEl = h("button", { class: cls, title, onclick: onClick });
-    btnEl.appendChild(iconSvg(icon, { size: 16 }));
-    return btnEl;
-  };
-  const railActionBtn = (icon, title, onClick) => railIconBtn(icon, title, onClick, { kind: "rail-action" });
-  const railActionLink = (icon, title, href, onClick) => {
-    const linkEl = h("a", { class: "rail-btn rail-action", title, href, onclick: onClick });
-    linkEl.appendChild(iconSvg(icon, { size: 16 }));
-    return linkEl;
-  };
-  const railChatBtn = null;
-  const rail = h("div", { class: "studio-rail" }, [
-    h("div", { class: "studio-rail-group" }, [
-      railActionBtn("panel", app.ui.leftCollapsed ? t("显示侧栏") : t("隐藏侧栏"), () => toggleLeftPane()),
-      railIconBtn("files", t("文件"), () => setLeftRailMode("files"), { active: app.ui.leftRailMode === "files" }),
-      railChatBtn,
-    ]),
-    h("div", { class: "studio-rail-footer" }, [
-      railAvatar,
-    ]),
-  ]);
-
-  const shell = h("div", { class: "studio-shell" }, [
-    rail,
-    h("div", { class: "studio-main" }, [layout]),
-  ]);
-
-  return h("div", { class: "page studio-page" }, [shell]);
 }
 
 function renderLoading() {
@@ -6734,7 +3633,7 @@ function renderModalOverlay() {
 function render() {
   let page;
   if (app.view === "loading") page = renderLoading();
-  else if (app.view === "login") page = renderProjects();
+  else if (app.view === "login") page = renderLogin();
   else if (app.view === "projects") page = renderProjects();
   else if (app.view === "project") page = renderProject();
   else page = renderLoading();
@@ -6783,8 +3682,8 @@ async function bootstrap() {
   }
   if (!app.me) {
     localStorage.removeItem("ct_session_token");
-    enterGuestMode();
-    await loadProjects();
+    app.ui.guestMode = false;
+    app.view = "login";
     mount(render());
     return;
   }
