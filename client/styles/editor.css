@@ -53,26 +53,26 @@
 }
 
 .cm-content { color: var(--editor-text); }
-.cm-comment { color: #f6d9b6; }
+.cm-comment { color: #8fd4a8; }
 .cm-keyword,
 .cm-atom,
-.cm-def { color: #ffe3be; }
+.cm-def { color: #dfc8ff; }
 .cm-string,
-.cm-string-2 { color: #ffe9cc; }
-.cm-number { color: #ffdcb0; }
+.cm-string-2 { color: #dcf6e8; }
+.cm-number { color: #d3c0ff; }
 .cm-operator,
-.cm-meta { color: #ffedd4; }
-.cm-bracket { color: #ffdeb8; }
+.cm-meta { color: #e8dbff; }
+.cm-bracket { color: #d8f1e5; }
 .cm-invalid { color: #ffb894; }
 .cm-variableName,
 .cm-variableName2,
-.cm-variableName3 { color: #fff2de; }
+.cm-variableName3 { color: #f3fbff; }
 .cm-typeName,
-.cm-className { color: #ffe6c8; }
-.cm-tag { color: #ffd9b6; }
-.cm-attribute { color: #ffe0bf; }
-.cm-builtin { color: #ffd2a6; }
-.cm-qualifier { color: #ffecd6; }
+.cm-className { color: #d8f3e5; }
+.cm-tag { color: #e1ccff; }
+.cm-attribute { color: #d2f0e2; }
+.cm-builtin { color: #d8c4ff; }
+.cm-qualifier { color: #eafcff; }
 .cm-property,
 .cm-namespace,
 .cm-bool,
@@ -81,9 +81,9 @@
 .cm-quote,
 .cm-strong,
 .cm-emphasis,
-.cm-header { color: #ffe6c8; }
+.cm-header { color: #dff9ec; }
 .cm-link,
-.cm-url { color: #ffe2c0; }
+.cm-url { color: #dbc6ff; }
 
 
 .cm-flashLine {

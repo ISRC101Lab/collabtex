@@ -697,7 +697,7 @@ async function renderPdfPages({ projectId, refresh = false } = {}) {
   app.ui.pdfPage = pageNum;
 
   const pageInput = document.getElementById("pdfPageInput");
-  if (pageInput) pageInput.value = String(pageNum);
+  if (pageInput) pageInput.value = String(pageNum).padStart(2, "0");
   updatePdfPageInfo(pageNum, total);
 
   const firstPage = await doc.getPage(1);
@@ -1008,7 +1008,7 @@ function setPdfView({ projectId, page, zoom, refresh = false } = {}) {
     const num = Number(page);
     app.ui.pdfPage = Number.isFinite(num) && num > 0 ? Math.floor(num) : 1;
     const pageInput = document.getElementById("pdfPageInput");
-    if (pageInput) pageInput.value = String(app.ui.pdfPage);
+    if (pageInput) pageInput.value = String(app.ui.pdfPage).padStart(2, "0");
     updatePdfPageInfo(app.ui.pdfPage, app.ui.pdfPageCount || 1);
   }
   const zoomChanged = !!zoom;
@@ -1038,7 +1038,9 @@ function getZoomNumber(val) {
 
 function formatPdfPageInfo(page, total) {
   const norm = (n) => Math.max(1, Number(n) || 1);
-  return `${norm(page)} / ${norm(total)} 页`;
+  const cur = String(norm(page)).padStart(2, "0");
+  const all = String(norm(total)).padStart(2, "0");
+  return `${t("共")} ${all} ${t("页")}`;
 }
 
 function updatePdfPageInfo(page, total) {
@@ -1503,8 +1505,8 @@ const app = {
 };
 
 // Simple resizable split panes (Overleaf-like).
-app.ui.leftW = clampNumber(localStorage.getItem("ct_leftW"), 180, 520, 200);
-app.ui.rightW = clampNumber(localStorage.getItem("ct_rightW"), 360, 900, 600);
+app.ui.leftW = clampNumber(localStorage.getItem("ct_leftW"), 140, 2200, 200);
+app.ui.rightW = clampNumber(localStorage.getItem("ct_rightW"), 220, 2200, 600);
 app.ui.rightTab = localStorage.getItem("ct_rightTab") || "pdf";
 {
   const base = Math.max(640, window.innerWidth || 0);
@@ -1513,6 +1515,58 @@ app.ui.rightTab = localStorage.getItem("ct_rightTab") || "pdf";
   localStorage.setItem("ct_left_ratio", String(app.ui.leftRatio));
   localStorage.setItem("ct_right_ratio", String(app.ui.rightRatio));
 }
+
+const SPLIT_LIMITS = {
+  minViewport: 640,
+  leftMinPx: 160,
+  rightMinPx: 280,
+  editorMinPx: 320,
+  leftMinRatio: 0.14,
+  rightMinRatio: 0.2,
+  editorMinRatio: 0.33,
+  leftHardMaxRatio: 0.72,
+  rightHardMaxRatio: 0.78,
+};
+
+function getSplitBounds({ width = window.innerWidth, panelDock = "right" } = {}) {
+  const w = Math.max(SPLIT_LIMITS.minViewport, Number(width) || 0);
+  const minLeftBase = Math.max(SPLIT_LIMITS.leftMinPx, Math.floor(w * SPLIT_LIMITS.leftMinRatio));
+  const minRightBase = Math.max(SPLIT_LIMITS.rightMinPx, Math.floor(w * SPLIT_LIMITS.rightMinRatio));
+  let minEditor = Math.max(SPLIT_LIMITS.editorMinPx, Math.floor(w * SPLIT_LIMITS.editorMinRatio));
+
+  if (panelDock === "bottom") {
+    const maxLeft = Math.max(minLeftBase, Math.floor(Math.min(w * SPLIT_LIMITS.leftHardMaxRatio, w - minEditor)));
+    return {
+      width: w,
+      minLeft: minLeftBase,
+      maxLeft,
+      minRight: minRightBase,
+      maxRight: Math.max(minRightBase, Math.floor(w * SPLIT_LIMITS.rightHardMaxRatio)),
+      minEditor,
+    };
+  }
+
+  const minTotal = minLeftBase + minRightBase + minEditor;
+  if (minTotal > w) {
+    const overflow = minTotal - w;
+    minEditor = Math.max(240, minEditor - overflow);
+  }
+
+  const maxLeftBySpace = w - minRightBase - minEditor;
+  const maxRightBySpace = w - minLeftBase - minEditor;
+  const maxLeft = Math.max(minLeftBase, Math.floor(Math.min(w * SPLIT_LIMITS.leftHardMaxRatio, maxLeftBySpace)));
+  const maxRight = Math.max(minRightBase, Math.floor(Math.min(w * SPLIT_LIMITS.rightHardMaxRatio, maxRightBySpace)));
+
+  return {
+    width: w,
+    minLeft: minLeftBase,
+    maxLeft,
+    minRight: minRightBase,
+    maxRight,
+    minEditor,
+  };
+}
+
 function applySplitVars() {
   normalizeSplitWidths();
   document.documentElement.style.setProperty("--leftW", `${app.ui.leftW}px`);
@@ -1522,51 +1576,46 @@ function applySplitVars() {
 }
 
 function updateSplitRatios() {
-  const w = Math.max(640, window.innerWidth || 0);
-  const minLeft = 180;
-  const minRight = 360;
-  const maxLeft = Math.min(520, Math.max(minLeft, Math.floor(w * 0.35)));
-  const maxRight = Math.min(900, Math.max(minRight, Math.floor(w * 0.45)));
-  const left = clampNumber(app.ui.leftW, minLeft, maxLeft, 200);
-  const right = clampNumber(app.ui.rightW, minRight, maxRight, 600);
-  app.ui.leftRatio = clampNumber(left / w, minLeft / w, maxLeft / w, app.ui.leftRatio || left / w);
-  app.ui.rightRatio = clampNumber(right / w, minRight / w, maxRight / w, app.ui.rightRatio || right / w);
+  const sideBounds = getSplitBounds({ panelDock: "right" });
+  const w = sideBounds.width;
+  const left = clampNumber(app.ui.leftW, sideBounds.minLeft, sideBounds.maxLeft, app.ui.leftW);
+  const right = clampNumber(app.ui.rightW, sideBounds.minRight, sideBounds.maxRight, app.ui.rightW);
+  app.ui.leftRatio = clampNumber(left / w, sideBounds.minLeft / w, sideBounds.maxLeft / w, app.ui.leftRatio || left / w);
+  app.ui.rightRatio = clampNumber(right / w, sideBounds.minRight / w, sideBounds.maxRight / w, app.ui.rightRatio || right / w);
   localStorage.setItem("ct_left_ratio", String(app.ui.leftRatio));
   localStorage.setItem("ct_right_ratio", String(app.ui.rightRatio));
 }
 
 function normalizeSplitWidths() {
-  const w = Math.max(640, window.innerWidth || 0);
-  const minLeft = 180;
-  const minRight = 300;
-  const minEditor = 320;
-  const maxLeft = Math.min(520, Math.max(minLeft, Math.floor(w * 0.35)));
-  const maxRight = Math.min(760, Math.max(minRight, Math.floor(w * 0.4)));
+  const panelDock = app.ui.panelDock === "bottom" ? "bottom" : "right";
+  const dockBounds = getSplitBounds({ panelDock });
+  const sideBounds = getSplitBounds({ panelDock: "right" });
+  const w = dockBounds.width;
 
-  let left = clampNumber(app.ui.leftW, minLeft, maxLeft, 220);
-  let right = clampNumber(app.ui.rightW, minRight, maxRight, 520);
+  let left = clampNumber(app.ui.leftW, dockBounds.minLeft, dockBounds.maxLeft, app.ui.leftW);
+  let right = clampNumber(app.ui.rightW, sideBounds.minRight, sideBounds.maxRight, app.ui.rightW);
   if (app.ui.splitAuto) {
     const leftRatio = Number.isFinite(app.ui.leftRatio) ? app.ui.leftRatio : left / w;
     const rightRatio = Number.isFinite(app.ui.rightRatio) ? app.ui.rightRatio : right / w;
-    left = clampNumber(Math.round(w * leftRatio), minLeft, maxLeft, left);
-    right = clampNumber(Math.round(w * rightRatio), minRight, maxRight, right);
+    left = clampNumber(Math.round(w * leftRatio), dockBounds.minLeft, dockBounds.maxLeft, left);
+    right = clampNumber(Math.round(w * rightRatio), sideBounds.minRight, sideBounds.maxRight, right);
   }
 
   if (app.ui.panelDock !== "bottom") {
-    const available = w - minEditor;
+    const available = w - dockBounds.minEditor;
     if (left + right > available) {
       let overflow = left + right - available;
-      const rightSlack = Math.max(0, right - minRight);
+      const rightSlack = Math.max(0, right - sideBounds.minRight);
       const reduceRight = Math.min(overflow, rightSlack);
       right -= reduceRight;
       overflow -= reduceRight;
       if (overflow > 0) {
-        left = Math.max(minLeft, left - overflow);
+        left = Math.max(dockBounds.minLeft, left - overflow);
       }
     }
   } else {
-    const available = w - minEditor;
-    if (left > available) left = Math.max(minLeft, available);
+    const available = w - dockBounds.minEditor;
+    if (left > available) left = Math.max(dockBounds.minLeft, available);
   }
 
   if (left !== app.ui.leftW || right !== app.ui.rightW) {
@@ -1651,8 +1700,9 @@ function setLeftCollapsed(next) {
   updateTopbarButtons();
   const restoreBtn = document.getElementById("sidebarRestoreBtn");
   if (restoreBtn) {
-    restoreBtn.classList.toggle("is-hidden", !app.ui.leftCollapsed);
-    const title = app.ui.leftCollapsed ? t("打开侧边栏") : t("侧边栏已打开");
+    restoreBtn.classList.toggle("is-collapsed", app.ui.leftCollapsed);
+    restoreBtn.classList.toggle("is-expanded", !app.ui.leftCollapsed);
+    const title = app.ui.leftCollapsed ? t("显示文件树") : t("隐藏文件树");
     restoreBtn.setAttribute("title", title);
     restoreBtn.setAttribute("aria-label", title);
   }
@@ -1990,13 +2040,16 @@ function startDrag(which, ev) {
   const startLeft = app.ui.leftW;
   const startRight = app.ui.rightW;
 
+  const bounds = getSplitBounds({ panelDock: app.ui.panelDock === "bottom" ? "bottom" : "right" });
+  const sideBounds = getSplitBounds({ panelDock: "right" });
+
   const onMove = (e) => {
     const dx = e.clientX - startX;
     if (which === "left") {
-      app.ui.leftW = Math.max(180, Math.min(520, startLeft + dx));
+      app.ui.leftW = clampNumber(startLeft + dx, bounds.minLeft, bounds.maxLeft, startLeft);
       localStorage.setItem("ct_leftW", String(app.ui.leftW));
     } else {
-      app.ui.rightW = Math.max(360, Math.min(900, startRight - dx));
+      app.ui.rightW = clampNumber(startRight - dx, sideBounds.minRight, sideBounds.maxRight, startRight);
       localStorage.setItem("ct_rightW", String(app.ui.rightW));
     }
     applySplitVars();

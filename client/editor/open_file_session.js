@@ -307,12 +307,12 @@ export async function openFileSession(filePath, deps) {
             color: "var(--muted)",
             borderRight: "1px solid var(--border)",
           },
-          ".cm-activeLine": { backgroundColor: "rgba(14, 99, 156, 0.08)" },
-          ".cm-selectionBackground": { backgroundColor: "rgba(14, 99, 156, 0.2)" },
-          ".cm-cursor": { borderLeftColor: "var(--accent)" },
+          ".cm-activeLine": { backgroundColor: "rgba(206, 186, 255, 0.12)" },
+          ".cm-selectionBackground": { backgroundColor: "rgba(176, 227, 198, 0.2)" },
+          ".cm-cursor": { borderLeftColor: "#e5f3ff" },
           ".cm-matchingBracket": {
-            backgroundColor: "rgba(214, 122, 31, 0.2)",
-            outline: "1px solid rgba(214, 122, 31, 0.4)",
+            backgroundColor: "rgba(172, 236, 204, 0.18)",
+            outline: "1px solid rgba(176, 227, 198, 0.42)",
           },
         },
         { dark: false }

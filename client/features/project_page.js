@@ -40,7 +40,6 @@ export function renderProjectPage(deps) {
     renderLoading,
     renderPdfPages,
     renderPinnedFiles,
-    revealActiveFile,
     schedulePdfSync,
     setBottomConsole,
     setBottomMode,
@@ -48,8 +47,6 @@ export function renderProjectPage(deps) {
     setEditorLineHeight,
     setEditorPaddingX,
     setEditorPaddingY,
-    setFileView,
-    setLeftCollapsed,
     setLayoutMode,
     setPdfTargetFile,
     setPdfView,
@@ -345,105 +342,21 @@ export function renderProjectPage(deps) {
   ]);
 
   const openCompileLogs = () => {
-    if (app.ui.selectRightTab) app.ui.selectRightTab("logs");
-    else app.ui.rightTab = "logs";
-    setBottomMode("log");
-  };
-
-  const toggleCodePane = () => {
-    const codeOn = app.ui.layoutMode !== "pdf";
-    const pdfOn = app.ui.layoutMode !== "editor";
-    if (codeOn) {
-      if (!pdfOn) return;
-      setLayoutMode("pdf");
+    const nowTab = app.ui.rightTab || "pdf";
+    const toLogs = nowTab !== "logs";
+    if (toLogs) {
+      if (app.ui.layoutMode === "editor") setLayoutMode("balanced");
+      if (app.ui.selectRightTab) app.ui.selectRightTab("logs");
+      else app.ui.rightTab = "logs";
+      setBottomMode("log");
       return;
     }
-    setLayoutMode(pdfOn ? "balanced" : "editor");
+    if (app.ui.selectRightTab) app.ui.selectRightTab("pdf");
+    else app.ui.rightTab = "pdf";
   };
 
-  const togglePdfPane = () => {
-    const codeOn = app.ui.layoutMode !== "pdf";
-    const pdfOn = app.ui.layoutMode !== "editor";
-    if (pdfOn) {
-      if (!codeOn) return;
-      setLayoutMode("editor");
-      return;
-    }
-    setLayoutMode(codeOn ? "balanced" : "pdf");
-  };
-
-  const isFileTreeMode = () => !app.ui.leftCollapsed && app.ui.fileView === "all";
-
-  const enableFileTreeMode = () => {
-    if (app.ui.leftCollapsed) setLeftCollapsed(false);
-    if (app.ui.fileView !== "all") setFileView("all");
-    app.ui.leftRailMode = "files";
-    app.ui.leftPaneTab = "files";
-    if (typeof revealActiveFile === "function") revealActiveFile();
-  };
-
-  const toggleFileTreeMode = () => {
-    if (isFileTreeMode()) {
-      setLeftCollapsed(true);
-      return;
-    }
-    enableFileTreeMode();
-  };
-
-  const modeToggleRow = ({ iconName, label, enabled, onToggle }) => {
-    const switchBtn = h("button", {
-      class: `mode-switch ${enabled ? "on" : ""}`.trim(),
-      role: "switch",
-      "aria-checked": enabled ? "true" : "false",
-      title: enabled ? t("关闭") : t("打开"),
-      onclick: (ev) => {
-        ev.stopPropagation();
-        onToggle();
-      },
-    }, [h("span", { class: "mode-switch-thumb" })]);
-
-    return h("div", { class: "mode-row" }, [
-      h("div", { class: "mode-row-main" }, [
-        iconSvg(iconName, { size: 14, className: "mode-row-icon" }),
-        h("span", { class: "mode-row-label", html: label }),
-      ]),
-      switchBtn,
-    ]);
-  };
 
   const settingsMenu = dropdownMenu("panel-settings", h("div", { class: "dropdown-panel settings-panel" }, [
-    h("div", { class: "settings-mode-head", html: t("视图模式") }),
-    h("div", { class: "view-mode-panel" }, [
-      modeToggleRow({
-        iconName: "back",
-        label: "Code",
-        enabled: app.ui.layoutMode !== "pdf",
-        onToggle: () => toggleCodePane(),
-      }),
-      modeToggleRow({
-        iconName: "files",
-        label: "PDF",
-        enabled: app.ui.layoutMode !== "editor",
-        onToggle: () => togglePdfPane(),
-      }),
-      modeToggleRow({
-        iconName: "panel",
-        label: t("文件树"),
-        enabled: isFileTreeMode(),
-        onToggle: () => toggleFileTreeMode(),
-      }),
-      modeToggleRow({
-        iconName: "chat",
-        label: "Assistant",
-        enabled: !!app.ui.bottomConsole,
-        onToggle: () => {
-          const next = !app.ui.bottomConsole;
-          setBottomConsole(next);
-          if (next) setBottomMode("terminal");
-        },
-      }),
-    ]),
-    h("div", { class: "menu-sep" }),
     h("div", { class: "label", html: t("预览文件") }),
     pdfTargetSelect,
     h("div", { class: "label", html: t("缩放") }),
@@ -458,29 +371,6 @@ export function renderProjectPage(deps) {
     openPdfMenuBtn,
     refreshPdfMenuBtn,
   ]));
-
-  const sidebarToggleBtn = h("button", {
-    id: "toggleSidebarBtn",
-    class: `left-icon-btn ${app.ui.leftCollapsed ? "" : "active"}`.trim(),
-    title: app.ui.leftCollapsed ? t("显示文件树") : t("隐藏文件树"),
-    onclick: (ev) => {
-      ev.stopPropagation();
-      toggleLeftPane();
-      clearDropdowns();
-    },
-  });
-  sidebarToggleBtn.appendChild(iconSvg("files", { size: 14 }));
-
-  const logsBtn = h("button", {
-    class: "left-icon-btn",
-    title: t("编译日志"),
-    onclick: (ev) => {
-      ev.stopPropagation();
-      openCompileLogs();
-      clearDropdowns();
-    },
-  });
-  logsBtn.appendChild(iconSvg("list", { size: 14 }));
 
   const settingsBtn = h("button", {
     class: "left-icon-btn left-settings-btn dropdown-trigger",
@@ -503,7 +393,7 @@ export function renderProjectPage(deps) {
     class: "project-title-btn brand-title-btn",
     title: t("返回项目列表"),
     onclick: () => goProjects(),
-    html: "CollabTeX",
+    html: p.name || "CollabTeX",
   });
   const leftTitleWrap = h("div", { class: "left-title-wrap" }, [brandBtn]);
   const shareInput = input({ placeholder: t("分享给 (如 user01)") });
@@ -614,6 +504,7 @@ export function renderProjectPage(deps) {
           exportProjectZip();
         },
       }),
+      h("div", { class: "left-add-note", html: t("正在连接 Zotero...") }),
     ])
   );
   const addBtn = h("button", {
@@ -641,7 +532,7 @@ export function renderProjectPage(deps) {
     h("div", { class: "left-tabs-main" }, [filesTabBtn, focusTabBtn]),
     h("div", { class: "left-tabs-actions" }, [searchBtn, addWrap]),
   ]);
-  const headerActions = h("div", { class: "left-header-actions" }, [shareWrap, logsBtn, sidebarToggleBtn, settingsWrap]);
+  const headerActions = h("div", { class: "left-header-actions" }, [shareWrap, settingsWrap]);
   const headerChildren = [
     h("div", { class: "left-header-top" }, [leftTitleWrap, headerActions]),
     tabsRow,
@@ -821,6 +712,22 @@ export function renderProjectPage(deps) {
     ]
   );
 
+  const toolsBtn = h(
+    "button",
+    {
+      class: "editor-tools-btn",
+      title: t("编译日志"),
+      onclick: (ev) => {
+        ev.stopPropagation();
+        openCompileLogs();
+      },
+    },
+    [
+      iconSvg("list", { size: 13 }),
+      h("span", { class: "editor-tools-label", html: t("工具") }),
+    ]
+  );
+
   const editorHeader = h("div", { class: "pane-header editor-pane-header" }, [
     h("div", { class: "editor-header-left" }, [
       h("div", {
@@ -831,7 +738,7 @@ export function renderProjectPage(deps) {
       }),
     ]),
     h("div", { class: "editor-header-right" }, [
-      h("span", { class: "editor-tools-label", html: t("工具") }),
+      toolsBtn,
     ]),
   ]);
 
@@ -989,7 +896,7 @@ export function renderProjectPage(deps) {
     const pageHeight = app.ui.pdfPageHeights ? app.ui.pdfPageHeights[page] : null;
     app.ui.pdfPage = page;
     const pageInput = document.getElementById("pdfPageInput");
-    if (pageInput) pageInput.value = String(page);
+    if (pageInput) pageInput.value = String(page).padStart(2, "0");
     app.ui.pdfMarker = { page, x, y };
     app.ui.pdfMarkerFocus = false;
     app.ui.pdfMarkerPulse = true;
@@ -1038,10 +945,22 @@ export function renderProjectPage(deps) {
     }, 0);
   }
   const pageInput = h("input", {
-    class: "input pdf-page",
+    class: "input pdf-page pdf-page-current",
     id: "pdfPageInput",
-    value: String(app.ui.pdfPage || 1),
+    value: String(app.ui.pdfPage || 1).padStart(2, "0"),
     onchange: (ev) => setPdfView({ projectId: p.id, page: ev.target.value }),
+    oninput: (ev) => {
+      const digits = String(ev.target.value || "").replace(/\D+/g, "").slice(0, 4);
+      if (digits !== ev.target.value) ev.target.value = digits;
+    },
+    onfocus: (ev) => {
+      ev.currentTarget.select();
+    },
+    onblur: (ev) => {
+      if (!String(ev.target.value || "").trim()) {
+        ev.target.value = String(app.ui.pdfPage || 1).padStart(2, "0");
+      }
+    },
   });
   pageInput.setAttribute("inputmode", "numeric");
   pageInput.setAttribute("min", "1");
@@ -1052,15 +971,12 @@ export function renderProjectPage(deps) {
     html: formatPdfPageInfo(app.ui.pdfPage || 1, app.ui.pdfPageCount || 1),
   });
 
-  const pdfRefreshBtn = h("button", {
-    class: "pdf-tool-btn",
-    title: t("刷新预览"),
-    onclick: (ev) => {
-      ev.stopPropagation();
-      setPdfView({ projectId: p.id, refresh: true });
-    },
-  });
-  pdfRefreshBtn.appendChild(iconSvg("refresh", { size: 14 }));
+  const hasPdfNow = () => !!(app.current.artifacts && app.current.artifacts.pdf && app.current.artifacts.pdf.exists);
+
+  const openPdfInNewWindow = () => {
+    if (!hasPdfNow()) return;
+    window.open(pdfUrl(p.id, Date.now(), app.ui.pdfPage, app.ui.pdfZoom, getPdfTargetFile(p.id)), "_blank");
+  };
 
   const pdfOpenBtn = h("button", {
     class: "pdf-tool-btn",
@@ -1069,15 +985,97 @@ export function renderProjectPage(deps) {
     disabled: !hasPdf ? "" : null,
     onclick: (ev) => {
       ev.stopPropagation();
-      window.open(pdfUrl(p.id, Date.now(), app.ui.pdfPage, app.ui.pdfZoom, getPdfTargetFile(p.id)), "_blank");
+      openPdfInNewWindow();
     },
   });
   pdfOpenBtn.appendChild(iconSvg("download", { size: 14 }));
 
+  const togglePdfFullscreen = async () => {
+    const target = document.getElementById("tab_pdf") || document.getElementById("rightPane");
+    if (!target) return;
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (target.requestFullscreen) {
+        await target.requestFullscreen();
+      }
+    } catch {
+      // ignore fullscreen failures
+    }
+  };
+
+  const pdfMoreItem = ({ id = null, label, shortcut = "", disabled = false, onClick }) => {
+    const cls = `pdf-more-item ${disabled ? "disabled" : ""}`.trim();
+    return h("button", {
+      class: cls,
+      id,
+      type: "button",
+      "aria-disabled": disabled ? "true" : "false",
+      onclick: (ev) => {
+        ev.stopPropagation();
+        if (ev.currentTarget.getAttribute("aria-disabled") === "true") return;
+        if (typeof onClick === "function") onClick();
+        clearDropdowns();
+      },
+    }, [
+      h("span", { class: "pdf-more-item-label", html: label }),
+      shortcut ? h("span", { class: "pdf-more-item-shortcut", html: shortcut }) : null,
+    ]);
+  };
+
+  const pdfMoreMenu = dropdownMenu("pdf-toolbar-more", h("div", { class: "pdf-more-menu" }, [
+    pdfMoreItem({
+      label: t("全屏"),
+      shortcut: "F11",
+      onClick: () => {
+        togglePdfFullscreen().catch(() => {});
+      },
+    }),
+    pdfMoreItem({
+      id: "pdfMoreOpenNewWindow",
+      label: t("在新窗口中打开"),
+      disabled: !hasPdf,
+      onClick: () => openPdfInNewWindow(),
+    }),
+    pdfMoreItem({
+      label: t("刷新预览"),
+      onClick: () => setPdfView({ projectId: p.id, refresh: true }),
+    }),
+  ]));
+
+  const syncPdfToolbarState = () => {
+    const pdfExists = hasPdfNow();
+    pdfOpenBtn.disabled = pdfExists ? null : "";
+    const openInNew = document.getElementById("pdfMoreOpenNewWindow");
+    if (openInNew) {
+      openInNew.classList.toggle("disabled", !pdfExists);
+      openInNew.setAttribute("aria-disabled", pdfExists ? "false" : "true");
+    }
+  };
+
+  const pdfMoreBtn = h("button", {
+    class: "pdf-tool-btn dropdown-trigger pdf-more-btn",
+    title: t("更多"),
+    onclick: (ev) => {
+      syncPdfToolbarState();
+      toggleDropdown("pdf-toolbar-more", ev);
+    },
+  });
+  pdfMoreBtn.appendChild(iconSvg("more", { size: 14 }));
+
+  const pdfMoreWrap = h(
+    "div",
+    { class: "dropdown dropdown-right pdf-more-wrap", "data-dropdown-id": "pdf-toolbar-more" },
+    [pdfMoreBtn, pdfMoreMenu]
+  );
+
+  const pageCluster = h("div", { class: "pdf-page-cluster" }, [pageInput, pageInfo]);
+  syncPdfToolbarState();
+
   const pdfToolbar = h("div", { class: "pdf-toolbar" }, [
     h("div", { class: "pdf-toolbar-left" }, [compileBtn]),
-    h("div", { class: "pdf-toolbar-center" }, [pageInput, pageInfo]),
-    h("div", { class: "pdf-toolbar-right" }, [pdfZoomSelect, pdfRefreshBtn, pdfOpenBtn]),
+    h("div", { class: "pdf-toolbar-center" }, [pageCluster]),
+    h("div", { class: "pdf-toolbar-right" }, [pdfZoomSelect, pdfOpenBtn, pdfMoreWrap]),
   ]);
 
   const logDiv = h("div", { class: "log", id: "compileLog" });
@@ -1189,12 +1187,11 @@ export function renderProjectPage(deps) {
 
   const sidebarRestoreBtn = h("button", {
     id: "sidebarRestoreBtn",
-    class: `sidebar-restore-btn ${app.ui.leftCollapsed ? "" : "is-hidden"}`.trim(),
-    title: app.ui.leftCollapsed ? t("打开文件树") : t("文件树已打开"),
+    class: `sidebar-fan-toggle ${app.ui.leftCollapsed ? "is-collapsed" : "is-expanded"}`.trim(),
+    title: app.ui.leftCollapsed ? t("显示文件树") : t("隐藏文件树"),
     onclick: () => toggleLeftPane(),
   }, [
-    iconSvg("files", { size: 15 }),
-    h("span", { class: "sidebar-restore-text", html: t("文件树") }),
+    iconSvg("back", { size: 15, className: "sidebar-fan-icon" }),
   ]);
 
   return h("div", { class: "page studio-page" }, [shell, sidebarRestoreBtn]);
