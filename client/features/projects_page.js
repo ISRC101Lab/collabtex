@@ -311,18 +311,25 @@ export function renderProjectsPage(deps) {
 
   const switchUserInput = input({ placeholder: t("用户名") });
   const switchPassInput = input({ placeholder: t("密码"), type: "password" });
+  switchUserInput.autocomplete = "username";
+  switchUserInput.name = "switch_username";
+  switchPassInput.autocomplete = "current-password";
+  switchPassInput.name = "switch_password";
+  const switchBtn = btn(t("切换"), { kind: "primary" });
+  switchBtn.setAttribute("type", "submit");
   const userMenu = dropdownMenu("user", h("div", { class: "user-menu" }, [
     h("div", { class: "user-menu-title", html: t("切换用户") }),
-    h("div", { class: "user-menu-row" }, [
+    h("form", {
+      class: "user-menu-row",
+      onsubmit: (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        doSwitchUser(switchUserInput.value, switchPassInput.value);
+      },
+    }, [
       switchUserInput,
       switchPassInput,
-      btn(t("切换"), {
-        kind: "primary",
-        onClick: (ev) => {
-          ev.stopPropagation();
-          doSwitchUser(switchUserInput.value, switchPassInput.value);
-        },
-      }),
+      switchBtn,
     ]),
     app.ui.switchError ? h("div", { class: "hint error", html: app.ui.switchError }) : null,
   ]));

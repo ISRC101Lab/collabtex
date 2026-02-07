@@ -210,12 +210,14 @@ export function registerJobsArtifactsHistoryRoutes(deps) {
       }
     };
 
+    const [pdfStat, logStat] = await Promise.all([statOrNull(pdf), statOrNull(log)]);
+
     res.json({
       base,
       mainFile: p.mainFile,
       targetFile: mainFile,
-      pdf: await statOrNull(pdf),
-      log: await statOrNull(log),
+      pdf: pdfStat,
+      log: logStat,
     });
   });
 

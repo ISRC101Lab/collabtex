@@ -18,6 +18,7 @@ export async function api(path, opts = {}) {
   const token = localStorage.getItem("ct_session_token") || "";
   if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
   try {
+    const url = typeof path === "string" ? path : String(path || "");
     const res = await fetch(path, {
       ...opts,
       headers,
@@ -33,6 +34,9 @@ export async function api(path, opts = {}) {
       err.status = res.status;
       err.data = data;
       throw err;
+    }
+    if (url.includes("/api/me") && data && data.authenticated && data.token) {
+      localStorage.setItem("ct_session_token", data.token);
     }
     return data;
   } catch (e) {

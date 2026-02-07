@@ -21,7 +21,32 @@ export function renderLoginPage(deps) {
   } = deps;
   const user = input({ placeholder: t("用户名 (admin / user01..user09)") });
   const pass = input({ placeholder: t("密码"), type: "password" });
+  user.autocomplete = "username";
+  user.name = "username";
+  pass.autocomplete = "current-password";
+  pass.name = "password";
   const err = h("div", { class: "hint error" });
+
+  const doLogin = async () => {
+    err.textContent = "";
+    try {
+      const loginRes = await api("/api/login", {
+        method: "POST",
+        body: JSON.stringify({ username: user.value.trim(), password: pass.value }),
+      });
+      if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
+      localStorage.setItem("ct_last_user", user.value.trim() || "admin");
+      await loadMe();
+      await loadProjects();
+      app.view = "projects";
+      mount(render());
+    } catch (e) {
+      err.textContent = e && e.message ? e.message : String(e);
+    }
+  };
+
+  const loginBtn = btn(t("登录"), { kind: "primary" });
+  loginBtn.setAttribute("type", "submit");
 
   setTimeout(() => {
     applyLayoutClass();
@@ -37,31 +62,18 @@ export function renderLoginPage(deps) {
       h("div", { class: "card auth" }, [
         h("div", { class: "h1", html: t("登录") }),
         h("div", { class: "hint", html: t("不开放注册，账号由服务器本地创建。") }),
-        h("div", { class: "form" }, [
+        h("form", {
+          class: "form",
+          onsubmit: (ev) => {
+            ev.preventDefault();
+            doLogin();
+          },
+        }, [
           h("div", { class: "label", html: t("用户名") }),
           user,
           h("div", { class: "label", html: t("密码") }),
           pass,
-          btn(t("登录"), {
-            kind: "primary",
-            onClick: async () => {
-              err.textContent = "";
-              try {
-                const loginRes = await api("/api/login", {
-                  method: "POST",
-                  body: JSON.stringify({ username: user.value.trim(), password: pass.value }),
-                });
-                if (loginRes && loginRes.token) localStorage.setItem("ct_session_token", loginRes.token);
-                localStorage.setItem("ct_last_user", user.value.trim() || "admin");
-                await loadMe();
-                await loadProjects();
-                app.view = "projects";
-                mount(render());
-              } catch (e) {
-                err.textContent = e && e.message ? e.message : String(e);
-              }
-            },
-          }),
+          loginBtn,
           err,
         ]),
       ]),

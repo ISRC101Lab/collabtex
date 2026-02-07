@@ -56,6 +56,7 @@ export function renderProjectPage(deps) {
     showModal,
     startBottomDrag,
     startDrag,
+    startFloatDrag,
     stopMonitorPolling,
     t,
     toggleDropdown,
@@ -382,20 +383,26 @@ export function renderProjectPage(deps) {
   settingsBtn.appendChild(iconSvg("settings", { size: 14 }));
   const settingsWrap = h(
     "div",
-    { class: "dropdown dropdown-left", "data-dropdown-id": "panel-settings" },
+    { class: "dropdown dropdown-right", "data-dropdown-id": "panel-settings" },
     [settingsBtn, settingsMenu]
   );
 
   const recentFilesEl = null;
   const pinnedFilesEl = renderPinnedFiles();
 
-  const brandBtn = h("button", {
-    class: "project-title-btn brand-title-btn",
+  const brandWordmark = h("button", {
+    class: "brand-wordmark",
     title: t("返回项目列表"),
     onclick: () => goProjects(),
-    html: p.name || "CollabTeX",
+    html: "collabtex",
   });
-  const leftTitleWrap = h("div", { class: "left-title-wrap" }, [brandBtn]);
+  const projectBtn = h("button", {
+    class: "project-title-btn",
+    title: `${t("返回项目列表")} · ${p.name || ""}`,
+    onclick: () => goProjects(),
+    html: p.name || t("未命名项目"),
+  });
+  const leftTitleWrap = h("div", { class: "left-title-wrap" }, [brandWordmark, projectBtn]);
   const shareInput = input({ placeholder: t("分享给 (如 user01)") });
   const shareMenu = dropdownMenu("share", h("div", { class: "dropdown-panel share-panel" }, [
     h("div", { class: "label", html: t("分享给") }),
@@ -504,7 +511,6 @@ export function renderProjectPage(deps) {
           exportProjectZip();
         },
       }),
-      h("div", { class: "left-add-note", html: t("正在连接 Zotero...") }),
     ])
   );
   const addBtn = h("button", {
@@ -1113,7 +1119,13 @@ export function renderProjectPage(deps) {
   app.ui.selectRightTab = selectTab;
   selectTab(app.ui.rightTab || "pdf");
 
-  const right = h("div", { class: "pane right-pane", id: "rightPane" }, [
+  const rightPaneAttrs = {
+    class: "pane right-pane",
+    id: "rightPane",
+    onmousedown: (ev) => startFloatDrag(ev),
+  };
+
+  const right = h("div", rightPaneAttrs, [
     h("div", { class: "tab-body" }, Object.values(tabPages)),
   ]);
 

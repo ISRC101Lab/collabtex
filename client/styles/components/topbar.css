@@ -20,9 +20,12 @@
 
 
 .brand {
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  font-family: var(--font-display);
+  font-weight: 620;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: rgba(194, 210, 236, 0.9);
 }
 
 

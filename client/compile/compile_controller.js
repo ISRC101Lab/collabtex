@@ -47,6 +47,7 @@ export async function compileProjectController({ clean = false, mode = "full", o
   const logEl = document.getElementById("compileLog");
   const btnEl = document.getElementById("compileBtn");
   const statusEl = document.getElementById("compileStatus");
+  const bottomLog = document.getElementById("bottomLog");
 
   const setStatus = (s) => {
     app.compile.status = s;
@@ -75,19 +76,71 @@ export async function compileProjectController({ clean = false, mode = "full", o
     if (labelEl) labelEl.textContent = running ? t("编译中") : t("编译");
   };
 
-  const appendLog = (s) => {
+  const MAX_LOG_CHARS = 2_000_000;
+  let pendingLogChunk = "";
+  let logFlushTimer = null;
+  let pendingStageChunk = "";
+  let stageFlushTimer = null;
+
+  const trimLogText = (txt) => {
+    const text = String(txt || "");
+    if (text.length <= MAX_LOG_CHARS) return text;
+    return text.slice(-MAX_LOG_CHARS);
+  };
+
+  const flushStage = () => {
+    stageFlushTimer = null;
+    const chunk = pendingStageChunk;
+    pendingStageChunk = "";
+    if (!chunk) return;
+    updateCompileStageFromLog(chunk);
+  };
+
+  const scheduleStageFlush = () => {
+    if (stageFlushTimer) return;
+    stageFlushTimer = setTimeout(flushStage, 80);
+  };
+
+  const flushLog = () => {
+    logFlushTimer = null;
+    const chunk = pendingLogChunk;
+    pendingLogChunk = "";
+    if (!chunk) return;
     if (logEl) {
-      logEl.textContent += s;
-      if (logEl.textContent.length > 2000000) logEl.textContent = logEl.textContent.slice(-2000000);
+      logEl.textContent = trimLogText(`${logEl.textContent || ""}${chunk}`);
       logEl.scrollTop = logEl.scrollHeight;
     }
-    const bottomLog = document.getElementById("bottomLog");
     if (bottomLog && app.ui.bottomMode === "log") {
-      bottomLog.textContent += s;
-      if (bottomLog.textContent.length > 2000000) bottomLog.textContent = bottomLog.textContent.slice(-2000000);
+      bottomLog.textContent = trimLogText(`${bottomLog.textContent || ""}${chunk}`);
       bottomLog.scrollTop = bottomLog.scrollHeight;
     }
-    updateCompileStageFromLog(s);
+  };
+
+  const scheduleLogFlush = () => {
+    if (logFlushTimer) return;
+    logFlushTimer = setTimeout(flushLog, 40);
+  };
+
+  const appendLog = (s) => {
+    const chunk = String(s || "");
+    if (!chunk) return;
+    pendingLogChunk += chunk;
+    pendingStageChunk += chunk;
+    scheduleLogFlush();
+    scheduleStageFlush();
+  };
+
+  const flushPendingUi = () => {
+    if (logFlushTimer) {
+      clearTimeout(logFlushTimer);
+      logFlushTimer = null;
+    }
+    if (stageFlushTimer) {
+      clearTimeout(stageFlushTimer);
+      stageFlushTimer = null;
+    }
+    if (pendingLogChunk) flushLog();
+    if (pendingStageChunk) flushStage();
   };
 
   const noteDiagnostics = (job) => {
@@ -171,6 +224,9 @@ export async function compileProjectController({ clean = false, mode = "full", o
   if (app.ui.selectRightTab) app.ui.selectRightTab("logs");
   setBtnRunning(true);
   if (logEl) logEl.textContent = "";
+  if (bottomLog && app.ui.bottomMode === "log") bottomLog.textContent = "";
+  pendingLogChunk = "";
+  pendingStageChunk = "";
   appendLog(`${t("[开始] 编译中...")}\n`);
 
   try {
@@ -349,6 +405,7 @@ export async function compileProjectController({ clean = false, mode = "full", o
     setStatus("error");
     appendLog(msg ? `\n[error] ${msg}\n` : `\n[error] ${String(e)}\n`);
   } finally {
+    flushPendingUi();
     app.compile.inFlight = false;
     setBtnRunning(false);
     if (app.compile.pending) {

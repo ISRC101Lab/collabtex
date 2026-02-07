@@ -26,6 +26,8 @@ export async function openFileSession(filePath, deps) {
     loadHistory,
     readTextForWork,
     hashText,
+    getCachedFileText,
+    cacheFileText,
     api,
     wsUrl,
     pickColor,
@@ -116,6 +118,9 @@ export async function openFileSession(filePath, deps) {
     return;
   }
 
+  const cachedText = typeof getCachedFileText === "function" ? getCachedFileText(filePath) : null;
+  const hasCachedText = typeof cachedText === "string";
+
   const docName = `${projectId}:${encodeURIComponent(filePath)}`;
 
   const ydoc = new Y.Doc();
@@ -130,6 +135,12 @@ export async function openFileSession(filePath, deps) {
   const resetCollabBackoff = () => {
     app.ui.collabFailStreak = 0;
     app.ui.collabBackoffUntil = 0;
+    try {
+      localStorage.removeItem("ct_collab_fail_streak");
+      localStorage.removeItem("ct_collab_backoff_until");
+    } catch {
+      // ignore localStorage errors
+    }
   };
 
   const bumpCollabBackoff = () => {
@@ -137,6 +148,12 @@ export async function openFileSession(filePath, deps) {
     app.ui.collabFailStreak = streak;
     const cooldownMs = Math.min(10 * 60_000, 12_000 * streak * streak);
     app.ui.collabBackoffUntil = Date.now() + cooldownMs;
+    try {
+      localStorage.setItem("ct_collab_fail_streak", String(app.ui.collabFailStreak));
+      localStorage.setItem("ct_collab_backoff_until", String(app.ui.collabBackoffUntil));
+    } catch {
+      // ignore localStorage errors
+    }
   };
 
   const degradeToLocal = () => {
@@ -167,6 +184,7 @@ export async function openFileSession(filePath, deps) {
   };
 
   const canTryCollabNow = Date.now() >= Number(app.ui.collabBackoffUntil || 0);
+  let wsConnectWarned = false;
 
   if (canTryCollabNow) {
     try {
@@ -193,6 +211,19 @@ export async function openFileSession(filePath, deps) {
         preserveConnection: false,
         quiet: true,
       });
+      if (provider && provider.configuration && provider.configuration.websocketProvider) {
+        const socket = provider.configuration.websocketProvider;
+        if (socket && typeof socket.on === "function") {
+          socket.on("disconnect", () => {
+            if (wsConnectWarned) return;
+            wsConnectWarned = true;
+            const statusEl = document.getElementById("editorStatus");
+            if (statusEl && !statusEl.textContent.trim()) {
+              statusEl.textContent = t("协作连接不可用，已自动切换本地编辑模式。");
+            }
+          });
+        }
+      }
       providerStatus = "connecting";
       if (!provider || !provider.awareness || typeof provider.awareness.setLocalStateField !== "function") {
         provider = null;
@@ -368,11 +399,23 @@ export async function openFileSession(filePath, deps) {
     if (isStaleOpen()) return;
     if (!app.editor.view || app.editor.view !== view) return;
     if (view.state.doc.length > 0) return;
+    if (hasCachedText) {
+      try {
+        view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: cachedText } });
+        updateOutlineFromText(cachedText);
+        updateDocCaches(filePath, cachedText);
+        updateEditorStatus(view);
+      } catch {
+        // ignore cache insert errors
+      }
+      return;
+    }
     try {
       const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
       if (isStaleOpen()) return;
       if (!app.editor.view || app.editor.view !== view) return;
       if (typeof text !== "string" || !text.length || view.state.doc.length > 0) return;
+      if (typeof cacheFileText === "function") cacheFileText(filePath, text);
       view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } });
       updateOutlineFromText(text);
       updateDocCaches(filePath, text);
@@ -507,10 +550,16 @@ export async function openFileSession(filePath, deps) {
       prefillTimer = setTimeout(() => { maybePrefill().catch(() => {}); }, 140);
       return;
     }
+    if (hasCachedText) {
+      ytext.insert(0, cachedText || "");
+      prefilled = true;
+      return;
+    }
     try {
       const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
       if (isStaleOpen()) return;
       if (typeof text === "string" && ytext.length === 0) {
+        if (typeof cacheFileText === "function") cacheFileText(filePath, text);
         ytext.insert(0, text || "");
         prefilled = true;
       }

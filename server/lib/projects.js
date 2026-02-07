@@ -143,31 +143,98 @@ function projectsDir(dataDir) {
   return path.join(dataDir, 'projects')
 }
 
+const PROJECTS_CACHE_TTL_MS = Math.max(0, Number(process.env.PROJECTS_CACHE_TTL_MS || 250))
+let projectsCache = null
+
+function cloneProjects(obj) {
+  if (typeof structuredClone === 'function') return structuredClone(obj)
+  return JSON.parse(JSON.stringify(obj))
+}
+
+function normalizeProjectsObject(obj) {
+  if (!obj || typeof obj !== 'object') return { projects: [] }
+  if (!Array.isArray(obj.projects)) obj.projects = []
+  for (const pr of obj.projects) {
+    if (!pr || typeof pr !== 'object') continue
+    if (!Array.isArray(pr.collaborators)) pr.collaborators = []
+    if (!pr.mainFile) pr.mainFile = 'main.tex'
+    if (!pr.compiler) pr.compiler = 'pdflatex'
+    if (!Array.isArray(pr.tags)) pr.tags = []
+    if (!pr.category) pr.category = ''
+  }
+  return obj
+}
+
 export async function loadProjects(dataDir) {
   const p = projectsPath(dataDir)
+  const now = Date.now()
+  if (
+    projectsCache &&
+    projectsCache.path === p &&
+    projectsCache.data &&
+    now - Number(projectsCache.checkedAt || 0) <= PROJECTS_CACHE_TTL_MS
+  ) {
+    return cloneProjects(projectsCache.data)
+  }
+
   try {
-    const raw = await fs.readFile(p, 'utf8')
-    const obj = JSON.parse(raw)
-    if (!obj || typeof obj !== 'object') throw new Error('bad projects.json')
-    if (!Array.isArray(obj.projects)) obj.projects = []
-    // Backward-compatible defaults.
-    for (const pr of obj.projects) {
-      if (!pr || typeof pr !== 'object') continue
-      if (!Array.isArray(pr.collaborators)) pr.collaborators = []
-      if (!pr.mainFile) pr.mainFile = 'main.tex'
-      if (!pr.compiler) pr.compiler = 'pdflatex'
-      if (!Array.isArray(pr.tags)) pr.tags = []
-      if (!pr.category) pr.category = ''
+    let st = null
+    try {
+      st = await fs.stat(p)
+    } catch {
+      st = null
     }
-    return obj
+    if (
+      st &&
+      projectsCache &&
+      projectsCache.path === p &&
+      projectsCache.data &&
+      Number.isFinite(Number(projectsCache.mtimeMs)) &&
+      Number(projectsCache.mtimeMs) === Number(st.mtimeMs)
+    ) {
+      projectsCache.checkedAt = now
+      return cloneProjects(projectsCache.data)
+    }
+
+    const raw = await fs.readFile(p, 'utf8')
+    const obj = normalizeProjectsObject(JSON.parse(raw))
+    projectsCache = {
+      path: p,
+      mtimeMs: st ? Number(st.mtimeMs) : Number.NaN,
+      checkedAt: now,
+      data: cloneProjects(obj),
+    }
+    return cloneProjects(obj)
   } catch {
-    return { projects: [] }
+    const fallback = { projects: [] }
+    projectsCache = {
+      path: p,
+      mtimeMs: Number.NaN,
+      checkedAt: now,
+      data: cloneProjects(fallback),
+    }
+    return fallback
   }
 }
 
 export async function saveProjects(dataDir, obj) {
   await ensureDir(dataDir)
-  await atomicWriteFile(projectsPath(dataDir), JSON.stringify(obj, null, 2) + '\n')
+  const p = projectsPath(dataDir)
+  const normalized = normalizeProjectsObject(obj && typeof obj === 'object' ? obj : { projects: [] })
+  await atomicWriteFile(p, JSON.stringify(normalized, null, 2) + '\n')
+  let mtimeMs = Number.NaN
+  try {
+    const st = await fs.stat(p)
+    mtimeMs = Number(st.mtimeMs)
+  } catch {
+    mtimeMs = Number.NaN
+  }
+  projectsCache = {
+    path: p,
+    mtimeMs,
+    checkedAt: Date.now(),
+    data: cloneProjects(normalized),
+  }
 }
 
 export function canAccessProject(project, username) {
