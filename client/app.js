@@ -191,43 +191,94 @@ function listBibFiles() {
   return tree.filter((f) => /\.bib$/i.test(f));
 }
 
-async function refreshLabelCache() {
-  if (!app || !app.current || !app.current.project) return;
-  const projectId = app.current.project.id;
-  const texFiles = listTexFiles();
-  if (!app.ui.labelCache) app.ui.labelCache = {};
-  const maxFiles = 80;
-  for (const filePath of texFiles.slice(0, maxFiles)) {
-    try {
-      const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
-      app.ui.labelCache[filePath] = extractLabels(text);
-    } catch {
-      // ignore file read errors
+async function processFilesInBatches(files, worker, { batchSize = 4, pauseMs = 28, isCancelled = null } = {}) {
+  if (!Array.isArray(files) || files.length === 0) return;
+  const chunk = Math.max(1, Math.floor(Number(batchSize) || 1));
+  const pause = Math.max(0, Math.floor(Number(pauseMs) || 0));
+  for (let i = 0; i < files.length; i += chunk) {
+    if (isCancelled && isCancelled()) return;
+    const group = files.slice(i, i + chunk);
+    await Promise.all(group.map((filePath) => worker(filePath)));
+    if (pause > 0 && i + chunk < files.length) {
+      await new Promise((resolve) => setTimeout(resolve, pause));
     }
   }
 }
 
-async function refreshBibKeyCache() {
-  if (!app || !app.current || !app.current.project) return;
-  const projectId = app.current.project.id;
-  const cache = { projectId, keys: [], byFile: {}, updatedAt: 0 };
+async function refreshLabelCache({ projectId = null, isCancelled = null } = {}) {
+  const pid = projectId || (app && app.current && app.current.project ? app.current.project.id : "");
+  if (!pid) return;
+  const texFiles = listTexFiles();
+  if (!app.ui.labelCache) app.ui.labelCache = {};
+  const maxFiles = 80;
+  const files = texFiles.slice(0, maxFiles);
+  await processFilesInBatches(
+    files,
+    async (filePath) => {
+      if (isCancelled && isCancelled()) return;
+      try {
+        const text = await api(`/api/projects/${pid}/file?path=${encodeURIComponent(filePath)}`);
+        if (isCancelled && isCancelled()) return;
+        app.ui.labelCache[filePath] = extractLabels(text);
+      } catch {
+        // ignore file read errors
+      }
+    },
+    { batchSize: 4, pauseMs: 26, isCancelled }
+  );
+}
+
+async function refreshBibKeyCache({ projectId = null, isCancelled = null } = {}) {
+  const pid = projectId || (app && app.current && app.current.project ? app.current.project.id : "");
+  if (!pid) return;
+  const cache = { projectId: pid, keys: [], byFile: {}, updatedAt: 0 };
   app.ui.bibKeyCache = cache;
   const bibFiles = listBibFiles();
   const maxFiles = 80;
-  for (const filePath of bibFiles.slice(0, maxFiles)) {
-    try {
-      const text = await api(`/api/projects/${projectId}/file?path=${encodeURIComponent(filePath)}`);
-      cache.byFile[filePath] = extractBibKeys(text);
-    } catch {
-      // ignore file read errors
-    }
-  }
+  const files = bibFiles.slice(0, maxFiles);
+  await processFilesInBatches(
+    files,
+    async (filePath) => {
+      if (isCancelled && isCancelled()) return;
+      try {
+        const text = await api(`/api/projects/${pid}/file?path=${encodeURIComponent(filePath)}`);
+        if (isCancelled && isCancelled()) return;
+        cache.byFile[filePath] = extractBibKeys(text);
+      } catch {
+        // ignore file read errors
+      }
+    },
+    { batchSize: 4, pauseMs: 26, isCancelled }
+  );
+  if (isCancelled && isCancelled()) return;
   const all = new Set();
   for (const list of Object.values(cache.byFile)) {
     for (const key of list || []) all.add(key);
   }
   cache.keys = Array.from(all).sort();
   cache.updatedAt = Date.now();
+}
+
+let projectCacheWarmupTimer = null;
+let projectCacheWarmupToken = 0;
+
+function scheduleProjectCacheWarmup(projectId) {
+  const pid = String(projectId || "");
+  if (!pid) return;
+  projectCacheWarmupToken += 1;
+  const token = projectCacheWarmupToken;
+  if (projectCacheWarmupTimer) clearTimeout(projectCacheWarmupTimer);
+  projectCacheWarmupTimer = setTimeout(() => {
+    projectCacheWarmupTimer = null;
+    const isCancelled = () => {
+      if (token !== projectCacheWarmupToken) return true;
+      if (!app.current.project || app.current.project.id !== pid) return true;
+      return false;
+    };
+    if (isCancelled()) return;
+    refreshBibKeyCache({ projectId: pid, isCancelled }).catch(console.error);
+    refreshLabelCache({ projectId: pid, isCancelled }).catch(console.error);
+  }, 900);
 }
 
 function clear() {
@@ -1171,6 +1222,37 @@ function pinnedFilesKey(projectId) {
   return `ct_pins_${projectId}`;
 }
 
+const FILE_TEXT_CACHE_MAX = 36;
+
+function getFileTextCache() {
+  if (!app.ui || !(app.ui.fileTextCache instanceof Map)) app.ui.fileTextCache = new Map();
+  return app.ui.fileTextCache;
+}
+
+function getCachedFileText(filePath) {
+  const key = String(filePath || "");
+  if (!key) return null;
+  const cache = getFileTextCache();
+  if (!cache.has(key)) return null;
+  const value = cache.get(key);
+  cache.delete(key);
+  cache.set(key, value);
+  return value && typeof value.text === "string" ? value.text : null;
+}
+
+function cacheFileText(filePath, text) {
+  const key = String(filePath || "");
+  if (!key || typeof text !== "string") return;
+  const cache = getFileTextCache();
+  if (cache.has(key)) cache.delete(key);
+  cache.set(key, { text, at: Date.now() });
+  while (cache.size > FILE_TEXT_CACHE_MAX) {
+    const oldest = cache.keys().next().value;
+    if (!oldest) break;
+    cache.delete(oldest);
+  }
+}
+
 const FOLDER_PLACEHOLDER = ".ct-folder";
 function isFolderPlaceholder(path) {
   const raw = String(path || "");
@@ -1362,6 +1444,10 @@ const panelDockStored = localStorage.getItem("ct_panel_dock");
 if (panelDockStored && panelDockStored !== "right") localStorage.setItem("ct_panel_dock", "right");
 const floatStored = localStorage.getItem("ct_float_right");
 if (floatStored && floatStored !== "0") localStorage.setItem("ct_float_right", "0");
+const collabBackoffStored = Number(localStorage.getItem("ct_collab_backoff_until") || 0);
+const collabFailStored = Number(localStorage.getItem("ct_collab_fail_streak") || 0);
+const collabBackoffInit = Number.isFinite(collabBackoffStored) && collabBackoffStored > 0 ? collabBackoffStored : 0;
+const collabFailInit = Number.isFinite(collabFailStored) && collabFailStored > 0 ? Math.min(8, Math.floor(collabFailStored)) : 0;
 
 const app = {
   me: null,
@@ -1438,8 +1524,8 @@ const app = {
     refreshFileTabs: null,
     lang: getLang(),
     wsUrlOverride: localStorage.getItem("ct_ws_url") || "",
-    collabBackoffUntil: 0,
-    collabFailStreak: 0,
+    collabBackoffUntil: collabBackoffInit,
+    collabFailStreak: collabFailInit,
     compileOverview: null,
     monitorTimer: null,
     monitorLast: 0,
@@ -1462,6 +1548,7 @@ const app = {
     theme: localStorage.getItem("ct_theme") || "default",
     labelCache: {},
     bibKeyCache: { projectId: "", keys: [], byFile: {}, updatedAt: 0 },
+    fileTextCache: new Map(),
     layoutMode: "balanced",
     floatRightPane: false,
     splitAuto: localStorage.getItem("ct_split_auto") !== "0",
@@ -1505,27 +1592,27 @@ const app = {
 };
 
 // Simple resizable split panes (Overleaf-like).
-app.ui.leftW = clampNumber(localStorage.getItem("ct_leftW"), 140, 2200, 200);
-app.ui.rightW = clampNumber(localStorage.getItem("ct_rightW"), 220, 2200, 600);
+app.ui.leftW = clampNumber(localStorage.getItem("ct_leftW"), 140, 2200, 320);
+app.ui.rightW = clampNumber(localStorage.getItem("ct_rightW"), 220, 2200, 560);
 app.ui.rightTab = localStorage.getItem("ct_rightTab") || "pdf";
-{
-  const base = Math.max(640, window.innerWidth || 0);
-  if (!Number.isFinite(app.ui.leftRatio)) app.ui.leftRatio = app.ui.leftW / base;
-  if (!Number.isFinite(app.ui.rightRatio)) app.ui.rightRatio = app.ui.rightW / base;
-  localStorage.setItem("ct_left_ratio", String(app.ui.leftRatio));
-  localStorage.setItem("ct_right_ratio", String(app.ui.rightRatio));
-}
 
 const SPLIT_LIMITS = {
   minViewport: 640,
-  leftMinPx: 160,
-  rightMinPx: 280,
-  editorMinPx: 320,
-  leftMinRatio: 0.14,
-  rightMinRatio: 0.2,
-  editorMinRatio: 0.33,
-  leftHardMaxRatio: 0.72,
-  rightHardMaxRatio: 0.78,
+  leftMinPx: 220,
+  rightMinPx: 240,
+  editorMinPx: 420,
+  leftMinRatio: 0.16,
+  rightMinRatio: 0.26,
+  editorMinRatio: 0.32,
+  leftHardMaxRatio: 0.34,
+  rightHardMaxRatio: 0.48,
+};
+
+const COLLABTEX_LAYOUT_PRESET_KEY = "ct_layout_preset_version";
+const COLLABTEX_LAYOUT_PRESET_VERSION = "2026-02-07-balanced-v2";
+const COLLABTEX_LAYOUT_PRESET = {
+  leftRatio: 0.2,
+  rightRatio: 0.36,
 };
 
 function getSplitBounds({ width = window.innerWidth, panelDock = "right" } = {}) {
@@ -1565,6 +1652,66 @@ function getSplitBounds({ width = window.innerWidth, panelDock = "right" } = {})
     maxRight,
     minEditor,
   };
+}
+
+function computeBalancedSplitPreset({ width = window.innerWidth, panelDock = app.ui.panelDock } = {}) {
+  const dockMode = panelDock === "bottom" ? "bottom" : "right";
+  const bounds = getSplitBounds({ width, panelDock: dockMode });
+  const sideBounds = getSplitBounds({ width, panelDock: "right" });
+  const w = bounds.width;
+
+  let left = clampNumber(
+    Math.round(w * COLLABTEX_LAYOUT_PRESET.leftRatio),
+    bounds.minLeft,
+    bounds.maxLeft,
+    app.ui.leftW
+  );
+  let right = clampNumber(
+    Math.round(w * COLLABTEX_LAYOUT_PRESET.rightRatio),
+    sideBounds.minRight,
+    sideBounds.maxRight,
+    app.ui.rightW
+  );
+
+  if (dockMode !== "bottom") {
+    const available = w - bounds.minEditor;
+    if (left + right > available) {
+      let overflow = left + right - available;
+      const rightSlack = Math.max(0, right - sideBounds.minRight);
+      const reduceRight = Math.min(overflow, rightSlack);
+      right -= reduceRight;
+      overflow -= reduceRight;
+      if (overflow > 0) {
+        left = Math.max(bounds.minLeft, left - overflow);
+      }
+    }
+  }
+
+  return { width: w, left, right };
+}
+
+function applyCollabtexLayoutPresetIfNeeded() {
+  const seen = localStorage.getItem(COLLABTEX_LAYOUT_PRESET_KEY);
+  if (seen === COLLABTEX_LAYOUT_PRESET_VERSION) return;
+  const preset = computeBalancedSplitPreset({ panelDock: app.ui.panelDock });
+  app.ui.leftW = preset.left;
+  app.ui.rightW = preset.right;
+  app.ui.leftRatio = preset.left / preset.width;
+  app.ui.rightRatio = preset.right / preset.width;
+  localStorage.setItem("ct_leftW", String(app.ui.leftW));
+  localStorage.setItem("ct_rightW", String(app.ui.rightW));
+  localStorage.setItem("ct_left_ratio", String(app.ui.leftRatio));
+  localStorage.setItem("ct_right_ratio", String(app.ui.rightRatio));
+  localStorage.setItem(COLLABTEX_LAYOUT_PRESET_KEY, COLLABTEX_LAYOUT_PRESET_VERSION);
+}
+
+applyCollabtexLayoutPresetIfNeeded();
+{
+  const base = Math.max(640, window.innerWidth || 0);
+  if (!Number.isFinite(app.ui.leftRatio)) app.ui.leftRatio = app.ui.leftW / base;
+  if (!Number.isFinite(app.ui.rightRatio)) app.ui.rightRatio = app.ui.rightW / base;
+  localStorage.setItem("ct_left_ratio", String(app.ui.leftRatio));
+  localStorage.setItem("ct_right_ratio", String(app.ui.rightRatio));
 }
 
 function applySplitVars() {
@@ -1628,6 +1775,7 @@ function normalizeSplitWidths() {
 }
 
 function resetLayoutSafe() {
+  const preset = computeBalancedSplitPreset({ panelDock: "right" });
   app.ui.focusMode = false;
   app.ui.layoutMode = "balanced";
   app.ui.leftCollapsed = false;
@@ -1635,8 +1783,10 @@ function resetLayoutSafe() {
   app.ui.panelDock = "right";
   app.ui.floatX = 0;
   app.ui.floatY = 0;
-  app.ui.leftW = 200;
-  app.ui.rightW = 600;
+  app.ui.leftW = preset.left;
+  app.ui.rightW = preset.right;
+  app.ui.leftRatio = preset.left / preset.width;
+  app.ui.rightRatio = preset.right / preset.width;
   updateSplitRatios();
   localStorage.setItem("ct_focus_mode", "0");
   localStorage.setItem("ct_layout_mode", "balanced");
@@ -2387,6 +2537,22 @@ function isNetworkError(err) {
   return msg.includes("failed to fetch") || msg.includes("network") || msg.includes("timeout");
 }
 
+async function withNetworkRetry(task, { retries = 2, baseDelayMs = 260 } = {}) {
+  let lastErr = null;
+  const maxRetries = Math.max(0, Number(retries) || 0);
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    try {
+      return await task(attempt);
+    } catch (err) {
+      lastErr = err;
+      if (!isNetworkError(err) || attempt >= maxRetries) throw err;
+      const waitMs = Math.min(1200, baseDelayMs * (attempt + 1));
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+  throw lastErr || new Error("network retry failed");
+}
+
 function setLoadError(err, context = t("无法连接到服务器")) {
   const detail = err && err.message ? err.message : String(err || "");
   app.ui.loadError = context;
@@ -2468,12 +2634,24 @@ async function loadProject(projectId, { resetTab = false } = {}) {
   app.current.compiler = res.compiler || "pdflatex";
   app.ui.labelCache = {};
   app.ui.bibKeyCache = { projectId, keys: [], byFile: {}, updatedAt: 0 };
-  refreshBibKeyCache().catch(console.error);
-  refreshLabelCache().catch(console.error);
+  app.ui.fileTextCache = new Map();
+  scheduleProjectCacheWarmup(projectId);
   const storedOpenFiles = loadOpenFiles(projectId, app.current.tree);
   let initOpenFiles = storedOpenFiles;
+  const suggestedPromise = !initOpenFiles.length
+    ? buildSuggestedOpenFiles(projectId, app.current.tree, app.current.mainFile).catch(() => [])
+    : Promise.resolve([]);
+  const artifactsPromise = api(`/api/projects/${projectId}/artifacts/status${pdfArtifactQuery(projectId)}`).catch(() => null);
+  const logPromise = artifactsPromise.then(async (artifacts) => {
+    if (!(artifacts && artifacts.log && artifacts.log.exists)) return "";
+    try {
+      return await api(`/api/projects/${projectId}/artifacts/log${pdfArtifactQuery(projectId)}`);
+    } catch {
+      return "";
+    }
+  });
   if (!initOpenFiles.length) {
-    initOpenFiles = await buildSuggestedOpenFiles(projectId, app.current.tree, app.current.mainFile);
+    initOpenFiles = await suggestedPromise;
   }
   if (initOpenFiles.length) setOpenFiles(initOpenFiles);
   else app.ui.openFiles = [];
@@ -2514,20 +2692,8 @@ async function loadProject(projectId, { resetTab = false } = {}) {
   app.ui.fileMultiSelect = false;
   if (app.ui.openFiles.length) setOpenFiles(app.ui.openFiles.filter((p) => app.current.tree.includes(p)));
   app.ui.pinnedFiles = loadPinnedFiles(projectId, app.current.tree);
-  try {
-    app.current.artifacts = await api(`/api/projects/${projectId}/artifacts/status${pdfArtifactQuery(projectId)}`);
-  } catch {
-    app.current.artifacts = null;
-  }
-  try {
-    if (app.current.artifacts && app.current.artifacts.log && app.current.artifacts.log.exists) {
-      app.current.lastLog = await api(`/api/projects/${projectId}/artifacts/log${pdfArtifactQuery(projectId)}`);
-    } else {
-      app.current.lastLog = "";
-    }
-  } catch {
-    app.current.lastLog = "";
-  }
+  app.current.artifacts = await artifactsPromise;
+  app.current.lastLog = await logPromise;
   if (app.current.openFile && !app.current.tree.includes(app.current.openFile)) {
     app.current.openFile = null;
     app.current.outline = [];
@@ -2545,6 +2711,18 @@ async function loadProject(projectId, { resetTab = false } = {}) {
       (Array.isArray(app.current.tree) && app.current.tree.length ? app.current.tree[0] : "");
     if (preferred) app.ui.pendingOpenFile = preferred;
   }
+
+  const likely = app.ui.pendingOpenFile || app.current.mainFile || (Array.isArray(app.current.tree) ? app.current.tree[0] : "");
+  if (likely && !isFolderPlaceholder(likely)) {
+    setTimeout(() => {
+      if (!app.current.project || app.current.project.id !== projectId) return;
+      api(`/api/projects/${projectId}/file?path=${encodeURIComponent(likely)}`)
+        .then((text) => {
+          cacheFileText(likely, typeof text === "string" ? text : "");
+        })
+        .catch(() => {});
+    }, 0);
+  }
 }
 
 async function openProjectById(projectId, { pushHash = true, resetTab = true, seedProject = null } = {}) {
@@ -2559,12 +2737,16 @@ async function openProjectById(projectId, { pushHash = true, resetTab = true, se
     app.current.project = seedProject || app.projects.find((p) => p.id === projectId) || { id: projectId, name: projectId };
     mount(render());
 
-    await loadProject(projectId, { resetTab });
+    await withNetworkRetry(() => loadProject(projectId, { resetTab }), { retries: 2, baseDelayMs: 280 });
     app.view = "project";
     if (pushHash) history.pushState({}, "", `#project/${projectId}`);
     mount(render());
     return true;
   } catch (e) {
+    if (isNetworkError(e)) {
+      setLoadError(e, t("无法打开项目（网络连接异常）"));
+      return false;
+    }
     app.view = "projects";
     const msg = e && e.message ? e.message : String(e);
     alert(`无法打开项目：${msg}`);
@@ -2607,7 +2789,7 @@ async function handleRoute() {
 
 function topbar(title, rightEls) {
   const left = h("div", { class: "topbar-left" }, [
-    h("div", { class: "brand", html: "CollabTeX Studio" }),
+    h("div", { class: "brand", html: "collabtex" }),
     h("div", { class: "title", html: title || "" }),
   ]);
   const right = h("div", { class: "topbar-right" }, [...(rightEls || []), langToggleBtn()]);
@@ -2682,15 +2864,223 @@ function dropdownMenu(id, body) {
   return h("div", { class: "dropdown-menu", onclick: (ev) => ev.stopPropagation() }, [body]);
 }
 
+const dropdownMenuRef = new WeakMap();
+const dropdownMenuHome = new WeakMap();
+const dropdownMenuPortalMeta = new WeakMap();
+let dropdownPortalEl = null;
+
+function clearDropdownMenuPlacementStyles(menu) {
+  if (!menu) return;
+  menu.style.position = "";
+  menu.style.top = "";
+  menu.style.left = "";
+  menu.style.right = "";
+  menu.style.bottom = "";
+  menu.style.zIndex = "";
+  menu.style.pointerEvents = "";
+  menu.style.opacity = "";
+  menu.style.visibility = "";
+  menu.style.maxHeight = "";
+  menu.style.overflow = "";
+  menu.style.transform = "";
+  menu.style.transition = "";
+  menu.style.minWidth = "";
+  menu.style.maxWidth = "";
+  menu.style.borderRadius = "";
+  menu.style.padding = "";
+  menu.style.background = "";
+  menu.style.borderColor = "";
+  menu.style.boxShadow = "";
+  menu.style.backdropFilter = "";
+  menu.style.webkitBackdropFilter = "";
+  menu.style.backgroundClip = "";
+  menu.style.isolation = "";
+  menu.style.contain = "";
+  menu.removeAttribute("data-dropdown-owner");
+}
+
+function ensureDropdownPortal() {
+  if (dropdownPortalEl && dropdownPortalEl.isConnected) return dropdownPortalEl;
+  const portal = document.createElement("div");
+  portal.id = "dropdownPortal";
+  portal.style.position = "fixed";
+  portal.style.inset = "0";
+  portal.style.pointerEvents = "none";
+  portal.style.zIndex = "2800";
+  document.body.appendChild(portal);
+  dropdownPortalEl = portal;
+  return portal;
+}
+
+function getDropdownMenu(el) {
+  if (!el) return null;
+  const cached = dropdownMenuRef.get(el);
+  if (cached && cached.isConnected) return cached;
+  const found = el.querySelector(":scope > .dropdown-menu") || el.querySelector(".dropdown-menu");
+  if (found) dropdownMenuRef.set(el, found);
+  return found || null;
+}
+
+function snapshotDropdownPortalMeta(menu, ownerId = "") {
+  if (!menu) return null;
+  const cs = window.getComputedStyle(menu);
+  const meta = {
+    ownerId,
+    minWidth: cs.minWidth && cs.minWidth !== "0px" ? cs.minWidth : "",
+    maxWidth: cs.maxWidth && cs.maxWidth !== "none" ? cs.maxWidth : "",
+    borderRadius: cs.borderRadius || "",
+    padding: cs.padding || "",
+    background: cs.background || "",
+    borderColor: cs.borderColor || "",
+    boxShadow: cs.boxShadow || "",
+    backdropFilter: cs.backdropFilter || "",
+    webkitBackdropFilter: cs.webkitBackdropFilter || "",
+  };
+  dropdownMenuPortalMeta.set(menu, meta);
+  return meta;
+}
+
+function applyDropdownPortalMeta(menu, ownerId = "") {
+  if (!menu) return;
+  const meta = dropdownMenuPortalMeta.get(menu) || snapshotDropdownPortalMeta(menu, ownerId) || {};
+  const owner = ownerId || meta.ownerId || "";
+  if (owner) menu.setAttribute("data-dropdown-owner", owner);
+  else menu.removeAttribute("data-dropdown-owner");
+  if (meta.minWidth) menu.style.minWidth = meta.minWidth;
+  if (meta.maxWidth) menu.style.maxWidth = meta.maxWidth;
+  if (meta.borderRadius) menu.style.borderRadius = meta.borderRadius;
+  if (meta.padding) menu.style.padding = meta.padding;
+  if (meta.background) menu.style.background = meta.background;
+  if (meta.borderColor) menu.style.borderColor = meta.borderColor;
+  if (meta.boxShadow) menu.style.boxShadow = meta.boxShadow;
+  if (meta.backdropFilter) menu.style.backdropFilter = meta.backdropFilter;
+  if (meta.webkitBackdropFilter) menu.style.webkitBackdropFilter = meta.webkitBackdropFilter;
+  menu.style.backgroundClip = "padding-box";
+  menu.style.isolation = "isolate";
+}
+
+function moveDropdownMenuToPortal(el) {
+  const menu = getDropdownMenu(el);
+  if (!menu) return null;
+  const ownerId = String((el && el.getAttribute && el.getAttribute("data-dropdown-id")) || "");
+  snapshotDropdownPortalMeta(menu, ownerId);
+  if (!dropdownMenuHome.has(menu)) {
+    dropdownMenuHome.set(menu, {
+      parent: menu.parentNode,
+      next: menu.nextSibling,
+    });
+  }
+  const portal = ensureDropdownPortal();
+  if (menu.parentNode !== portal) portal.appendChild(menu);
+  menu.classList.add("dropdown-menu-portal");
+  applyDropdownPortalMeta(menu, ownerId);
+  return menu;
+}
+
+function restoreDropdownMenuHome(el) {
+  const menu = getDropdownMenu(el);
+  if (!menu) return;
+  const home = dropdownMenuHome.get(menu);
+  if (home && home.parent && home.parent.isConnected && menu.parentNode !== home.parent) {
+    if (home.next && home.next.parentNode === home.parent) home.parent.insertBefore(menu, home.next);
+    else home.parent.appendChild(menu);
+  }
+  menu.classList.remove("dropdown-menu-portal");
+  clearDropdownMenuPlacementStyles(menu);
+}
+
+function flushDropdownPortal() {
+  if (!dropdownPortalEl || !dropdownPortalEl.isConnected) return;
+  const menus = Array.from(dropdownPortalEl.querySelectorAll(".dropdown-menu-portal"));
+  menus.forEach((menu) => {
+    const home = dropdownMenuHome.get(menu);
+    if (home && home.parent && home.parent.isConnected) {
+      if (home.next && home.next.parentNode === home.parent) home.parent.insertBefore(menu, home.next);
+      else home.parent.appendChild(menu);
+    } else {
+      menu.remove();
+    }
+    menu.classList.remove("dropdown-menu-portal");
+    clearDropdownMenuPlacementStyles(menu);
+  });
+}
+
+function resetDropdownMenuPlacement(el) {
+  if (!el) return;
+  const menu = getDropdownMenu(el);
+  if (!menu) return;
+  restoreDropdownMenuHome(el);
+  clearDropdownMenuPlacementStyles(menu);
+}
+
+function placeOpenDropdownMenu(el) {
+  if (!el) return;
+  const menu = moveDropdownMenuToPortal(el) || getDropdownMenu(el);
+  if (!menu) return;
+  const trigger = el.querySelector(":scope > .dropdown-trigger") || el.querySelector(".dropdown-trigger") || el.firstElementChild;
+  if (!trigger || !(trigger instanceof HTMLElement)) return;
+
+  const gap = 8;
+  const margin = 8;
+  const triggerRect = trigger.getBoundingClientRect();
+  const viewportW = window.innerWidth || document.documentElement.clientWidth || 1200;
+  const viewportH = window.innerHeight || document.documentElement.clientHeight || 800;
+  const rawMenuWidth = Math.ceil(menu.getBoundingClientRect().width || menu.offsetWidth || 0);
+  const menuWidth = Math.max(160, rawMenuWidth);
+  const rawMenuHeight = Math.ceil(menu.getBoundingClientRect().height || menu.offsetHeight || 0);
+
+  let left;
+  if (el.classList.contains("dropdown-left")) left = triggerRect.left;
+  else left = triggerRect.right - menuWidth;
+  left = Math.max(margin, Math.min(viewportW - menuWidth - margin, left));
+
+  let top = triggerRect.bottom + gap;
+  const maxMenuH = Math.max(160, Math.min(Math.floor(viewportH * 0.72), 560));
+  const nextMenuHeight = Math.min(maxMenuH, rawMenuHeight || maxMenuH);
+  if (top + nextMenuHeight + margin > viewportH) {
+    const aboveTop = triggerRect.top - gap - nextMenuHeight;
+    if (aboveTop >= margin) top = aboveTop;
+    else top = Math.max(margin, viewportH - nextMenuHeight - margin);
+  }
+
+  menu.style.position = "fixed";
+  menu.style.top = String(Math.round(top)) + "px";
+  menu.style.left = String(Math.round(left)) + "px";
+  menu.style.right = "auto";
+  menu.style.bottom = "auto";
+  menu.style.zIndex = "2900";
+  menu.style.pointerEvents = "auto";
+  menu.style.opacity = "1";
+  menu.style.visibility = "visible";
+  menu.style.transform = "none";
+  menu.style.transition = "none";
+  menu.style.maxHeight = String(maxMenuH) + "px";
+  menu.style.overflow = "auto";
+  menu.style.contain = "layout paint";
+}
+
 function applyDropdownState() {
   if (!app || !app.ui) return;
   const open = app.ui.dropdownOpen || "";
+  let openEl = null;
   const dropdowns = document.querySelectorAll(".dropdown[data-dropdown-id]");
   dropdowns.forEach((el) => {
     const id = el.getAttribute("data-dropdown-id") || "";
-    if (open && id === open) el.setAttribute("data-open", "1");
-    else el.removeAttribute("data-open");
+    if (open && id === open) {
+      el.setAttribute("data-open", "1");
+      openEl = el;
+    } else {
+      el.removeAttribute("data-open");
+      resetDropdownMenuPlacement(el);
+    }
   });
+  if (!openEl) flushDropdownPortal();
+  if (openEl) {
+    requestAnimationFrame(() => {
+      if (!openEl || !openEl.getAttribute("data-open")) return;
+      placeOpenDropdownMenu(openEl);
+    });
+  }
 }
 
 function buildProjectSettingsPanel(project, { onDelete } = {}) {
@@ -2736,6 +3126,8 @@ async function openFile(filePath) {
     loadHistory,
     readTextForWork,
     hashText,
+    getCachedFileText,
+    cacheFileText,
     api,
     wsUrl,
     pickColor,
@@ -3508,6 +3900,10 @@ function closeTab(filePath) {
   if (app.ui.refreshFileTabs) app.ui.refreshFileTabs();
 }
 
+function flushActiveFileToDisk() {
+  return Promise.resolve();
+}
+
 function renderFileTabs() {
   return renderFileTabsView({
     h,
@@ -3633,6 +4029,7 @@ function renderProject() {
     showModal,
     startBottomDrag,
     startDrag,
+    startFloatDrag,
     stopMonitorPolling,
     t,
     toggleDropdown,
@@ -3815,6 +4212,19 @@ window.addEventListener("keydown", (ev) => {
 window.addEventListener("hashchange", () => {
   handleRoute().catch(() => {});
 });
+
+let dropdownRepositionRaf = null;
+function scheduleDropdownReposition() {
+  if (!app || !app.ui || !app.ui.dropdownOpen) return;
+  if (dropdownRepositionRaf) cancelAnimationFrame(dropdownRepositionRaf);
+  dropdownRepositionRaf = requestAnimationFrame(() => {
+    dropdownRepositionRaf = null;
+    if (app && app.ui && app.ui.dropdownOpen) applyDropdownState();
+  });
+}
+
+window.addEventListener("resize", scheduleDropdownReposition);
+window.addEventListener("scroll", scheduleDropdownReposition, true);
 
 function reportUiError(err) {
   const msg = err && err.message ? err.message : String(err);

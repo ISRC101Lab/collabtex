@@ -12,6 +12,7 @@ body {
   position: relative;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  font-synthesis-weight: none;
 }
 
 
@@ -143,6 +144,8 @@ body::after {
   gap: 6px;
   padding: 6px;
   height: calc(100vh - var(--topbarH));
+  position: relative;
+  isolation: isolate;
 }
 
 .layout .pane.left { grid-area: left; }
@@ -255,10 +258,11 @@ body::after {
   left: 16px;
   width: min(60vw, 900px);
   height: min(82vh, 900px);
-  z-index: 25;
+  z-index: 120;
   resize: both;
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  isolation: isolate;
 }
 
 .right-pane.float .tab-body,
