@@ -1,0 +1,149 @@
+.collab-manager__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.collab-manager {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 360px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-ui);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.collab-manager__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.collab-manager__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.collab-manager__close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px;
+}
+
+.collab-manager__close:hover {
+  color: var(--text);
+}
+
+.collab-manager__body {
+  padding: 8px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.collab-manager__member {
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  gap: 8px;
+}
+
+.collab-manager__member:hover {
+  background: var(--bg-hover);
+}
+
+.collab-manager__member--owner {
+  background: none;
+}
+
+.collab-manager__name {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.collab-manager__badge {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.collab-manager__remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.collab-manager__remove-btn:hover {
+  color: var(--error, #e55);
+  background: rgba(238, 85, 85, 0.1);
+}
+
+.collab-manager__empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.collab-manager__add {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.collab-manager__input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  outline: none;
+}
+
+.collab-manager__input:focus {
+  border-color: var(--accent, #4f8ff7);
+}
+
+.collab-manager__add-btn {
+  background: var(--accent, #4f8ff7);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.collab-manager__add-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.collab-manager__error {
+  padding: 6px 16px 10px;
+  color: var(--error, #e55);
+  font-size: 12px;
+}

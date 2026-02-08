@@ -1,0 +1,43 @@
+.code-editor {
+  flex: 1;
+  overflow: hidden;
+  font-family: var(--font-mono);
+}
+
+.code-editor .cm-editor {
+  height: 100%;
+  outline: none;
+}
+
+.code-editor .cm-scroller {
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.code-editor .cm-focused {
+  outline: none;
+}
+
+.code-editor .cm-gutters {
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.code-editor .cm-activeLineGutter {
+  background: rgba(92, 132, 255, 0.08);
+}
+
+.code-editor .cm-activeLine {
+  background: rgba(92, 132, 255, 0.04);
+}
+
+.code-editor .cm-selectionBackground {
+  background: rgba(92, 132, 255, 0.18) !important;
+}
+
+.code-editor .cm-cursor {
+  border-left-color: var(--accent);
+}

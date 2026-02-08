@@ -1,0 +1,663 @@
+import fs from 'node:fs/promises'
+import fsSync from 'node:fs'
+import path from 'node:path'
+import { spawn } from 'node:child_process'
+import { projectDir, ensureDir } from './paths.js'
+import { listTree } from './projects.js'
+
+// ── Config ──────────────────────────────────────────────────────────
+
+const AI_BASE_URL = process.env.AI_BASE_URL || 'https://llmapi.blsc.cn/v1'
+const AI_API_KEY = process.env.AI_API_KEY || 'sk-V2hxOCNJF8RmDs0Gq9i49w'
+const AI_MODEL = process.env.AI_MODEL || 'Qwen3-VL-235B-A22B-Instruct'
+
+const AVAILABLE_MODELS = [
+  'Qwen3-VL-235B-A22B-Instruct',
+  'Qwen3-VL-235B-A22B-Thinking',
+  'Qwen3-VL-30B-A3B-Instruct',
+  'Qwen3-VL-30B-A3B-Thinking',
+]
+
+// ── Tool definitions (OpenAI function-calling format) ───────────────
+
+const TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'list_files',
+      description: 'List all files in the current LaTeX project.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'read_file',
+      description: 'Read the full content of a file in the project.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative file path, e.g. "main.tex"' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description: 'Create or overwrite a file with the given content. Parent directories are created automatically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative file path' },
+          content: { type: 'string', description: 'Full file content to write' },
+        },
+        required: ['path', 'content'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'edit_file',
+      description: 'Replace a specific substring in a file. Use this for targeted edits instead of rewriting the whole file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative file path' },
+          old_text: { type: 'string', description: 'Exact text to find and replace' },
+          new_text: { type: 'string', description: 'Replacement text' },
+        },
+        required: ['path', 'old_text', 'new_text'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_file',
+      description: 'Delete a file from the project.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Relative file path to delete' },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'rename_file',
+      description: 'Rename or move a file within the project.',
+      parameters: {
+        type: 'object',
+        properties: {
+          from: { type: 'string', description: 'Current relative file path' },
+          to: { type: 'string', description: 'New relative file path' },
+        },
+        required: ['from', 'to'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'compile_project',
+      description: 'Compile the LaTeX project and return the result. Use this when the user asks you to compile, build, or generate PDF.',
+      parameters: {
+        type: 'object',
+        properties: {
+          compiler: {
+            type: 'string',
+            enum: ['pdflatex', 'xelatex', 'lualatex', 'latexmk'],
+            description: 'LaTeX compiler to use. Default: xelatex. Use xelatex for Chinese/Unicode content.',
+          },
+          main_file: {
+            type: 'string',
+            description: 'Main .tex file to compile. Default: main.tex',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+]
+
+// ── System prompt ───────────────────────────────────────────────────
+
+function buildSystemPrompt(projectName, fileList) {
+  const filesSection = fileList && fileList.length > 0
+    ? `\n## Current Project Files\n\n${fileList.map(f => `- ${f}`).join('\n')}\n`
+    : ''
+
+  return `You are Aitex AI — an expert LaTeX writing assistant embedded in a collaborative LaTeX editor called Aitex.
+
+Project: "${projectName}"
+${filesSection}
+## Your Capabilities
+
+You have access to these tools to directly operate on the project:
+- **list_files** — See all files in the project
+- **read_file(path)** — Read a file's content
+- **write_file(path, content)** — Create or fully rewrite a file
+- **edit_file(path, old_text, new_text)** — Targeted find-and-replace edit
+- **delete_file(path)** — Delete a file
+- **rename_file(from, to)** — Rename or move a file
+- **compile_project(compiler, main_file)** — Compile LaTeX to PDF
+
+## Core Principles
+
+1. **Explore before acting.** When you receive a task, first understand the project: check the file list above, then read_file on the key files (especially main.tex) to understand the structure, packages, and conventions. Never make blind changes.
+
+2. **Act, don't just describe.** When the user asks you to do something (translate, fix, add content, restructure), USE THE TOOLS to make the changes directly. Do not just show code snippets — apply them.
+
+3. **Always read before editing.** Before modifying any file, read it first with read_file so you know the exact current content. The edit_file tool requires exact string matching.
+
+4. **Prefer edit_file over write_file.** For modifications, use edit_file with precise old_text/new_text. Only use write_file when creating new files or when changes are so extensive that rewriting is simpler.
+
+5. **Compile proactively.** After making changes that affect the PDF output, compile the project automatically using compile_project. Use xelatex for Chinese/CJK content, pdflatex for English-only projects.
+
+6. **Handle multi-step tasks autonomously.** If a task requires multiple operations (e.g., "translate this file to Chinese"), break it down and execute all steps: read the file, edit/rewrite it, then compile. Don't stop halfway.
+
+## Common Task Patterns
+
+**Translation:** Read the file → rewrite with translated content (preserving all LaTeX commands, \\cite{}, \\ref{}, \\label{}, environments) → compile with xelatex.
+
+**Adding content:** Read the target file → use edit_file to insert new content at the right location → compile.
+
+**Fixing errors:** Read the file → identify the issue → use edit_file to fix → compile to verify.
+
+**Restructuring:** List files to understand project structure → read relevant files → create/edit/delete as needed → compile.
+
+**Creating new sections/chapters:** Read main file to understand structure → create new .tex file if needed → add \\input{} or \\include{} to main file → compile.
+
+## Important Rules
+
+- When the user provides file content via @filename context blocks, use that content directly — no need to read_file again.
+- Respond in the same language the user writes in.
+- Be concise in explanations. Focus on what you changed and why.
+- If compilation fails, read the log, diagnose the error, fix it, and recompile.
+- For large files, you may need multiple edit_file calls. That's fine — be thorough.`
+}
+
+// ── Path safety ─────────────────────────────────────────────────────
+
+function safePath(p) {
+  if (!p || typeof p !== 'string') return null
+  const normalized = path.normalize(p).replace(/\\/g, '/')
+  if (normalized.startsWith('/') || normalized.startsWith('..')) return null
+  if (normalized.includes('/../') || normalized === '..') return null
+  return normalized
+}
+
+// ── Tool execution ──────────────────────────────────────────────────
+
+async function executeTool(name, args, dir) {
+  const fileChanges = []
+
+  switch (name) {
+    case 'list_files': {
+      const tree = await listTree(dir)
+      return { result: JSON.stringify(tree), fileChanges }
+    }
+
+    case 'read_file': {
+      const sp = safePath(args.path)
+      if (!sp) return { result: 'Error: invalid path', fileChanges }
+      try {
+        const content = await fs.readFile(path.join(dir, sp), 'utf8')
+        return { result: content, fileChanges }
+      } catch {
+        return { result: `Error: file "${sp}" not found`, fileChanges }
+      }
+    }
+
+    case 'write_file': {
+      const sp = safePath(args.path)
+      if (!sp) return { result: 'Error: invalid path', fileChanges }
+      const full = path.join(dir, sp)
+      // Read old content for diff
+      let oldContent = null
+      try { oldContent = await fs.readFile(full, 'utf8') } catch { /* new file */ }
+      await fs.mkdir(path.dirname(full), { recursive: true })
+      await fs.writeFile(full, args.content, 'utf8')
+      fileChanges.push({
+        action: oldContent === null ? 'create' : 'write',
+        path: sp,
+        oldContent,
+        newContent: args.content,
+      })
+      return { result: `File "${sp}" written successfully.`, fileChanges }
+    }
+
+    case 'edit_file': {
+      const sp = safePath(args.path)
+      if (!sp) return { result: 'Error: invalid path', fileChanges }
+      const full = path.join(dir, sp)
+      try {
+        const oldContent = await fs.readFile(full, 'utf8')
+        if (!oldContent.includes(args.old_text)) {
+          return { result: `Error: old_text not found in "${sp}"`, fileChanges }
+        }
+        const newContent = oldContent.replace(args.old_text, args.new_text)
+        await fs.writeFile(full, newContent, 'utf8')
+        fileChanges.push({
+          action: 'edit',
+          path: sp,
+          oldContent,
+          newContent,
+        })
+        return { result: `File "${sp}" edited successfully.`, fileChanges }
+      } catch {
+        return { result: `Error: file "${sp}" not found`, fileChanges }
+      }
+    }
+
+    case 'delete_file': {
+      const sp = safePath(args.path)
+      if (!sp) return { result: 'Error: invalid path', fileChanges }
+      try {
+        const oldContent = await fs.readFile(path.join(dir, sp), 'utf8')
+        await fs.unlink(path.join(dir, sp))
+        fileChanges.push({ action: 'delete', path: sp, oldContent, newContent: null })
+        return { result: `File "${sp}" deleted.`, fileChanges }
+      } catch {
+        return { result: `Error: file "${sp}" not found`, fileChanges }
+      }
+    }
+
+    case 'rename_file': {
+      const from = safePath(args.from)
+      const to = safePath(args.to)
+      if (!from || !to) return { result: 'Error: invalid path', fileChanges }
+      try {
+        const oldContent = await fs.readFile(path.join(dir, from), 'utf8')
+        const destFull = path.join(dir, to)
+        await fs.mkdir(path.dirname(destFull), { recursive: true })
+        await fs.rename(path.join(dir, from), destFull)
+        fileChanges.push({ action: 'rename', path: to, oldPath: from, oldContent, newContent: oldContent })
+        return { result: `Renamed "${from}" → "${to}".`, fileChanges }
+      } catch {
+        return { result: `Error: file "${from}" not found`, fileChanges }
+      }
+    }
+
+    case 'compile_project': {
+      const compiler = args.compiler || 'xelatex'
+      const mainFile = args.main_file || 'main.tex'
+      const allowed = ['pdflatex', 'xelatex', 'lualatex', 'latexmk']
+      if (!allowed.includes(compiler)) {
+        return { result: `Error: unsupported compiler "${compiler}"`, fileChanges }
+      }
+      const buildDir = path.join(dir, 'build')
+      ensureDir(buildDir)
+      try {
+        const res = await runCompile(compiler, mainFile, dir, buildDir)
+        return { result: JSON.stringify(res), fileChanges }
+      } catch (err) {
+        return { result: `Compile error: ${err.message}`, fileChanges }
+      }
+    }
+
+    default:
+      return { result: `Unknown tool: ${name}`, fileChanges }
+  }
+}
+
+// ── Compile helper ─────────────────────────────────────────────────
+
+function runCompile(compiler, mainFile, srcDir, buildDir) {
+  const args = compiler === 'latexmk'
+    ? ['-pdf', '-interaction=nonstopmode', `-output-directory=${buildDir}`, mainFile]
+    : ['-interaction=nonstopmode', `-output-directory=${buildDir}`, mainFile]
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(compiler, args, {
+      cwd: srcDir,
+      timeout: 60_000,
+      env: { ...process.env, TEXMFOUTPUT: buildDir },
+    })
+
+    let stdout = ''
+    let stderr = ''
+    proc.stdout.on('data', d => { stdout += d })
+    proc.stderr.on('data', d => { stderr += d })
+
+    proc.on('close', code => {
+      const pdfName = mainFile.replace(/\.tex$/, '.pdf')
+      const pdfExists = fsSync.existsSync(path.join(buildDir, pdfName))
+      resolve({
+        ok: code === 0 && pdfExists,
+        code,
+        pdfExists,
+        compiler,
+        stdout: stdout.slice(-3000),
+        stderr: stderr.slice(-1500),
+      })
+    })
+
+    proc.on('error', err => reject(err))
+  })
+}
+
+// ── Call Qwen API ───────────────────────────────────────────────────
+
+async function callLLM(messages, useTools = true) {
+  const body = {
+    model: AI_MODEL,
+    messages,
+    temperature: 0.7,
+    max_tokens: 8192,
+  }
+  if (useTools) {
+    body.tools = TOOLS
+    body.tool_choice = 'auto'
+  }
+
+  const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${AI_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`LLM API error ${res.status}: ${text.slice(0, 500)}`)
+  }
+
+  return res.json()
+}
+
+// ── Streaming LLM call ─────────────────────────────────────────────
+
+async function callLLMStream(messages, model, useTools = true) {
+  const body = {
+    model: model || AI_MODEL,
+    messages,
+    temperature: 0.7,
+    max_tokens: 4096,
+    stream: true,
+  }
+  if (useTools) {
+    body.tools = TOOLS
+    body.tool_choice = 'auto'
+  }
+
+  const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${AI_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`LLM API error ${res.status}: ${text.slice(0, 500)}`)
+  }
+
+  return res.body
+}
+
+// ── Parse SSE stream from LLM into a complete message ──────────────
+
+async function consumeStream(stream, onContentDelta) {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  // Accumulated message
+  let content = ''
+  const toolCallsMap = new Map() // index -> { id, name, arguments }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const data = line.slice(6).trim()
+      if (data === '[DONE]') continue
+
+      let parsed
+      try { parsed = JSON.parse(data) } catch { continue }
+
+      const delta = parsed.choices?.[0]?.delta
+      if (!delta) continue
+
+      // Content delta
+      if (delta.content) {
+        content += delta.content
+        if (onContentDelta) onContentDelta(delta.content)
+      }
+
+      // Tool call deltas
+      if (delta.tool_calls) {
+        for (const tc of delta.tool_calls) {
+          const idx = tc.index ?? 0
+          if (!toolCallsMap.has(idx)) {
+            toolCallsMap.set(idx, {
+              id: tc.id || '',
+              name: tc.function?.name || '',
+              arguments: '',
+            })
+          }
+          const entry = toolCallsMap.get(idx)
+          if (tc.id) entry.id = tc.id
+          if (tc.function?.name) entry.name = tc.function.name
+          if (tc.function?.arguments) entry.arguments += tc.function.arguments
+        }
+      }
+    }
+  }
+
+  // Convert tool calls map to array
+  const toolCalls = [...toolCallsMap.values()].map(tc => ({
+    id: tc.id,
+    type: 'function',
+    function: { name: tc.name, arguments: tc.arguments },
+  }))
+
+  return { content, toolCalls }
+}
+
+// ── Agent loop ──────────────────────────────────────────────────────
+
+const MAX_TOOL_ROUNDS = 8
+
+export async function runAgent({ dataDir, projectId, projectName, message, history }) {
+  const dir = projectDir(dataDir, projectId)
+  const allFileChanges = []
+  const toolCalls = []
+
+  // Auto-fetch file list for context injection
+  let fileList = []
+  try { fileList = await listTree(dir) } catch { /* ignore */ }
+
+  // Build messages
+  const messages = [
+    { role: 'system', content: buildSystemPrompt(projectName, fileList) },
+    ...history,
+    { role: 'user', content: message },
+  ]
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const completion = await callLLM(messages)
+    const choice = completion.choices?.[0]
+    if (!choice) throw new Error('No response from LLM')
+
+    const assistantMsg = choice.message
+    messages.push(assistantMsg)
+
+    // If no tool calls, we're done
+    if (!assistantMsg.tool_calls || assistantMsg.tool_calls.length === 0) {
+      return {
+        reply: assistantMsg.content || '',
+        fileChanges: allFileChanges,
+        toolCalls,
+      }
+    }
+
+    // Execute each tool call
+    for (const tc of assistantMsg.tool_calls) {
+      let args = {}
+      try {
+        args = typeof tc.function.arguments === 'string'
+          ? JSON.parse(tc.function.arguments)
+          : tc.function.arguments || {}
+      } catch { /* parse error — empty args */ }
+
+      const { result, fileChanges } = await executeTool(tc.function.name, args, dir)
+      allFileChanges.push(...fileChanges)
+      toolCalls.push({ name: tc.function.name, args, result: result.slice(0, 200) })
+
+      messages.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: result,
+      })
+    }
+  }
+
+  // If we exhausted rounds, return what we have
+  return {
+    reply: 'I performed several operations but reached the maximum number of steps. Please check the results.',
+    fileChanges: allFileChanges,
+    toolCalls,
+  }
+}
+
+// ── Streaming agent loop ────────────────────────────────────────────
+// emit(event, data) sends SSE events to the client
+
+export async function runAgentStream({ dataDir, projectId, projectName, message, history, model, emit }) {
+  const dir = projectDir(dataDir, projectId)
+  const chosenModel = (model && AVAILABLE_MODELS.includes(model)) ? model : AI_MODEL
+  const isThinkingModel = chosenModel.includes('Thinking')
+
+  const messages = [
+    { role: 'system', content: buildSystemPrompt(projectName) },
+    ...history,
+    { role: 'user', content: message },
+  ]
+
+  emit('status', { model: chosenModel, round: 0 })
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    emit('thinking', { round: round + 1 })
+
+    // Stream the LLM response
+    const stream = await callLLMStream(messages, chosenModel, true)
+    let contentBuffer = ''
+    let inThinking = false
+    let thinkingBuffer = ''
+
+    const { content, toolCalls } = await consumeStream(stream, (delta) => {
+      contentBuffer += delta
+
+      // For thinking models, extract <think> blocks using state tracking
+      if (isThinkingModel) {
+        if (!inThinking && contentBuffer.includes('<think>')) {
+          inThinking = true
+          thinkingBuffer = contentBuffer.slice(contentBuffer.indexOf('<think>') + 7)
+          emit('thinking_content', { content: thinkingBuffer })
+          return
+        }
+        if (inThinking) {
+          if (contentBuffer.includes('</think>')) {
+            // Thinking block closed
+            const closeIdx = contentBuffer.indexOf('</think>')
+            const fullThinking = contentBuffer.slice(contentBuffer.indexOf('<think>') + 7, closeIdx)
+            emit('thinking_done', { content: fullThinking })
+            inThinking = false
+            const afterThink = contentBuffer.slice(closeIdx + 8).trim()
+            if (afterThink) emit('content', { content: afterThink })
+            // Reset buffer to only post-think content
+            contentBuffer = afterThink
+          } else {
+            emit('thinking_content', { content: delta })
+          }
+          return
+        }
+      }
+
+      emit('content', { content: delta })
+    })
+
+    // Build assistant message for conversation history
+    const assistantMsg = { role: 'assistant', content: content || null }
+    if (toolCalls.length > 0) {
+      assistantMsg.tool_calls = toolCalls
+    }
+    messages.push(assistantMsg)
+
+    // No tool calls — we're done
+    if (toolCalls.length === 0) {
+      // Strip <think>...</think> tags from the final reply
+      const cleanReply = isThinkingModel
+        ? (content || '').replace(/^<think>[\s\S]*?<\/think>\s*/, '')
+        : content
+      emit('done', { reply: cleanReply })
+      return
+    }
+
+    // Execute each tool call
+    for (const tc of toolCalls) {
+      let args = {}
+      try {
+        args = typeof tc.function.arguments === 'string'
+          ? JSON.parse(tc.function.arguments)
+          : tc.function.arguments || {}
+      } catch { /* parse error */ }
+
+      emit('tool_call', { name: tc.function.name, args })
+
+      const { result, fileChanges } = await executeTool(tc.function.name, args, dir)
+
+      emit('tool_result', {
+        name: tc.function.name,
+        result: result.slice(0, 200),
+      })
+
+      // Emit file changes individually
+      for (const fc of fileChanges) {
+        emit('file_change', fc)
+      }
+
+      messages.push({
+        role: 'tool',
+        tool_call_id: tc.id,
+        content: result,
+      })
+    }
+  }
+
+  // Exhausted rounds
+  emit('done', {
+    reply: 'I performed several operations but reached the maximum number of steps. Please check the results.',
+  })
+}
+
+export function isConfigured() {
+  return !!(AI_API_KEY)
+}
+
+export function getProvider() {
+  return AI_MODEL
+}
+
+export function getAvailableModels() {
+  return AVAILABLE_MODELS
+}

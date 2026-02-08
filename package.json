@@ -1,0 +1,47 @@
+{
+  "name": "aitex",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=18.18"
+  },
+  "scripts": {
+    "dev": "concurrently -n vite,server -c blue,green \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "vite",
+    "dev:server": "node server/index.js",
+    "build": "vite build",
+    "start": "NODE_ENV=production node server/index.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.0",
+    "@codemirror/language": "^6.11.1",
+    "@codemirror/legacy-modes": "^6.4.3",
+    "@hocuspocus/provider": "^2.15.0",
+    "@hocuspocus/server": "^2.15.0",
+    "archiver": "^7.0.1",
+    "busboy": "^1.6.0",
+    "codemirror": "^6.0.2",
+    "express": "^4.19.2",
+    "marked": "^17.0.1",
+    "openai": "^6.18.0",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "unzipper": "^0.10.14",
+    "y-codemirror.next": "^0.3.5",
+    "yjs": "^13.6.23",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/marked": "^6.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0"
+  }
+}

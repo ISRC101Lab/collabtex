@@ -1,0 +1,150 @@
+.change-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 12px;
+  background: rgba(79, 110, 247, 0.06);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.change-banner__info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.change-banner__icon {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.change-banner__path {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-banner__badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.change-banner__badge--create {
+  background: rgba(52, 211, 153, 0.15);
+  color: #059669;
+}
+
+.change-banner__badge--edit {
+  background: rgba(92, 132, 255, 0.12);
+  color: var(--accent);
+}
+
+.change-banner__badge--write {
+  background: rgba(251, 191, 36, 0.15);
+  color: #d97706;
+}
+
+.change-banner__badge--delete {
+  background: rgba(248, 113, 113, 0.15);
+  color: #dc2626;
+}
+
+.change-banner__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.change-banner__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.change-banner__nav-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.change-banner__nav-btn:hover:not(:disabled) {
+  background: rgba(60, 86, 124, 0.08);
+  color: var(--text);
+}
+
+.change-banner__nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.change-banner__counter {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 36px;
+  text-align: center;
+}
+
+.change-banner__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.change-banner__btn {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.change-banner__btn:hover {
+  opacity: 0.8;
+}
+
+.change-banner__btn--accept {
+  background: rgba(52, 211, 153, 0.15);
+  color: #059669;
+}
+
+.change-banner__btn--reject {
+  background: rgba(248, 113, 113, 0.12);
+  color: #dc2626;
+}
+
+.change-banner__btn--accept-all {
+  background: rgba(52, 211, 153, 0.10);
+  color: #059669;
+}
+
+.change-banner__btn--reject-all {
+  background: rgba(248, 113, 113, 0.08);
+  color: #dc2626;
+}

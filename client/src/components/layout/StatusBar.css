@@ -1,0 +1,42 @@
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 10px;
+  background: var(--bg-surface, #1e1e2e);
+  border-top: 1px solid var(--border, #313244);
+  font-size: 12px;
+  color: var(--text-muted, #a6adc8);
+  font-family: var(--font-ui, sans-serif);
+  flex-shrink: 0;
+}
+
+.status-bar__left,
+.status-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-bar__item {
+  white-space: nowrap;
+}
+
+.status-bar__file {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-bar__compile--compiling {
+  color: var(--warning, #f9e2af);
+}
+
+.status-bar__compile--success {
+  color: var(--success, #a6e3a1);
+}
+
+.status-bar__compile--error {
+  color: var(--error, #f38ba8);
+}

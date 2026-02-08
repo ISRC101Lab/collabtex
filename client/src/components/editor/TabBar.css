@@ -1,0 +1,262 @@
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  min-height: 36px;
+  flex-shrink: 0;
+}
+
+/* ── Tabs area ─────────────────────────────── */
+
+.tabbar__tabs {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tabbar__tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  user-select: none;
+  transition: background 0.1s, color 0.1s;
+  position: relative;
+}
+
+.tabbar__tab:hover {
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+.tabbar__tab--active {
+  background: var(--bg-surface);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.tabbar__tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
+.tabbar__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tabbar__dirty {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.tabbar__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tabbar__close:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+/* ── Right actions area ────────────────────── */
+
+.tabbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+}
+
+.tabbar__sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ── Compile split button ──────────────────── */
+
+.tabbar__compile-group {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+}
+
+.tabbar__compile-btn {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm, 4px) 0 0 var(--radius-sm, 4px);
+  padding: 4px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.tabbar__compile-btn:hover {
+  background: var(--accent-hover, #3d5ce5);
+}
+
+.tabbar__compile-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.tabbar__compile-dropdown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.tabbar__compile-dropdown:hover {
+  background: var(--accent-hover, #3d5ce5);
+}
+
+.tabbar__compile-dropdown:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.tabbar__compile-icon {
+  display: inline-flex;
+  font-size: 12px;
+  line-height: 1;
+}
+
+@keyframes tabbar-spin {
+  to { transform: rotate(360deg); }
+}
+
+.tabbar__compile-icon--spinning {
+  animation: tabbar-spin 0.8s linear infinite;
+}
+
+.tabbar__compile-icon--success {
+  color: #34d399;
+}
+
+.tabbar__compile-icon--error {
+  color: #f87171;
+}
+
+/* ── Compiler dropdown menu ────────────────── */
+
+.tabbar__compiler-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  min-width: 130px;
+  z-index: 100;
+  padding: 4px 0;
+}
+
+.tabbar__compiler-opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.tabbar__compiler-opt:hover {
+  background: var(--bg-hover);
+}
+
+.tabbar__compiler-opt--active {
+  color: var(--accent);
+}
+
+.tabbar__compiler-check {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+/* ── Panel toggle buttons ──────────────────── */
+
+.tabbar__toggle {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  padding: 3px 6px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.tabbar__toggle:hover {
+  color: var(--text);
+  background: var(--bg-surface);
+}
+
+.tabbar__toggle--active {
+  color: var(--accent);
+  background: var(--accent-subtle, rgba(79, 110, 247, 0.08));
+  border-color: rgba(79, 110, 247, 0.18);
+}
