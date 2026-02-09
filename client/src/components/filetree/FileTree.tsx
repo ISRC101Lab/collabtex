@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './FileTree.css';
 
 interface FileTreeProps {
@@ -303,6 +304,7 @@ export default function FileTree({
   onMoveFile,
   onUpload,
 }: FileTreeProps) {
+  const navigate = useNavigate();
   const tree = useMemo(() => buildTree(files), [files]);
   const [showNew, setShowNew] = useState<false | 'file' | 'folder'>(false);
   const [newName, setNewName] = useState('');
@@ -397,7 +399,14 @@ export default function FileTree({
     >
       {/* ── Toolbar: Files label + actions ── */}
       <div className="ft-toolbar">
-        <span className="ft-toolbar__label">Files</span>
+        <button
+          type="button"
+          className="ft-toolbar__label ft-toolbar__label--brand"
+          onClick={() => navigate('/')}
+          title="返回项目列表"
+        >
+          Aitex
+        </button>
         <div className="ft-toolbar__actions">
           {downloadUrl && (
             <a className="ft-toolbar__btn" href={downloadUrl} title="Download ZIP">

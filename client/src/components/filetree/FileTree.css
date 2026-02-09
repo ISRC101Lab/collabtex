@@ -28,6 +28,18 @@
   letter-spacing: 0;
 }
 
+.ft-toolbar__label--brand {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.ft-toolbar__label--brand:hover {
+  color: #edf2fb;
+}
+
 .ft-toolbar__actions {
   display: flex;
   gap: 4px;
