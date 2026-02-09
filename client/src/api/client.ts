@@ -88,7 +88,55 @@ export function ping() {
 // ── Projects ────────────────────────────────────────────────────────
 
 export function getProjects() {
-  return request<{ projects: Project[] }>('GET', '/projects');
+  return request<{ projects: Project[]; prefs?: ProjectListPreferences }>('GET', '/projects');
+}
+
+export type ProjectListScope = 'all' | 'owned' | 'shared';
+export type ProjectListSort = 'updated_desc' | 'updated_asc' | 'name_asc' | 'name_desc';
+export type ProjectListView = 'list' | 'card';
+
+export interface ProjectListPreferences {
+  scope: ProjectListScope;
+  sort: ProjectListSort;
+  view: ProjectListView;
+}
+
+export function getProjectsWithQuery(query: {
+  q?: string;
+  scope?: ProjectListScope;
+  sort?: ProjectListSort;
+}) {
+  const params = new URLSearchParams();
+  if (query.q) params.set('q', query.q);
+  if (query.scope) params.set('scope', query.scope);
+  if (query.sort) params.set('sort', query.sort);
+  const qs = params.toString();
+  return request<{ projects: Project[]; prefs?: ProjectListPreferences }>(
+    'GET', `/projects${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export function getProjectListPreferences() {
+  return request<{ prefs: ProjectListPreferences }>('GET', '/projects/preferences');
+}
+
+export function setProjectListPreferences(
+  updates: Partial<ProjectListPreferences>,
+) {
+  return request<{ ok: boolean; prefs: ProjectListPreferences }>(
+    'POST', '/projects/preferences', updates,
+  );
+}
+
+export function importProject(params: {
+  name?: string;
+  sourceType: 'zip' | 'snapshot';
+  fileName?: string;
+  contentBase64: string;
+}) {
+  return request<{ ok: boolean; project: Project; importedCount: number }>(
+    'POST', '/projects/import', params,
+  );
 }
 
 export function createProject(name: string, mainFile = 'main.tex') {

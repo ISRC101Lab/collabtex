@@ -23,10 +23,18 @@
 }
 
 .diff-view__chevron {
-  font-size: 10px;
   color: var(--text-muted);
-  width: 12px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diff-view__chevron-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .diff-view__badge {

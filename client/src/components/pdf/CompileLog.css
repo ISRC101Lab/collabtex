@@ -3,11 +3,12 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 200px;
+  height: 132px;
+  max-height: 30%;
   display: flex;
   flex-direction: column;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border);
+  background: #111622;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 10;
 }
 
@@ -15,16 +16,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
 }
 
 .compile-log__title {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--text);
+  color: #d8deea;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -32,24 +33,24 @@
 .compile-log__header-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .compile-log__filter-btn {
-  background: none;
-  border: 1px solid var(--border);
-  font-size: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 10px;
   font-family: var(--font-ui);
-  color: var(--text-muted);
+  color: #aab5c8;
   cursor: pointer;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: 4px;
   transition: color 0.15s, background 0.15s;
 }
 
 .compile-log__filter-btn:hover {
-  background: var(--border);
-  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  color: #dbe2ef;
 }
 
 .compile-log__filter-btn--active {
@@ -84,31 +85,31 @@
 .compile-log__close-btn {
   background: none;
   border: none;
-  font-size: 16px;
-  color: var(--text-muted);
+  font-size: 13px;
+  color: #aab5c8;
   cursor: pointer;
-  padding: 2px 6px;
+  padding: 1px 4px;
   border-radius: 4px;
   line-height: 1;
   transition: color 0.15s, background 0.15s;
 }
 
 .compile-log__close-btn:hover {
-  color: var(--text);
-  background: var(--border);
+  color: #dbe2ef;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .compile-log__body {
   flex: 1;
   overflow: auto;
-  padding: 10px 12px;
-  background: #1e2a3e;
+  padding: 6px 8px;
+  background: #0e1420;
 }
 
 .compile-log__output {
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 11px;
+  line-height: 1.5;
   color: #c8d6e5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -117,7 +118,7 @@
 
 .compile-log__empty {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(200, 214, 229, 0.5);
   font-style: italic;
 }
@@ -134,10 +135,10 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 4px 8px;
+  padding: 3px 6px;
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.5;
   cursor: pointer;
   transition: background 0.1s;
@@ -151,7 +152,7 @@
   flex-shrink: 0;
   width: 16px;
   text-align: center;
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .compile-log__entry--error .compile-log__entry-icon {
@@ -178,16 +179,16 @@
 
 .compile-log__entry-loc {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(200, 214, 229, 0.5);
 }
 
 /* ── Raw log toggle ──────────────────────────────────────────── */
 
 .compile-log__raw-toggle {
-  margin-top: 8px;
-  padding: 4px 8px;
-  font-size: 11px;
+  margin-top: 6px;
+  padding: 2px 6px;
+  font-size: 10px;
   font-family: var(--font-ui);
   color: var(--text-muted);
   background: none;

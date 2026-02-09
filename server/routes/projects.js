@@ -1,6 +1,44 @@
 import { requireAuth } from '../lib/session.js'
 import { loadProjects, saveProjects, createProject, canAccess, addCollaborator, removeCollaborator, listTree } from '../lib/projects.js'
 import { projectDir } from '../lib/paths.js'
+import { getProjectListPreferences, updateProjectListPreferences } from '../lib/project-preferences.js'
+
+function applyScope(projects, username, isAdmin, scope) {
+  if (scope === 'owned') {
+    return projects.filter((p) => p.owner === username || isAdmin)
+  }
+  if (scope === 'shared') {
+    return projects.filter((p) => p.owner !== username && canAccess(p, username))
+  }
+  return projects
+}
+
+function applyQuery(projects, query) {
+  if (!query) return projects
+  const q = String(query).trim().toLowerCase()
+  if (!q) return projects
+  return projects.filter((p) => {
+    return (
+      p.name?.toLowerCase().includes(q) ||
+      p.owner?.toLowerCase().includes(q) ||
+      p.mainFile?.toLowerCase().includes(q)
+    )
+  })
+}
+
+function applySort(projects, sort) {
+  const next = [...projects]
+  if (sort === 'updated_asc') {
+    return next.sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
+  }
+  if (sort === 'name_asc') {
+    return next.sort((a, b) => String(a.name).localeCompare(String(b.name)))
+  }
+  if (sort === 'name_desc') {
+    return next.sort((a, b) => String(b.name).localeCompare(String(a.name)))
+  }
+  return next.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+}
 
 export function registerProjectRoutes({ app, dataDir, session }) {
   const auth = requireAuth(session)
@@ -8,8 +46,27 @@ export function registerProjectRoutes({ app, dataDir, session }) {
   // List projects
   app.get('/api/projects', auth, async (req, res) => {
     const db = await loadProjects(dataDir)
-    const visible = db.projects.filter(p => canAccess(p, req.user.username) || req.user.isAdmin)
-    res.json({ projects: visible })
+    const base = db.projects.filter(p => canAccess(p, req.user.username) || req.user.isAdmin)
+    const prefs = await getProjectListPreferences(dataDir, req.user.username)
+    const scope = req.query.scope ? String(req.query.scope) : prefs.scope
+    const sort = req.query.sort ? String(req.query.sort) : prefs.sort
+    const q = req.query.q ? String(req.query.q) : ''
+    const scoped = applyScope(base, req.user.username, req.user.isAdmin, scope)
+    const queried = applyQuery(scoped, q)
+    const sorted = applySort(queried, sort)
+    res.json({ projects: sorted, prefs: { ...prefs, scope, sort } })
+  })
+
+  // Project list preferences
+  app.get('/api/projects/preferences', auth, async (req, res) => {
+    const prefs = await getProjectListPreferences(dataDir, req.user.username)
+    res.json({ prefs })
+  })
+
+  app.post('/api/projects/preferences', auth, async (req, res) => {
+    const { scope, sort, view } = req.body || {}
+    const prefs = await updateProjectListPreferences(dataDir, req.user.username, { scope, sort, view })
+    res.json({ ok: true, prefs })
   })
 
   // Create project

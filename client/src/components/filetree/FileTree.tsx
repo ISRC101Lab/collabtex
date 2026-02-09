@@ -294,7 +294,6 @@ export default function FileTree({
   files,
   activeFile,
   isOwner,
-  projectName,
   downloadUrl,
   onSelect,
   onCreateFile,
@@ -303,7 +302,6 @@ export default function FileTree({
   onRenameFile,
   onMoveFile,
   onUpload,
-  onShare,
 }: FileTreeProps) {
   const tree = useMemo(() => buildTree(files), [files]);
   const [showNew, setShowNew] = useState<false | 'file' | 'folder'>(false);
@@ -397,18 +395,6 @@ export default function FileTree({
       onDragOver={(e) => { if (isOwner) e.preventDefault(); }}
       onDrop={isOwner ? handleDrop : undefined}
     >
-      {/* ── Top: Project name + Share ── */}
-      <div className="ft-top">
-        <div className="ft-project-name">
-          {projectName || 'Project'}
-        </div>
-        {isOwner && onShare && (
-          <button className="ft-share-btn" onClick={onShare}>
-            Share
-          </button>
-        )}
-      </div>
-
       {/* ── Toolbar: Files label + actions ── */}
       <div className="ft-toolbar">
         <span className="ft-toolbar__label">Files</span>

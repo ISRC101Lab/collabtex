@@ -6,9 +6,9 @@ interface StatusBarProps {
 }
 
 const COMPILE_LABELS: Record<string, string> = {
-  idle: 'Ready',
+  idle: 'Connected',
   compiling: 'Compiling...',
-  success: 'Compiled',
+  success: 'Compile Complete',
   error: 'Compile Error',
 };
 

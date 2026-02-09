@@ -1,0 +1,102 @@
+.project-thumbnail {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.project-thumbnail--list {
+  width: 22px;
+  height: 30px;
+}
+
+.project-thumbnail--card {
+  width: 100%;
+  height: 100%;
+}
+
+.project-thumbnail__paper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border: 1px solid rgba(198, 208, 225, 0.38);
+  background: #ffffff;
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.16);
+}
+
+.project-thumbnail--card .project-thumbnail__paper {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #ffffff;
+}
+
+.project-thumbnail__line {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 1px;
+  background: rgba(94, 108, 131, 0.24);
+}
+
+.project-thumbnail__line--1 {
+  top: 6px;
+}
+
+.project-thumbnail__line--2 {
+  top: 10px;
+}
+
+.project-thumbnail__line--3 {
+  top: 14px;
+}
+
+.project-thumbnail__line--4 {
+  top: 18px;
+}
+
+.project-thumbnail__line--5 {
+  top: 22px;
+}
+
+.project-thumbnail--card .project-thumbnail__line--1 {
+  top: 12%;
+}
+
+.project-thumbnail--card .project-thumbnail__line--2 {
+  top: 20%;
+}
+
+.project-thumbnail--card .project-thumbnail__line--3 {
+  top: 28%;
+}
+
+.project-thumbnail--card .project-thumbnail__line--4 {
+  top: 36%;
+}
+
+.project-thumbnail--card .project-thumbnail__line--5 {
+  top: 44%;
+}
+
+.project-thumbnail__canvas {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.project-thumbnail__canvas--visible {
+  opacity: 1;
+}
+
+.project-thumbnail__fallback-mark {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  color: rgba(33, 42, 58, 0.3);
+  font-size: 10px;
+}

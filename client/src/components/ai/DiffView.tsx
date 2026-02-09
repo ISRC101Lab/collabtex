@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { FileChange } from '@/api/client';
+import ChevronIcon from '@/components/common/ChevronIcon';
 import './DiffView.css';
 
 interface DiffLine {
@@ -139,7 +140,7 @@ export default function DiffView({ change, onAccept, onReject }: DiffViewProps) 
   return (
     <div className="diff-view">
       <div className="diff-view__header" onClick={() => setExpanded((v) => !v)}>
-        <span className="diff-view__chevron">{expanded ? '\u25BC' : '\u25B6'}</span>
+        <span className="diff-view__chevron"><ChevronIcon className="diff-view__chevron-icon" direction={expanded ? 'down' : 'right'} /></span>
         <span className={`diff-view__badge diff-view__badge--${change.action}`}>
           {actionLabel}
         </span>

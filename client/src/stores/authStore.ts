@@ -27,9 +27,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   async logout() {
-    await api.logout();
-    localStorage.removeItem('token');
-    set({ user: null });
+    try {
+      await api.logout();
+    } catch {
+    } finally {
+      localStorage.removeItem('token');
+      document.cookie = 'token=; Max-Age=0; path=/';
+      set({ user: null });
+    }
   },
 
   async checkAuth() {

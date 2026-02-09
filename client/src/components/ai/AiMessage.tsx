@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { marked } from 'marked';
 import type { FileChange, ToolCall } from '@/api/client';
 import { usePendingChangesStore } from '@/stores/pendingChangesStore';
+import ChevronIcon from '@/components/common/ChevronIcon';
 import DiffView from './DiffView';
 import './AiMessage.css';
 
@@ -91,7 +92,11 @@ function ThinkingBlock({ content }: { content: string }) {
         onClick={() => setOpen(!open)}
         type="button"
       >
-        {open ? '\u25BC' : '\u25B6'} Thinking
+        <ChevronIcon
+          className="ai-thinking-block__toggle-icon"
+          direction={open ? 'down' : 'right'}
+        />
+        <span>Thinking</span>
       </button>
       {open && (
         <div className="ai-thinking-block__content">{content}</div>

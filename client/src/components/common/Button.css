@@ -2,12 +2,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 7px;
   font-family: var(--font-ui);
-  font-weight: 500;
-  border-radius: var(--radius);
+  font-weight: 550;
+  border-radius: var(--radius-pill);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s, transform 0.15s;
   position: relative;
   white-space: nowrap;
   border: 1px solid transparent;
@@ -16,60 +16,64 @@
 /* Sizes */
 .btn--sm {
   font-size: 12px;
-  padding: 4px 10px;
-  height: 28px;
+  padding: 0 12px;
+  height: 30px;
 }
 
 .btn--md {
-  font-size: 14px;
-  padding: 6px 16px;
-  height: 34px;
+  font-size: 13px;
+  padding: 0 16px;
+  height: 36px;
 }
 
 /* Variants */
 .btn--primary {
   background: var(--accent);
-  color: #ffffff;
-  border-color: var(--accent);
+  color: var(--accent-text);
+  border-color: rgba(255, 255, 255, 0.24);
 }
 
 .btn--primary:hover:not(:disabled) {
-  opacity: 0.88;
+  background: var(--accent-hover);
+  transform: translateY(-1px);
 }
 
 .btn--secondary {
-  background: transparent;
-  color: var(--text);
-  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
 }
 
 .btn--secondary:hover:not(:disabled) {
-  background: var(--bg);
+  color: var(--text);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .btn--ghost {
   background: transparent;
-  color: var(--text);
+  color: var(--text-secondary);
   border-color: transparent;
 }
 
 .btn--ghost:hover:not(:disabled) {
-  background: var(--bg);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .btn--danger {
-  background: #e5484d;
-  color: #ffffff;
-  border-color: #e5484d;
+  background: rgba(255, 107, 118, 0.16);
+  color: #ff9da6;
+  border-color: rgba(255, 107, 118, 0.4);
 }
 
 .btn--danger:hover:not(:disabled) {
-  opacity: 0.88;
+  background: rgba(255, 107, 118, 0.24);
 }
 
 /* Disabled */
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 

@@ -7,46 +7,7 @@
   font-family: var(--font-ui);
   font-size: 13px;
   user-select: none;
-}
-
-/* ── Top: Project name + Share ─────────────────────────────────── */
-
-.ft-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.ft-project-name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-.ft-share-btn {
-  flex-shrink: 0;
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 500;
-  color: #fff;
-  background: #138a72;
-  border: none;
-  border-radius: 4px;
-  padding: 4px 12px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.ft-share-btn:hover {
-  background: #0f7562;
+  background: transparent;
 }
 
 /* ── Toolbar: Files label + actions ────────────────────────────── */
@@ -55,17 +16,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .ft-toolbar__label {
   font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
+  font-size: 17px;
+  color: var(--text);
+  letter-spacing: 0;
 }
 
 .ft-toolbar__actions {
@@ -77,20 +37,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   background: none;
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.11);
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 8px;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .ft-toolbar__btn:hover {
   background: var(--bg-hover);
   color: var(--text);
-  border-color: var(--border);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 /* ── Add menu (dropdown) ───────────────────────────────────────── */
@@ -106,8 +66,8 @@
   margin-top: 4px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.36);
   min-width: 150px;
   z-index: 100;
   padding: 4px 0;
@@ -126,11 +86,12 @@
   font-family: var(--font-ui);
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
 
 .ft-add-menu__item:hover {
   background: var(--bg-hover);
+  color: #ecf1fb;
 }
 
 /* ── New file/folder input row ─────────────────────────────────── */
@@ -188,6 +149,7 @@
   text-overflow: ellipsis;
   position: relative;
   height: 28px;
+  border-radius: 7px;
   transition: background 0.1s;
 }
 
@@ -197,7 +159,7 @@
 
 .ft-item--active {
   background: var(--accent-bg, rgba(79, 143, 247, 0.12));
-  color: var(--accent, #4f8ff7);
+  color: var(--text);
 }
 
 /* ── Indent guides ─────────────────────────────────────────────── */
@@ -241,7 +203,7 @@
 }
 
 .ft-item--active .ft-icon {
-  color: var(--accent, #4f8ff7);
+  color: var(--text);
 }
 
 .ft-icon--dir  { color: #c09553; }
@@ -259,6 +221,7 @@
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
+  font-size: 12.5px;
 }
 
 /* ── File type tag ─────────────────────────────────────────────── */
@@ -319,8 +282,8 @@
   position: fixed;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.36);
   min-width: 150px;
   z-index: 200;
   padding: 4px 0;
@@ -337,11 +300,12 @@
   font-family: var(--font-ui);
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s;
+  transition: background 0.1s, color 0.1s;
 }
 
 .ft-ctx-menu__item:hover {
   background: var(--bg-hover);
+  color: #ecf1fb;
 }
 
 .ft-ctx-menu__item--danger {

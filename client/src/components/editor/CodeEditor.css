@@ -2,18 +2,21 @@
   flex: 1;
   overflow: hidden;
   font-family: var(--font-mono);
+  background: #0a0f18;
 }
 
 .code-editor .cm-editor {
   height: 100%;
   outline: none;
+  background: #0a0f18;
+  color: #d8dde7;
 }
 
 .code-editor .cm-scroller {
   overflow: auto;
   font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 34px;
+  line-height: 1.42;
 }
 
 .code-editor .cm-focused {
@@ -21,13 +24,14 @@
 }
 
 .code-editor .cm-gutters {
-  background: var(--bg);
-  border-right: 1px solid var(--border);
-  color: var(--text-muted);
+  background: #0b121e;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  color: #5b667a;
 }
 
 .code-editor .cm-activeLineGutter {
   background: rgba(92, 132, 255, 0.08);
+  color: #8d98ad;
 }
 
 .code-editor .cm-activeLine {
@@ -40,4 +44,9 @@
 
 .code-editor .cm-cursor {
   border-left-color: var(--accent);
+}
+
+.code-editor .cm-content {
+  caret-color: #dbe4f4;
+  padding: 10px 0;
 }

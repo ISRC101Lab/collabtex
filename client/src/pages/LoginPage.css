@@ -3,18 +3,18 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f0f4ff 0%, var(--bg) 50%, #f0f0ff 100%);
+  background: radial-gradient(circle at top, rgba(141, 164, 255, 0.14), transparent 40%), var(--bg-app);
   padding: 1rem;
 }
 
 .login-card {
   width: 100%;
-  max-width: 400px;
-  background: var(--bg-surface);
+  max-width: 420px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)), var(--bg-panel);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border);
-  padding: 2.5rem 2rem 2rem;
+  border: 1px solid var(--border-subtle);
+  padding: 2.5rem 2rem 2.15rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -22,25 +22,24 @@
 
 .login-title {
   font-family: var(--font-ui);
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--accent);
+  font-size: 1.85rem;
+  font-weight: 650;
+  color: var(--text-primary);
   text-align: center;
   margin: 0;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 .login-subtitle {
   font-family: var(--font-ui);
-  font-size: 0.875rem;
+  font-size: 0.84rem;
   color: var(--text-muted);
   text-align: center;
-  margin: -0.5rem 0 0.25rem;
+  margin: -0.35rem 0 0.35rem;
 }
 
 .login-card .btn {
   margin-top: 0.5rem;
   width: 100%;
-  height: 40px;
-  font-weight: 500;
+  height: 38px;
 }

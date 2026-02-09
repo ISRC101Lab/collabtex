@@ -4,6 +4,7 @@ import { useEditorStore } from '@/stores/editorStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
+import { useCollabStore } from '@/stores/collabStore';
 import { compile, uploadFiles, getDownloadUrl } from '@/api/client';
 import { extractLabels, extractBibKeys } from '@/lib/tex-labels';
 import FileTree from '@/components/filetree/FileTree';
@@ -40,7 +41,9 @@ export default function EditorPage() {
   const deleteFileAction = useEditorStore((s) => s.deleteFile);
   const renameFileAction = useEditorStore((s) => s.renameFile);
   const markDirty = useEditorStore((s) => s.markDirty);
-  const username = useAuthStore((s) => s.user?.username);
+  const user = useAuthStore((s) => s.user);
+  const username = user?.username;
+  const isAdmin = !!user?.isAdmin;
   const currentProject = useProjectStore((s) => s.currentProject);
   const isOwner = !!(username && currentProject && currentProject.owner === username);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
@@ -53,6 +56,7 @@ export default function EditorPage() {
   const toggleCollabManager = useUiStore((s) => s.toggleCollabManager);
   const panelWidths = useUiStore((s) => s.panelWidths);
   const setPanelWidth = useUiStore((s) => s.setPanelWidth);
+  const onlineUsers = useCollabStore((s) => s.onlineUsers);
 
   const contentRef = useRef<string>('');
   const editorRef = useRef<CodeEditorHandle>(null);
@@ -299,6 +303,10 @@ export default function EditorPage() {
     return () => window.removeEventListener('aitex:revert-file', onRevert);
   }, [id, saveFile, addToast]);
 
+  const roleLabel = isAdmin ? 'Admin' : isOwner ? 'Owner' : 'Member';
+  const userInitial = (username || 'U').slice(0, 1).toUpperCase();
+  const onlinePreview = onlineUsers.slice(0, 4);
+
   return (
     <div className="editor-page">
       {sidebarOpen && (
@@ -307,21 +315,64 @@ export default function EditorPage() {
             className="editor-page__sidebar"
             style={{ width: panelWidths.sidebar }}
           >
-            <FileTree
-              files={fileTree}
-              activeFile={activeFile}
-              isOwner={isOwner}
-              projectName={currentProject?.name}
-              downloadUrl={currentProject ? getDownloadUrl(currentProject.id) : undefined}
-              onSelect={handleFileSelect}
-              onCreateFile={handleCreateFile}
-              onCreateFolder={handleCreateFolder}
-              onDeleteFile={handleDeleteFile}
-              onRenameFile={handleRenameFile}
-              onMoveFile={handleMoveFile}
-              onUpload={handleUpload}
-              onShare={toggleCollabManager}
-            />
+            <div className="editor-page__sidebar-main">
+              <FileTree
+                files={fileTree}
+                activeFile={activeFile}
+                isOwner={isOwner}
+                projectName={currentProject?.name}
+                downloadUrl={currentProject ? getDownloadUrl(currentProject.id) : undefined}
+                onSelect={handleFileSelect}
+                onCreateFile={handleCreateFile}
+                onCreateFolder={handleCreateFolder}
+                onDeleteFile={handleDeleteFile}
+                onRenameFile={handleRenameFile}
+                onMoveFile={handleMoveFile}
+                onUpload={handleUpload}
+                onShare={toggleCollabManager}
+              />
+            </div>
+
+            <div className="editor-page__sidebar-footer">
+              <div className="editor-page__identity">
+                <span className="editor-page__identity-avatar">{userInitial}</span>
+                <span className="editor-page__identity-main">
+                  <span className="editor-page__identity-name">{username || 'user'}</span>
+                  <span className="editor-page__identity-role">{roleLabel}</span>
+                </span>
+                <button
+                  type="button"
+                  className="editor-page__collab-btn"
+                  onClick={toggleCollabManager}
+                  title="Open collaborators"
+                >
+                  协同
+                </button>
+              </div>
+
+              <div className="editor-page__presence">
+                <span className="editor-page__presence-label">实时在线</span>
+                <span className="editor-page__presence-stack">
+                  {onlinePreview.length > 0 ? (
+                    onlinePreview.map((member, index) => (
+                      <span
+                        key={member.clientId}
+                        className="editor-page__presence-avatar"
+                        style={{ backgroundColor: member.color, zIndex: onlinePreview.length - index }}
+                        title={member.name}
+                      >
+                        {member.name.slice(0, 1).toUpperCase()}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="editor-page__presence-avatar editor-page__presence-avatar--empty">•</span>
+                  )}
+                  <span className="editor-page__presence-count" title="Online users">
+                    {onlineUsers.length}
+                  </span>
+                </span>
+              </div>
+            </div>
           </aside>
           <ResizeHandle onResize={handleSidebarResize} />
         </>

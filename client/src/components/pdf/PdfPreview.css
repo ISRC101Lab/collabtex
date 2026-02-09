@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100%;
   position: relative;
-  background: var(--bg);
+  background: #111720;
 }
 
 .pdf-preview__toolbar {
@@ -11,8 +11,8 @@
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border);
+  background: #121923;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
 }
 

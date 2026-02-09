@@ -3,10 +3,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 5px 12px;
-  background: rgba(79, 110, 247, 0.06);
-  border-bottom: 1px solid var(--border);
+  background: rgba(141, 164, 255, 0.09);
+  border-bottom: 1px solid var(--border-subtle);
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 16px;
   flex-shrink: 0;
   gap: 12px;
 }
@@ -19,10 +19,10 @@
 }
 
 .change-banner__icon {
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
-  background: var(--accent);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text-primary);
   padding: 2px 6px;
   border-radius: 3px;
   flex-shrink: 0;
@@ -30,16 +30,16 @@
 
 .change-banner__path {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 500;
-  color: var(--text);
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .change-banner__badge {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   padding: 1px 6px;
@@ -54,8 +54,8 @@
 }
 
 .change-banner__badge--edit {
-  background: rgba(92, 132, 255, 0.12);
-  color: var(--accent);
+  background: rgba(141, 164, 255, 0.16);
+  color: #cdd8ff;
 }
 
 .change-banner__badge--write {
@@ -83,18 +83,18 @@
 
 .change-banner__nav-btn {
   background: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: 3px;
   padding: 1px 6px;
-  font-size: 12px;
+  font-size: 16px;
   cursor: pointer;
   color: var(--text-muted);
   line-height: 1;
 }
 
 .change-banner__nav-btn:hover:not(:disabled) {
-  background: rgba(60, 86, 124, 0.08);
-  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
 }
 
 .change-banner__nav-btn:disabled {
@@ -103,7 +103,7 @@
 }
 
 .change-banner__counter {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--text-muted);
   min-width: 36px;
   text-align: center;
@@ -116,7 +116,7 @@
 
 .change-banner__btn {
   font-family: var(--font-ui);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   border: none;
   border-radius: 4px;

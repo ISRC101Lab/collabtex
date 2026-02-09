@@ -99,7 +99,7 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const toggleAiPanel = useUiStore((s) => s.toggleAiPanel);
+  const setInspectorOpen = useUiStore((s) => s.setInspectorOpen);
   const addToast = useUiStore((s) => s.addToast);
   const fetchTree = useEditorStore((s) => s.fetchTree);
   const refreshFile = useEditorStore((s) => s.refreshFile);
@@ -451,10 +451,11 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
           )}
           <button
             className="ai-chat-panel__header-btn"
-            onClick={toggleAiPanel}
+            onClick={() => setInspectorOpen(false)}
             type="button"
+            title="Close panel"
           >
-            Close
+            ✕
           </button>
         </div>
       </div>

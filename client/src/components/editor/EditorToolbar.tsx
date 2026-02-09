@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import ChevronIcon from '@/components/common/ChevronIcon';
 import './EditorToolbar.css';
 
 interface EditorToolbarProps {
@@ -23,12 +24,18 @@ function DropdownBtn({
   return (
     <div className="editor-toolbar__dropdown">
       <button
-        className="editor-toolbar__btn"
+        className="editor-toolbar__btn editor-toolbar__btn--dropdown"
         onClick={() => setOpen((v) => !v)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         type="button"
       >
-        {label} &#x25BE;
+        <span className="editor-toolbar__dropdown-label">{label}</span>
+        <span
+          className={`editor-toolbar__dropdown-caret${open ? ' editor-toolbar__dropdown-caret--open' : ''}`}
+          aria-hidden
+        >
+          <ChevronIcon className="editor-toolbar__dropdown-caret-icon" />
+        </span>
       </button>
       {open && (
         <div className="editor-toolbar__dropdown-menu">

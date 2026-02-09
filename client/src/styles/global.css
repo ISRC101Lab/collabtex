@@ -5,46 +5,40 @@
 }
 
 :root {
-  /* Typography */
-  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --font-ui: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
 
-  /* Brand */
-  --accent: #4f6ef7;
-  --accent-hover: #3d5ce5;
-  --accent-subtle: rgba(79, 110, 247, 0.08);
+  --accent: #5c84ff;
+  --accent-hover: #7397ff;
+  --accent-subtle: rgba(92, 132, 255, 0.14);
+  --accent-bg: rgba(92, 132, 255, 0.13);
 
-  /* Surfaces */
-  --bg: #f5f7fb;
-  --bg-surface: #ffffff;
-  --bg-elevated: #ffffff;
+  --bg: #090f18;
+  --bg-surface: #0f1623;
+  --bg-elevated: #131e2f;
+  --bg-hover: rgba(255, 255, 255, 0.08);
 
-  /* Text */
-  --text: #1a2332;
-  --text-secondary: #4a5568;
-  --text-muted: rgba(72, 95, 126, 0.5);
+  --text: #e1e9f7;
+  --text-secondary: #c3cee2;
+  --text-muted: #7d8ba4;
 
-  /* Borders */
-  --border: rgba(60, 86, 124, 0.12);
-  --border-strong: rgba(60, 86, 124, 0.22);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --border-hover: rgba(255, 255, 255, 0.16);
 
-  /* Radii */
   --radius: 8px;
   --radius-sm: 6px;
   --radius-lg: 12px;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(30, 43, 62, 0.06);
-  --shadow-md: 0 2px 8px rgba(30, 43, 62, 0.08), 0 1px 2px rgba(30, 43, 62, 0.04);
-  --shadow-lg: 0 4px 16px rgba(30, 43, 62, 0.1), 0 2px 4px rgba(30, 43, 62, 0.04);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 8px 22px rgba(0, 0, 0, 0.32);
+  --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.4);
 
-  /* Motion */
   --transition: 0.15s ease;
 
-  /* Semantic */
-  --success: #22c55e;
-  --error: #ef4444;
-  --warning: #f59e0b;
+  --success: #34d399;
+  --error: #f87171;
+  --warning: #fbbf24;
   --info: var(--accent);
 }
 
@@ -56,7 +50,7 @@ html, body, #root {
 
 body {
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
@@ -75,23 +69,23 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(60, 86, 124, 0.18);
+  background: rgba(255, 255, 255, 0.18);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(60, 86, 124, 0.3);
+  background: rgba(255, 255, 255, 0.28);
 }
 
 /* ── Selection ───────────────────────────────────────────────────── */
 
 ::selection {
-  background: rgba(79, 110, 247, 0.2);
+  background: rgba(92, 132, 255, 0.24);
 }
 
 /* ── Focus ring ──────────────────────────────────────────────────── */
 
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: 1px solid rgba(123, 155, 255, 0.72);
+  outline-offset: 1px;
 }

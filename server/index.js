@@ -12,6 +12,7 @@ import { registerAiRoutes } from './routes/ai.js'
 import { registerUploadRoutes } from './routes/upload.js'
 import { registerDownloadRoutes } from './routes/download.js'
 import { registerSearchRoutes } from './routes/search.js'
+import { registerImportRoutes } from './routes/import.js'
 import { createCollabServer } from './collab.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -47,6 +48,7 @@ async function main() {
   registerUploadRoutes(ctx)
   registerDownloadRoutes(ctx)
   registerSearchRoutes(ctx)
+  registerImportRoutes(ctx)
 
   // Serve frontend
   const distDir = path.resolve(__dirname, '../client/dist')

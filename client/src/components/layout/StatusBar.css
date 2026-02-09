@@ -2,14 +2,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 24px;
-  padding: 0 10px;
-  background: var(--bg-surface, #1e1e2e);
-  border-top: 1px solid var(--border, #313244);
-  font-size: 12px;
-  color: var(--text-muted, #a6adc8);
-  font-family: var(--font-ui, sans-serif);
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  background: #0d1118;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 16px;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
   flex-shrink: 0;
+  order: 99;
 }
 
 .status-bar__left,
@@ -24,7 +26,7 @@
 }
 
 .status-bar__file {
-  max-width: 200px;
+  max-width: 360px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

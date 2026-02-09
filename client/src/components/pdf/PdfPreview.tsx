@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { getPdfUrl, getDownloadUrl } from '@/api/client';
+import ChevronIcon from '@/components/common/ChevronIcon';
 import CompileLog from './CompileLog';
 import './PdfPreview.css';
 
@@ -18,6 +19,26 @@ interface PdfPreviewProps {
   compileLog: string;
   onRefresh: () => void;
   onJumpToLine?: (file: string | undefined, line: number) => void;
+}
+
+
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path d="M16 10A6 6 0 1 1 10 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M10 2.8V5.1H12.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path d="M10 4.2V12.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M6.8 9.6L10 12.8L13.2 9.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5.4 15.2H14.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 export default function PdfPreview({
@@ -215,6 +236,7 @@ export default function PdfPreview({
   }, []);
 
   const zoomPercent = Math.round(scale * 100);
+  const pageDisplayTotal = numPages || 1;
 
   return (
     <div className="pdf-preview">
@@ -226,7 +248,7 @@ export default function PdfPreview({
           disabled={currentPage <= 1}
           title="Previous page"
         >
-          &#x25C0;
+          <ChevronIcon className="pdf-preview__toolbar-icon" direction="left" />
         </button>
         <div className="pdf-preview__page-nav">
           <input
@@ -237,7 +259,7 @@ export default function PdfPreview({
             onKeyDown={(e) => e.key === 'Enter' && handlePageInputSubmit()}
             size={3}
           />
-          <span className="pdf-preview__page-total">/ {numPages}</span>
+          <span className="pdf-preview__page-total">of {pageDisplayTotal}</span>
         </div>
         <button
           className="pdf-preview__toolbar-btn"
@@ -245,37 +267,37 @@ export default function PdfPreview({
           disabled={currentPage >= numPages}
           title="Next page"
         >
-          &#x25B6;
+          <ChevronIcon className="pdf-preview__toolbar-icon" direction="right" />
         </button>
 
         <span className="pdf-preview__toolbar-sep" />
 
         <button className="pdf-preview__toolbar-btn" onClick={zoomOut} title="Zoom out">
-          &#x2212;
+          −
         </button>
         <span className="pdf-preview__zoom-label">{zoomPercent}%</span>
         <button className="pdf-preview__toolbar-btn" onClick={zoomIn} title="Zoom in">
-          &#x2B;
+          +
         </button>
         <button
           className={'pdf-preview__toolbar-btn' + (zoomMode === 'fit-width' ? ' pdf-preview__toolbar-btn--active' : '')}
           onClick={() => setZoomMode('fit-width')}
           title="Fit width"
         >
-          &#x2194;
+          Fit Width
         </button>
         <button
           className={'pdf-preview__toolbar-btn' + (zoomMode === 'fit-page' ? ' pdf-preview__toolbar-btn--active' : '')}
           onClick={() => setZoomMode('fit-page')}
           title="Fit page"
         >
-          &#x21F2;
+          Fit Page
         </button>
 
         <div className="pdf-preview__toolbar-spacer" />
 
         <button className="pdf-preview__toolbar-btn" onClick={handleRefresh} title="Refresh PDF">
-          &#x21BB;
+          <RefreshIcon className="pdf-preview__toolbar-icon" />
         </button>
         <a
           className="pdf-preview__toolbar-btn"
@@ -283,14 +305,14 @@ export default function PdfPreview({
           download
           title="Download PDF"
         >
-          &#x2B73;
+          <DownloadIcon className="pdf-preview__toolbar-icon" />
         </a>
         <button
           className={'pdf-preview__toolbar-btn' + (logVisible ? ' pdf-preview__toolbar-btn--active' : '')}
           onClick={toggleLog}
           title="Toggle compile log"
         >
-          &#x2630;
+          {logVisible ? 'Hide Log' : 'Show Log'}
         </button>
       </div>
 

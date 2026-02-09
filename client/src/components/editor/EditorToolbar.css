@@ -1,10 +1,10 @@
 .editor-toolbar {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 3px 8px;
-  background: var(--bg-surface, #1e1e2e);
-  border-bottom: 1px solid var(--border, #313244);
+  gap: 4px;
+  padding: 7px 10px;
+  background: #0f141d;
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   overflow-x: auto;
 }
@@ -13,13 +13,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 26px;
+  min-width: 30px;
+  height: 30px;
   padding: 0 6px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-muted, #a6adc8);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
   font-size: 13px;
   font-family: var(--font-ui, sans-serif);
   cursor: pointer;
@@ -27,8 +27,8 @@
 }
 
 .editor-toolbar__btn:hover {
-  background: var(--bg-hover, #313244);
-  color: var(--text, #cdd6f4);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .editor-toolbar__btn--bold {
@@ -42,13 +42,42 @@
 .editor-toolbar__sep {
   width: 1px;
   height: 18px;
-  background: var(--border, #313244);
+  background: var(--border-subtle);
   margin: 0 4px;
   flex-shrink: 0;
 }
 
 .editor-toolbar__dropdown {
   position: relative;
+}
+
+.editor-toolbar__btn--dropdown {
+  padding: 0 9px;
+  gap: 4px;
+}
+
+.editor-toolbar__dropdown-label {
+  line-height: 1;
+}
+
+.editor-toolbar__dropdown-caret {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: transform 180ms ease, color 140ms ease;
+}
+
+.editor-toolbar__dropdown-caret-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.editor-toolbar__dropdown-caret--open {
+  transform: rotate(180deg);
+  color: var(--text-primary);
 }
 
 .editor-toolbar__dropdown-menu {
@@ -58,10 +87,10 @@
   z-index: 100;
   min-width: 160px;
   padding: 4px 0;
-  background: var(--bg-surface, #1e1e2e);
-  border: 1px solid var(--border, #313244);
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
 }
 
 .editor-toolbar__dropdown-item {
@@ -70,12 +99,13 @@
   padding: 5px 12px;
   border: none;
   background: transparent;
-  color: var(--text, #cdd6f4);
+  color: var(--text-secondary);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
 }
 
 .editor-toolbar__dropdown-item:hover {
-  background: var(--bg-hover, #313244);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
