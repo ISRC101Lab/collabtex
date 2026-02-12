@@ -1,13 +1,10 @@
 import { useEffect } from 'react';
-import { Outlet, Navigate, useLocation } from 'react-router-dom';
+import { Outlet, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
-import { Header } from './Header';
 import './AppShell.css';
 
 export function AppShell() {
   const { user, loading, checkAuth } = useAuthStore();
-  const location = useLocation();
-  const isEditorRoute = location.pathname.startsWith('/project/');
 
   useEffect(() => {
     checkAuth();
@@ -27,10 +24,7 @@ export function AppShell() {
 
   return (
     <div className="appshell">
-      {!isEditorRoute && <Header />}
-      <main className="appshell__content">
-        <Outlet />
-      </main>
+      <Outlet />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Modal, Spinner } from '@/components/common';
 import ChevronIcon from '@/components/common/ChevronIcon';
@@ -10,39 +10,14 @@ import {
   setProjectListPreferences,
   importProject,
   type ProjectListScope,
-  type ProjectListView,
 } from '@/api/client';
 import type { Project } from '@/stores/projectStore';
-import ProjectThumbnail from '@/components/projects/ProjectThumbnail';
 import './ProjectListPage.css';
-
-function ViewListIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <path d="M6 5.5H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M6 10H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M6 14.5H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="4" cy="5.5" r="0.9" fill="currentColor" />
-      <circle cx="4" cy="10" r="0.9" fill="currentColor" />
-      <circle cx="4" cy="14.5" r="0.9" fill="currentColor" />
-    </svg>
-  );
-}
-
-function ViewGridIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="11" y="3.5" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="3.5" y="11" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-      <rect x="11" y="11" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
 
 function SearchIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <title>Search</title>
       <circle cx="9" cy="9" r="4.7" stroke="currentColor" strokeWidth="1.7" />
       <path d="M12.5 12.5L15.7 15.7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
@@ -52,6 +27,7 @@ function SearchIcon({ className }: { className?: string }) {
 function RenameIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <title>Rename</title>
       <path d="M13.9 3.5L16.5 6.1" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
       <path d="M5 15.1L7.3 14.6L15.6 6.4L13 3.8L4.8 12.1L4.3 14.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M4.2 15.8H15.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -62,6 +38,7 @@ function RenameIcon({ className }: { className?: string }) {
 function DeleteIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <title>Delete</title>
       <path d="M5.8 6.2H14.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
       <path d="M7.1 6.2V14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
       <path d="M10 6.2V14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -75,6 +52,7 @@ function DeleteIcon({ className }: { className?: string }) {
 function MoreIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <title>More actions</title>
       <circle cx="5.2" cy="10" r="1.2" fill="currentColor" />
       <circle cx="10" cy="10" r="1.2" fill="currentColor" />
       <circle cx="14.8" cy="10" r="1.2" fill="currentColor" />
@@ -83,6 +61,12 @@ function MoreIcon({ className }: { className?: string }) {
 }
 
 type ActionMode = 'menu' | 'rename';
+
+const SCOPE_ITEMS: { scope: ProjectListScope; label: string }[] = [
+  { scope: 'all', label: 'All Projects' },
+  { scope: 'owned', label: 'Your Projects' },
+  { scope: 'shared', label: 'Shared with you' },
+];
 
 export default function ProjectListPage() {
   const navigate = useNavigate();
@@ -107,14 +91,15 @@ export default function ProjectListPage() {
   const [searchValue, setSearchValue] = useState('');
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
 
   const [scope, setScope] = useState<ProjectListScope>('owned');
-  const [viewMode, setViewMode] = useState<ProjectListView>('list');
   const [prefsReady, setPrefsReady] = useState(false);
   const searchHydrated = useRef(false);
 
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const newMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [accountPanelMode, setAccountPanelMode] = useState<'menu' | 'switch'>('menu');
@@ -127,20 +112,20 @@ export default function ProjectListPage() {
   const [actionName, setActionName] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
 
-  const fetchByControls = async (query: string, nextScope: ProjectListScope) => {
+  const fetchByControls = useCallback(async (query: string, nextScope: ProjectListScope) => {
     await fetchProjectsWithQuery({
       q: query.trim() || undefined,
       scope: nextScope,
       sort: 'updated_desc',
     });
-  };
+  }, [fetchProjectsWithQuery]);
 
-  const closeActionMenu = () => {
+  const closeActionMenu = useCallback(() => {
     setActiveActionProjectId(null);
     setActionMode('menu');
     setActionName('');
     setActionBusy(false);
-  };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,12 +135,11 @@ export default function ProjectListPage() {
         const { prefs } = await getProjectListPreferences();
         if (cancelled) return;
         setScope(prefs.scope);
-        setViewMode('list');
         await fetchProjectsWithQuery({ scope: prefs.scope, sort: 'updated_desc' });
       } catch {
         if (cancelled) return;
         try {
-          await fetchProjectsWithQuery({ scope, sort: 'updated_desc' });
+          await fetchProjectsWithQuery({ scope: 'owned', sort: 'updated_desc' });
         } catch {
           addToast('Failed to load projects.', 'error');
         }
@@ -168,7 +152,7 @@ export default function ProjectListPage() {
     return () => {
       cancelled = true;
     };
-  }, [fetchProjectsWithQuery, addToast, username]);
+  }, [addToast, fetchProjectsWithQuery]);
 
   useEffect(() => {
     if (!prefsReady) return;
@@ -184,7 +168,7 @@ export default function ProjectListPage() {
     }, 220);
 
     return () => window.clearTimeout(handler);
-  }, [searchValue, prefsReady]);
+  }, [searchValue, prefsReady, fetchByControls, scope, addToast]);
 
   useEffect(() => {
     if (!prefsReady) return;
@@ -224,7 +208,21 @@ export default function ProjectListPage() {
 
     window.addEventListener('mousedown', handleOutsideClick);
     return () => window.removeEventListener('mousedown', handleOutsideClick);
-  }, [activeActionProjectId]);
+  }, [activeActionProjectId, closeActionMenu]);
+
+  useEffect(() => {
+    if (!newMenuOpen) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (newMenuRef.current && !newMenuRef.current.contains(target)) {
+        setNewMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('mousedown', handleOutsideClick);
+    return () => window.removeEventListener('mousedown', handleOutsideClick);
+  }, [newMenuOpen]);
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
@@ -282,12 +280,6 @@ export default function ProjectListPage() {
     });
   };
 
-  const handleViewChange = (nextView: ProjectListView) => {
-    if (nextView === viewMode) return;
-    setViewMode(nextView);
-    closeActionMenu();
-  };
-
   const importFromFile = async (file: File) => {
     setImporting(true);
     try {
@@ -315,6 +307,7 @@ export default function ProjectListPage() {
 
   const handleImportArchive = () => {
     if (importing) return;
+    setNewMenuOpen(false);
 
     const picker = document.createElement('input');
     picker.type = 'file';
@@ -381,31 +374,32 @@ export default function ProjectListPage() {
 
     const minutes = Math.floor(safeDiff / (1000 * 60));
     if (minutes < 60) {
-      return `${Math.max(1, minutes)}m`;
+      return `${Math.max(1, minutes)}m ago`;
     }
 
     const hours = Math.floor(minutes / 60);
-    return `${Math.max(1, hours)}h`;
+    if (hours < 24) {
+      return `${Math.max(1, hours)}h ago`;
+    }
+
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   };
 
   const avatarLetter = username.slice(0, 1).toUpperCase();
-  const scopeTitle = scope === 'all' ? 'All Projects' : scope === 'shared' ? 'Shared with You' : 'Your Projects';
   const showOwnerMeta = scope !== 'owned' || isAdmin;
 
-  const renderProjectActions = (project: Project, variant: 'card' | 'row') => {
+  const renderProjectActions = (project: Project) => {
     const isOpen = activeActionProjectId === project.id;
-    const wrapperClass = variant === 'card'
-      ? `project-card__actions${isOpen ? ' project-card__actions--open' : ''}`
-      : `project-row__actions${isOpen ? ' project-row__actions--open' : ''}`;
 
     return (
       <div
-        className={wrapperClass}
+        className={`projects-table__actions${isOpen ? ' project-row__actions--open' : ''}`}
         ref={isOpen ? actionMenuRef : null}
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          className={`project-actions__trigger project-actions__trigger--${variant}${isOpen ? ' project-actions__trigger--active' : ''}`}
+          className={`project-actions__trigger${isOpen ? ' project-actions__trigger--active' : ''}`}
           type="button"
           title="Project actions"
           aria-haspopup="menu"
@@ -421,7 +415,8 @@ export default function ProjectListPage() {
         {isOpen && (
           <div className="project-actions__menu" role="menu">
             {actionMode === 'rename' ? (
-              <div className="project-actions__rename" role="group" aria-label="Rename project">
+              <fieldset className="project-actions__rename">
+                <legend className="visually-hidden">Rename project</legend>
                 <input
                   className="project-actions__rename-input"
                   value={actionName}
@@ -437,7 +432,6 @@ export default function ProjectListPage() {
                       closeActionMenu();
                     }
                   }}
-                  autoFocus
                 />
                 <div className="project-actions__rename-buttons">
                   <button
@@ -457,7 +451,7 @@ export default function ProjectListPage() {
                     {actionBusy ? 'Saving...' : 'Save'}
                   </button>
                 </div>
-              </div>
+              </fieldset>
             ) : (
               <>
                 <button
@@ -495,10 +489,12 @@ export default function ProjectListPage() {
   }
 
   return (
-    <div className="projects-page">
-      <aside className="projects-nav">
-        <div className="projects-nav__brand">Aitex</div>
-        <div className="projects-nav__account-wrap" ref={accountMenuRef}>
+    <div className="projects-dashboard">
+      {/* ── Navbar ── */}
+      <nav className="projects-navbar">
+        <span className="projects-navbar__brand">Aitex</span>
+
+        <div className="projects-navbar__right" ref={accountMenuRef}>
           <button
             className="projects-nav__account"
             type="button"
@@ -514,7 +510,7 @@ export default function ProjectListPage() {
             <span className="projects-nav__identity">
               <span className="projects-nav__name">{username}</span>
               <span className="projects-nav__meta">
-                {isAdmin ? 'Admin workspace' : 'Personal workspace'}
+                {isAdmin ? 'Admin' : 'Personal'}
               </span>
             </span>
             <span
@@ -545,14 +541,14 @@ export default function ProjectListPage() {
                   </button>
                 </>
               ) : (
-                <div className="projects-nav__switch-panel" role="group" aria-label="Switch user">
+                <fieldset className="projects-nav__switch-panel">
+                  <legend className="visually-hidden">Switch user</legend>
                   <div className="projects-nav__switch-title">Switch User</div>
                   <input
                     className="projects-nav__switch-input"
                     placeholder="Username"
                     value={switchUsername}
                     onChange={(e) => setSwitchUsername(e.target.value)}
-                    autoFocus
                   />
                   <input
                     className="projects-nav__switch-input"
@@ -589,155 +585,134 @@ export default function ProjectListPage() {
                       {switchingUser ? 'Switching...' : 'Switch'}
                     </button>
                   </div>
-                </div>
+                </fieldset>
               )}
             </div>
           )}
         </div>
+      </nav>
 
-        <nav className="projects-nav__menu">
-          <button
-            className={`projects-nav__item${scope === 'all' ? ' projects-nav__item--active' : ''}`}
-            type="button"
-            onClick={() => handleScopeChange('all')}
-          >
-            All Projects
-          </button>
-          <button
-            className={`projects-nav__item${scope === 'owned' ? ' projects-nav__item--active' : ''}`}
-            type="button"
-            onClick={() => handleScopeChange('owned')}
-          >
-            Your Projects
-          </button>
-          <button
-            className={`projects-nav__item${scope === 'shared' ? ' projects-nav__item--active' : ''}`}
-            type="button"
-            onClick={() => handleScopeChange('shared')}
-          >
-            Shared with You
-          </button>
-        </nav>
-      </aside>
+      {/* ── Body: sidebar + main ── */}
+      <div className="projects-body">
+        {/* Sidebar */}
+        <aside className="projects-sidebar">
+          <div className="projects-sidebar__section">
+            {SCOPE_ITEMS.map((item) => (
+              <button
+                key={item.scope}
+                type="button"
+                className={`projects-sidebar__nav-item${scope === item.scope ? ' projects-sidebar__nav-item--active' : ''}`}
+                onClick={() => handleScopeChange(item.scope)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </aside>
 
-      <section className="projects-main">
-        <header className="projects-toolbar">
-          <h1 className="projects-heading">{scopeTitle}</h1>
-          <div className="projects-toolbar__right">
-            <div className="projects-search">
-              <SearchIcon className="projects-search__icon" />
+        {/* Main */}
+        <div className="projects-main">
+          {/* Toolbar */}
+          <div className="projects-toolbar">
+            <div className="projects-toolbar__new-group" ref={newMenuRef}>
+              <button
+                type="button"
+                className="projects-toolbar__new-btn"
+                onClick={() => {
+                  setNewMenuOpen(false);
+                  setShowNewModal(true);
+                }}
+              >
+                New Project
+              </button>
+              <button
+                type="button"
+                className="projects-toolbar__new-dropdown"
+                onClick={() => setNewMenuOpen((v) => !v)}
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M3 6l5 5 5-5H3z" />
+                </svg>
+              </button>
+              {newMenuOpen && (
+                <div className="projects-toolbar__new-menu">
+                  <button
+                    type="button"
+                    className="projects-toolbar__new-menu-item"
+                    onClick={() => {
+                      setNewMenuOpen(false);
+                      setShowNewModal(true);
+                    }}
+                  >
+                    Blank Project
+                  </button>
+                  <button
+                    type="button"
+                    className="projects-toolbar__new-menu-item"
+                    onClick={handleImportArchive}
+                    disabled={importing}
+                  >
+                    {importing ? 'Importing...' : 'Upload Project (.zip)'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="projects-toolbar__search">
+              <SearchIcon className="projects-toolbar__search-icon" />
               <input
-                className="projects-search__input"
+                className="projects-toolbar__search-input"
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="Search"
+                placeholder="Search projects..."
                 aria-label="Search projects"
               />
             </div>
-            <div className="projects-toolbar__view-switch" role="group" aria-label="Project view mode">
-              <button
-                className={`projects-toolbar__icon projects-toolbar__icon--square${viewMode === 'list' ? ' projects-toolbar__icon--active' : ''}`}
-                type="button"
-                aria-label="List view"
-                title="List view"
-                onClick={() => handleViewChange('list')}
-              >
-                <ViewListIcon className="projects-toolbar__icon-svg" />
-              </button>
-              <button
-                className={`projects-toolbar__icon projects-toolbar__icon--square${viewMode === 'card' ? ' projects-toolbar__icon--active' : ''}`}
-                type="button"
-                aria-label="Card view"
-                title="Card view"
-                onClick={() => handleViewChange('card')}
-              >
-                <ViewGridIcon className="projects-toolbar__icon-svg" />
-              </button>
+          </div>
+
+          {/* Table */}
+          <div className="projects-table">
+            <div className="projects-table__header">
+              <span className="projects-table__checkbox" />
+              <span className="projects-table__header-cell">Name</span>
+              <span className="projects-table__header-cell">Owner</span>
+              <span className="projects-table__header-cell">Modified</span>
+              <span className="projects-table__header-cell" />
             </div>
-            <div className="projects-import">
-              <button
-                className="projects-import__main"
-                type="button"
-                onClick={handleImportArchive}
-                disabled={importing}
-                title="Import .zip project archive"
-              >
-                {importing ? 'Importing...' : 'Import'}
-              </button>
-            </div>
-            <Button
-              variant="primary"
-              className="projects-toolbar__pill"
-              onClick={() => setShowNewModal(true)}
-            >
-              + New
-            </Button>
-          </div>
-        </header>
 
-        {projects.length === 0 ? (
-          <div className="projects-empty">
-            <p>No projects yet. Create one to get started.</p>
-          </div>
-        ) : viewMode === 'card' ? (
-          <div className="projects-grid">
-            {projects.map((project: Project) => {
-              const canManageProject = isAdmin || project.owner === username;
-              return (
-                <article
-                  key={project.id}
-                  className="project-card"
-                  onClick={() => navigate(`/project/${project.id}`)}
-                >
-                  <div className="project-card__header">
-                    <ProjectThumbnail
-                      projectId={project.id}
-                      updatedAt={project.updatedAt}
-                      variant="card"
-                      className="project-card__icon"
-                    />
-                    {canManageProject && renderProjectActions(project, 'card')}
+            {projects.length === 0 ? (
+              <div className="projects-table__empty">
+                {loading ? 'Loading projects...' : 'No projects found.'}
+              </div>
+            ) : (
+              projects.map((project) => {
+                const canManage = isAdmin || project.owner === username;
+                return (
+                  <div
+                    key={project.id}
+                    className="projects-table__row"
+                    onClick={() => navigate(`/project/${project.id}`)}
+                  >
+                    <span className="projects-table__checkbox" onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" aria-label={`Select ${project.name}`} />
+                    </span>
+                    <span className="projects-table__name">{project.name}</span>
+                    <span className="projects-table__owner">
+                      {showOwnerMeta ? project.owner : 'You'}
+                    </span>
+                    <span className="projects-table__date">
+                      {formatDate(project.updatedAt)}
+                    </span>
+                    {canManage ? renderProjectActions(project) : <span />}
                   </div>
-                  <h2 className="project-card__name">{project.name}</h2>
-                  <p className="project-card__date">{formatDate(project.updatedAt)}</p>
-                </article>
-              );
-            })}
+                );
+              })
+            )}
           </div>
-        ) : (
-          <div className="projects-list">
-            {projects.map((project: Project) => {
-              const canManageProject = isAdmin || project.owner === username;
-              return (
-                <article
-                  key={project.id}
-                  className="project-row"
-                  onClick={() => navigate(`/project/${project.id}`)}
-                >
-                  <div className="project-row__left">
-                    <ProjectThumbnail
-                      projectId={project.id}
-                      updatedAt={project.updatedAt}
-                      variant="list"
-                      className="project-row__icon"
-                    />
-                    <div className="project-row__meta">
-                      <h2 className="project-row__name">{project.name}</h2>
-                      {showOwnerMeta && <p className="project-row__owner">Owner: {project.owner}</p>}
-                    </div>
-                  </div>
+        </div>
+      </div>
 
-                  <div className="project-row__right">
-                    <p className="project-row__date">{formatDate(project.updatedAt)}</p>
-                    {canManageProject && renderProjectActions(project, 'row')}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
+      {/* ── New Project Modal ── */}
       <Modal
         open={showNewModal}
         onClose={() => {
@@ -774,7 +749,6 @@ export default function ProjectListPage() {
           onChange={(e) => setNewName(e.target.value)}
         />
       </Modal>
-
     </div>
   );
 }

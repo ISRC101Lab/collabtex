@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import './FileTree.css';
 
 interface FileTreeProps {
@@ -32,6 +31,37 @@ interface TreeNode {
   isDir: boolean;
 }
 
+// Files to hide from tree — build artifacts and non-essential files for LaTeX editing
+const HIDDEN_FILES = new Set([
+  'build',
+  '.git',
+  '.gitignore',
+  'node_modules',
+]);
+
+const HIDDEN_EXTENSIONS = new Set([
+  '.aux', '.log', '.out', '.toc', '.lof', '.lot',
+  '.fls', '.fdb_latexmk', '.synctex.gz', '.synctex',
+  '.bbl', '.blg', '.bcf', '.run.xml',
+  '.nav', '.snm', '.vrb',
+  '.idx', '.ilg', '.ind',
+  '.gz', '.xdv',
+]);
+
+function shouldHide(name: string, path: string): boolean {
+  // Hide known build/config directories
+  const rootName = path.split('/')[0];
+  if (HIDDEN_FILES.has(rootName)) return true;
+  if (HIDDEN_FILES.has(name)) return true;
+  // Hide missfont.log
+  if (name === 'missfont.log') return true;
+  // Hide by extension
+  for (const ext of HIDDEN_EXTENSIONS) {
+    if (name.endsWith(ext)) return true;
+  }
+  return false;
+}
+
 function buildTree(paths: string[]): TreeNode[] {
   const root: TreeNode[] = [];
   for (const raw of paths) {
@@ -39,13 +69,20 @@ function buildTree(paths: string[]): TreeNode[] {
     const p = isExplicitDir ? raw.slice(0, -1) : raw;
     if (!p) continue;
 
+    // Filter out build artifacts and hidden files
+    const fileName = p.split('/').pop() || '';
+    if (shouldHide(fileName, p)) continue;
+
     const parts = p.split('/');
     let current = root;
     let accumulated = '';
+    let skip = false;
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       if (!part) continue;
       accumulated = accumulated ? `${accumulated}/${part}` : part;
+      // Skip if any parent directory is hidden
+      if (shouldHide(part, accumulated)) { skip = true; break; }
       const isLast = i === parts.length - 1;
       const isDir = !isLast || isExplicitDir;
       let node = current.find((n) => n.name === part && n.isDir === isDir);
@@ -55,6 +92,7 @@ function buildTree(paths: string[]): TreeNode[] {
       }
       current = node.children;
     }
+    if (skip) continue;
   }
   return sortTree(root);
 }
@@ -85,22 +123,6 @@ function fileTypeClass(name: string): string {
       return 'ft-icon--text';
     default:
       return '';
-  }
-}
-
-function fileTypeLabel(name: string): string | null {
-  const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
-  switch (ext) {
-    case '.tex': return 'TEX';
-    case '.sty': return 'STY';
-    case '.cls': return 'CLS';
-    case '.bib': return 'BIB';
-    case '.pdf': return 'PDF';
-    case '.png': return 'PNG';
-    case '.jpg': case '.jpeg': return 'JPG';
-    case '.svg': return 'SVG';
-    case '.eps': return 'EPS';
-    default: return null;
   }
 }
 
@@ -170,7 +192,6 @@ function TreeItem({
   const [renameVal, setRenameVal] = useState(node.name);
 
   const isActive = node.path === activeFile;
-  const label = fileTypeLabel(node.name);
   const typeClass = fileTypeClass(node.name);
 
   const handleClick = () => {
@@ -247,12 +268,7 @@ function TreeItem({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <>
-            <span className="ft-name">{node.name}</span>
-            {!node.isDir && label && (
-              <span className={`ft-tag ${typeClass}`}>{label}</span>
-            )}
-          </>
+          <span className="ft-name">{node.name}</span>
         )}
 
         {/* Delete button */}
@@ -304,7 +320,6 @@ export default function FileTree({
   onMoveFile,
   onUpload,
 }: FileTreeProps) {
-  const navigate = useNavigate();
   const tree = useMemo(() => buildTree(files), [files]);
   const [showNew, setShowNew] = useState<false | 'file' | 'folder'>(false);
   const [newName, setNewName] = useState('');
@@ -399,14 +414,7 @@ export default function FileTree({
     >
       {/* ── Toolbar: Files label + actions ── */}
       <div className="ft-toolbar">
-        <button
-          type="button"
-          className="ft-toolbar__label ft-toolbar__label--brand"
-          onClick={() => navigate('/')}
-          title="返回项目列表"
-        >
-          Aitex
-        </button>
+        <span className="ft-toolbar__label">Files</span>
         <div className="ft-toolbar__actions">
           {downloadUrl && (
             <a className="ft-toolbar__btn" href={downloadUrl} title="Download ZIP">

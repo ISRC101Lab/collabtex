@@ -238,6 +238,7 @@ export function compile(
     pdfExists: boolean;
     stdout: string;
     stderr: string;
+    diagnostics?: Array<{ type: string; severity: string; message: string; suggestion?: string }>;
   }>('POST', `/projects/${projectId}/compile`, opts ?? {});
 }
 

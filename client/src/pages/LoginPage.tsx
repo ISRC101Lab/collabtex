@@ -1,9 +1,11 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Spinner } from '@/components/common';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
 import './LoginPage.css';
+
+const DEFAULT_HINT_DISMISSED_KEY = 'aitex-default-login-hint-dismissed';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -13,6 +15,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [showDefaultHint, setShowDefaultHint] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -23,6 +26,23 @@ export default function LoginPage() {
       navigate('/', { replace: true });
     }
   }, [authLoading, user, navigate]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    try {
+      setShowDefaultHint(!localStorage.getItem(DEFAULT_HINT_DISMISSED_KEY));
+    } catch {
+      setShowDefaultHint(true);
+    }
+  }, []);
+
+  const dismissDefaultHint = () => {
+    setShowDefaultHint(false);
+    try {
+      localStorage.setItem(DEFAULT_HINT_DISMISSED_KEY, '1');
+    } catch {
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -54,6 +74,17 @@ export default function LoginPage() {
       <form className="login-card" onSubmit={handleSubmit}>
         <h1 className="login-title">Aitex</h1>
         <p className="login-subtitle">Sign in to your account</p>
+
+        {showDefaultHint && (
+          <div className="login-default-hint" role="note">
+            <div className="login-default-hint__title">First start default account</div>
+            <div className="login-default-hint__line">Username: <code>admin</code></div>
+            <div className="login-default-hint__line">Password: <code>ChangeMe!2026</code></div>
+            <button type="button" className="login-default-hint__close" onClick={dismissDefaultHint}>
+              Got it
+            </button>
+          </div>
+        )}
 
         <Input
           label="Username"

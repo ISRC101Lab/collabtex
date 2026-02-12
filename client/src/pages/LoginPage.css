@@ -3,43 +3,88 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: radial-gradient(circle at top, rgba(141, 164, 255, 0.14), transparent 40%), var(--bg-app);
-  padding: 1rem;
+  background: radial-gradient(68% 52% at 14% 8%, rgba(223, 159, 136, 0.12), transparent 74%), radial-gradient(58% 44% at 95% 92%, rgba(150, 140, 123, 0.1), transparent 78%), #ebe7de;
+  padding: 24px;
 }
 
 .login-card {
   width: 100%;
-  max-width: 420px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)), var(--bg-panel);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-subtle);
-  padding: 2.5rem 2rem 2.15rem;
+  max-width: 436px;
+  background: #fbf9f5;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 22px 50px rgba(68, 63, 52, 0.1);
+  border: 1px solid #cfcac0;
+  padding: 40px 34px 34px;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 18px;
 }
 
 .login-title {
   font-family: var(--font-ui);
-  font-size: 1.85rem;
-  font-weight: 650;
-  color: var(--text-primary);
+  font-size: 2rem;
+  font-weight: 700;
+  color: #2e2c28;
   text-align: center;
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .login-subtitle {
   font-family: var(--font-ui);
-  font-size: 0.84rem;
-  color: var(--text-muted);
+  font-size: 12.5px;
+  color: #8a857d;
   text-align: center;
-  margin: -0.35rem 0 0.35rem;
+  margin: -6px 0 8px;
+}
+
+.login-default-hint {
+  border: 1px solid rgba(223, 159, 136, 0.48);
+  background: rgba(223, 159, 136, 0.1);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #5f5a52;
+  display: grid;
+  gap: 5px;
+}
+
+.login-default-hint__title {
+  font-size: 12px;
+  font-weight: 650;
+  color: #2e2c28;
+}
+
+.login-default-hint__line {
+  font-size: 12px;
+}
+
+.login-default-hint__line code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: rgba(68, 63, 52, 0.07);
+  color: #2e2c28;
+}
+
+.login-default-hint__close {
+  justify-self: end;
+  border: 1px solid rgba(223, 159, 136, 0.62);
+  background: rgba(255, 255, 255, 0.6);
+  color: #2e2c28;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.login-default-hint__close:hover {
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .login-card .btn {
-  margin-top: 0.5rem;
+  margin-top: 8px;
   width: 100%;
-  height: 38px;
+  height: 42px;
 }

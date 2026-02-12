@@ -15,6 +15,10 @@ export default defineConfig({
       '/api': 'http://localhost:4092',
       '/ws': { target: 'ws://localhost:4093', ws: true },
     },
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
   },
   build: {
     outDir: path.resolve(__dirname, 'client/dist'),

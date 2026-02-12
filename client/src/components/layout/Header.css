@@ -1,11 +1,11 @@
 .header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  height: 44px;
-  padding: 0 12px;
-  background: #0f141c;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: var(--space-3);
+  height: 48px;
+  padding: 0 var(--space-3);
+  background: #f1eee8;
+  border-bottom: 1px solid #ddd8ce;
   flex-shrink: 0;
   z-index: 10;
   width: 100%;
@@ -15,7 +15,7 @@
   font-family: var(--font-ui);
   font-size: 18px;
   font-weight: 650;
-  color: var(--text-secondary);
+  color: #2e2c28;
   letter-spacing: -0.02em;
   background: transparent;
   border: none;
@@ -26,7 +26,7 @@
 }
 
 .header__brand:hover {
-  color: var(--text-primary);
+  color: #df9f88;
 }
 
 .header__center {
@@ -39,15 +39,15 @@
 .header__breadcrumb {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1);
   font-size: 12px;
-  max-width: 860px;
+  max-width: 960px;
   overflow: hidden;
 }
 
 .header__breadcrumb-project {
-  font-weight: 560;
-  color: rgba(215, 223, 236, 0.95);
+  font-weight: 600;
+  color: #2e2c28;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -59,7 +59,7 @@
 }
 
 .header__breadcrumb-file {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

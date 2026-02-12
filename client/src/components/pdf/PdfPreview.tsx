@@ -1,8 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { getPdfUrl, getDownloadUrl } from '@/api/client';
+import { getPdfUrl } from '@/api/client';
 import ChevronIcon from '@/components/common/ChevronIcon';
-import CompileLog from './CompileLog';
 import './PdfPreview.css';
 
 // Set worker path
@@ -16,11 +15,8 @@ type ZoomMode = 'fit-width' | 'fit-page' | 'custom';
 interface PdfPreviewProps {
   projectId: string;
   pdfExists: boolean;
-  compileLog: string;
   onRefresh: () => void;
-  onJumpToLine?: (file: string | undefined, line: number) => void;
 }
-
 
 function RefreshIcon({ className }: { className?: string }) {
   return (
@@ -34,9 +30,8 @@ function RefreshIcon({ className }: { className?: string }) {
 function DownloadIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <path d="M10 4.2V12.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M6.8 9.6L10 12.8L13.2 9.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5.4 15.2H14.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M10 3v9M7 9.5l3 3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 14v2a1 1 0 001 1h10a1 1 0 001-1v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -44,12 +39,9 @@ function DownloadIcon({ className }: { className?: string }) {
 export default function PdfPreview({
   projectId,
   pdfExists,
-  compileLog,
   onRefresh,
-  onJumpToLine,
 }: PdfPreviewProps) {
   const [cacheBuster, setCacheBuster] = useState(Date.now());
-  const [logVisible, setLogVisible] = useState(false);
 
   // PDF state
   const [numPages, setNumPages] = useState(0);
@@ -68,10 +60,6 @@ export default function PdfPreview({
     setCacheBuster(Date.now());
     onRefresh();
   }, [onRefresh]);
-
-  const toggleLog = useCallback(() => {
-    setLogVisible((v) => !v);
-  }, []);
 
   // Load PDF document
   useEffect(() => {
@@ -238,9 +226,28 @@ export default function PdfPreview({
   const zoomPercent = Math.round(scale * 100);
   const pageDisplayTotal = numPages || 1;
 
+  // Ctrl+Wheel zoom
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoomMode('custom');
+      setScale((s) => {
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        return Math.max(0.25, Math.min(5, s * delta));
+      });
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, []);
+
   return (
     <div className="pdf-preview">
-      {/* Toolbar */}
+      {/* Toolbar — compact: page nav + zoom + refresh */}
       <div className="pdf-preview__toolbar">
         <button
           className="pdf-preview__toolbar-btn"
@@ -279,20 +286,6 @@ export default function PdfPreview({
         <button className="pdf-preview__toolbar-btn" onClick={zoomIn} title="Zoom in">
           +
         </button>
-        <button
-          className={'pdf-preview__toolbar-btn' + (zoomMode === 'fit-width' ? ' pdf-preview__toolbar-btn--active' : '')}
-          onClick={() => setZoomMode('fit-width')}
-          title="Fit width"
-        >
-          Fit Width
-        </button>
-        <button
-          className={'pdf-preview__toolbar-btn' + (zoomMode === 'fit-page' ? ' pdf-preview__toolbar-btn--active' : '')}
-          onClick={() => setZoomMode('fit-page')}
-          title="Fit page"
-        >
-          Fit Page
-        </button>
 
         <div className="pdf-preview__toolbar-spacer" />
 
@@ -301,19 +294,12 @@ export default function PdfPreview({
         </button>
         <a
           className="pdf-preview__toolbar-btn"
-          href={getDownloadUrl(projectId).replace('/download', '/pdf')}
+          href={getPdfUrl(projectId)}
           download
           title="Download PDF"
         >
           <DownloadIcon className="pdf-preview__toolbar-icon" />
         </a>
-        <button
-          className={'pdf-preview__toolbar-btn' + (logVisible ? ' pdf-preview__toolbar-btn--active' : '')}
-          onClick={toggleLog}
-          title="Toggle compile log"
-        >
-          {logVisible ? 'Hide Log' : 'Show Log'}
-        </button>
       </div>
 
       {/* PDF canvas area */}
@@ -332,13 +318,6 @@ export default function PdfPreview({
           </div>
         </div>
       )}
-
-      <CompileLog
-        log={compileLog}
-        visible={logVisible}
-        onClose={toggleLog}
-        onJumpToLine={onJumpToLine}
-      />
     </div>
   );
 }

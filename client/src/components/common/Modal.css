@@ -1,8 +1,8 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(7, 9, 12, 0.7);
-  backdrop-filter: blur(5px);
+  background: rgba(46, 44, 40, 0.5);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -10,10 +10,10 @@
 }
 
 .modal-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)), var(--surface-elevated);
-  border-radius: 14px;
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-lg);
+  background: #fbf9f5;
+  border-radius: var(--radius-xl);
+  border: 1px solid #cfcac0;
+  box-shadow: 0 12px 28px rgba(68, 63, 52, 0.12);
   min-width: 360px;
   max-width: 520px;
   width: 100%;
@@ -24,27 +24,28 @@
 }
 
 .modal-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 18px 22px;
+  border-bottom: 1px solid #ddd8ce;
 }
 
 .modal-title {
   font-size: 16px;
-  font-weight: 620;
-  color: var(--text-primary);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: #2e2c28;
 }
 
 .modal-body {
-  padding: 20px;
+  padding: 22px;
   overflow-y: auto;
   flex: 1;
-  color: var(--text-secondary);
+  color: #5f5a52;
 }
 
 .modal-footer {
-  padding: 12px 20px;
-  border-top: 1px solid var(--border-subtle);
+  padding: 14px 22px;
+  border-top: 1px solid #ddd8ce;
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
 }

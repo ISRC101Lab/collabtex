@@ -13,6 +13,7 @@ interface ProjectState {
   currentProject: Project | null;
   loading: boolean;
   fetchProjects: () => Promise<void>;
+  ensureCurrentProject: (id: string) => Promise<void>;
   fetchProjectsWithQuery: (query?: ProjectQuery) => Promise<void>;
   prefetchProjectsWithQuery: (query?: ProjectQuery) => Promise<void>;
   createProject: (name: string) => Promise<Project>;
@@ -138,6 +139,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set({ loading: false });
       }
     }
+  },
+
+  async ensureCurrentProject(id) {
+    const local = get().projects.find((p) => p.id === id);
+    if (local) {
+      set({ currentProject: local });
+      return;
+    }
+
+    const res = await api.getProjects();
+    const matched = res.projects.find((p) => p.id === id) ?? null;
+    set((s) => ({
+      projects: s.projects.length > 0 ? s.projects : res.projects,
+      currentProject: matched,
+    }));
   },
 
   async fetchProjectsWithQuery(query) {

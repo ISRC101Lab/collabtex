@@ -15,39 +15,95 @@ function getFileName(path: string): string {
   return slash >= 0 ? path.slice(slash + 1) : path;
 }
 
-function SidebarPanelIcon({ className }: { className?: string }) {
+/* ── Clean SVG icons (Claude Code style: 16×16, 1.5px stroke, round caps) ── */
+
+function SidebarIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect x="3.5" y="3.5" width="4.8" height="13" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M10.8 5.5H16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M10.8 10H16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M10.8 14.5H16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2.5" width="12" height="11" rx="2" />
+      <line x1="6" y1="2.5" x2="6" y2="13.5" />
     </svg>
   );
 }
 
-function PdfPanelIcon({ className }: { className?: string }) {
+function PdfIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <path d="M6 3.5H12.4L15 6.1V16.5H6V3.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M12.4 3.5V6.1H15" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M7.9 9.3H13.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M7.9 12H13.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M7.9 14.7H11.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 1.5H4.5a1.5 1.5 0 0 0-1.5 1.5v10a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5V5.5L9 1.5z" />
+      <polyline points="9 1.5 9 5.5 13 5.5" />
+      <line x1="5.5" y1="8.5" x2="10.5" y2="8.5" />
+      <line x1="5.5" y1="11" x2="8.5" y2="11" />
     </svg>
   );
 }
 
-function AiPanelIcon({ className }: { className?: string }) {
+function AiIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <path d="M10 4.1L11.4 7.1L14.4 8.5L11.4 9.9L10 12.9L8.6 9.9L5.6 8.5L8.6 7.1L10 4.1Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M4.2 12.5L4.75 13.75L6 14.3L4.75 14.85L4.2 16.1L3.65 14.85L2.4 14.3L3.65 13.75L4.2 12.5Z" fill="currentColor" />
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 1.5l1.2 3.3 3.3 1.2-3.3 1.2L8 10.5 6.8 7.2 3.5 6 6.8 4.8z" />
+      <path d="M12 10l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4L10 12l1.4-.6z" />
     </svg>
   );
 }
 
-const TabBar: React.FC = () => {
+function PlayIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M4.5 2.5v11l9-5.5z" />
+    </svg>
+  );
+}
+
+function SpinnerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M8 2a6 6 0 1 1-5.2 3" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
+    </svg>
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="4" y1="4" x2="12" y2="12" />
+      <line x1="12" y1="4" x2="4" y2="12" />
+    </svg>
+  );
+}
+
+function LogsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2.5" width="12" height="11" rx="2" />
+      <line x1="4.5" y1="6" x2="11.5" y2="6" />
+      <line x1="4.5" y1="8.5" x2="9.5" y2="8.5" />
+      <line x1="4.5" y1="11" x2="7.5" y2="11" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 6 8 10 12 6" />
+    </svg>
+  );
+}
+
+interface TabBarProps {
+  compileLogOpen?: boolean;
+  onToggleCompileLog?: () => void;
+}
+
+const TabBar: React.FC<TabBarProps> = ({ compileLogOpen, onToggleCompileLog }) => {
   const openFiles = useEditorStore((s) => s.openFiles);
   const activeFile = useEditorStore((s) => s.activeFile);
   const dirty = useEditorStore((s) => s.dirty);
@@ -61,8 +117,8 @@ const TabBar: React.FC = () => {
   const inspectorOpen = useUiStore((s) => s.inspectorOpen);
   const inspectorView = useUiStore((s) => s.inspectorView);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
-  const setInspectorOpen = useUiStore((s) => s.setInspectorOpen);
-  const setInspectorView = useUiStore((s) => s.setInspectorView);
+  const togglePdfPanel = useUiStore((s) => s.togglePdfPanel);
+  const toggleAiPanel = useUiStore((s) => s.toggleAiPanel);
 
   const [compilerMenuOpen, setCompilerMenuOpen] = useState(false);
   const isCompiling = compileStatus === 'compiling';
@@ -70,34 +126,16 @@ const TabBar: React.FC = () => {
 
   function renderCompileIcon() {
     if (isCompiling) {
-      return <span className="tabbar__compile-icon tabbar__compile-icon--spinning">&#x21BB;</span>;
+      return <SpinnerIcon className="tabbar__compile-icon tabbar__compile-icon--spinning" />;
     }
     if (compileStatus === 'success') {
-      return <span className="tabbar__compile-icon tabbar__compile-icon--success">&#x2713;</span>;
+      return <CheckIcon className="tabbar__compile-icon tabbar__compile-icon--success" />;
     }
     if (compileStatus === 'error') {
-      return <span className="tabbar__compile-icon tabbar__compile-icon--error">&#x2717;</span>;
+      return <XIcon className="tabbar__compile-icon tabbar__compile-icon--error" />;
     }
-    return <span className="tabbar__compile-icon">&#x25B6;</span>;
+    return <PlayIcon className="tabbar__compile-icon" />;
   }
-
-  const openPdfInspector = () => {
-    setInspectorView('pdf');
-    if (!inspectorOpen) {
-      setInspectorOpen(true);
-    }
-  };
-
-  const openAiInspector = () => {
-    setInspectorView('ai');
-    if (!inspectorOpen) {
-      setInspectorOpen(true);
-    }
-  };
-
-  const toggleInspector = () => {
-    setInspectorOpen(!inspectorOpen);
-  };
 
   return (
     <div className="tabbar">
@@ -139,7 +177,7 @@ const TabBar: React.FC = () => {
             title="Compile (Ctrl+Shift+B)"
           >
             {renderCompileIcon()}
-            {isCompiling ? 'Compiling...' : 'Compile'}
+            {isCompiling ? 'Compiling' : 'Compile'}
           </button>
           <button
             className="tabbar__compile-dropdown"
@@ -147,9 +185,7 @@ const TabBar: React.FC = () => {
             disabled={isCompiling}
             title="Select compiler"
           >
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M3 6l5 5 5-5H3z" />
-            </svg>
+            <ChevronDownIcon />
           </button>
           {compilerMenuOpen && (
             <div className="tabbar__compiler-menu">
@@ -170,38 +206,39 @@ const TabBar: React.FC = () => {
         {/* Separator */}
         <span className="tabbar__sep" />
 
-        {/* Panel toggles */}
+        {/* Logs toggle */}
         <button
-          className={'tabbar__toggle tabbar__toggle--icon' + (sidebarOpen ? ' tabbar__toggle--active' : '')}
-          onClick={toggleSidebar}
-          title="Toggle file tree"
+          className={'tabbar__toggle' + (compileLogOpen ? ' tabbar__toggle--active' : '')}
+          onClick={onToggleCompileLog}
+          title="Toggle compile log"
         >
-          <SidebarPanelIcon className="tabbar__toggle-icon" />
+          <LogsIcon />
         </button>
-        <div className="tabbar__inspector-switch" role="group" aria-label="Inspector view">
-          <button
-            className={'tabbar__inspector-btn' + (inspectorOpen && inspectorView === 'pdf' ? ' tabbar__inspector-btn--active' : '')}
-            onClick={openPdfInspector}
-            title="Show PDF"
-          >
-            <PdfPanelIcon className="tabbar__inspector-icon" />
-            PDF
-          </button>
-          <button
-            className={'tabbar__inspector-btn' + (inspectorOpen && inspectorView === 'ai' ? ' tabbar__inspector-btn--active' : '')}
-            onClick={openAiInspector}
-            title="Show AI"
-          >
-            <AiPanelIcon className="tabbar__inspector-icon" />
-            AI
-          </button>
-        </div>
+
+        {/* Separator */}
+        <span className="tabbar__sep" />
+
+        {/* Panel toggles — clean SVG icons */}
         <button
-          className={'tabbar__toggle tabbar__toggle--icon' + (inspectorOpen ? ' tabbar__toggle--active' : '')}
-          onClick={toggleInspector}
-          title={inspectorOpen ? 'Hide inspector' : 'Show inspector'}
+          className={'tabbar__toggle' + (sidebarOpen ? ' tabbar__toggle--active' : '')}
+          onClick={toggleSidebar}
+          title="Toggle sidebar"
         >
-          {inspectorOpen ? '−' : '+'}
+          <SidebarIcon />
+        </button>
+        <button
+          className={'tabbar__toggle' + (inspectorOpen && inspectorView === 'pdf' ? ' tabbar__toggle--active' : '')}
+          onClick={togglePdfPanel}
+          title="Toggle PDF preview"
+        >
+          <PdfIcon />
+        </button>
+        <button
+          className={'tabbar__toggle' + (inspectorOpen && inspectorView === 'ai' ? ' tabbar__toggle--active' : '')}
+          onClick={toggleAiPanel}
+          title="Toggle AI assistant"
+        >
+          <AiIcon />
         </button>
       </div>
     </div>

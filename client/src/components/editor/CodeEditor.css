@@ -1,52 +1,192 @@
+/* ── Code editor: Claude warm light theme ────── */
+
 .code-editor {
   flex: 1;
   overflow: hidden;
   font-family: var(--font-mono);
-  background: #0a0f18;
+  background: #faf8f4;
 }
 
 .code-editor .cm-editor {
   height: 100%;
   outline: none;
-  background: #0a0f18;
-  color: #d8dde7;
+  background: #faf8f4;
+  color: #2e2c28;
 }
 
 .code-editor .cm-scroller {
   overflow: auto;
   font-family: var(--font-mono);
-  font-size: 34px;
-  line-height: 1.42;
+  font-size: 13.5px;
+  line-height: 1.55;
 }
 
 .code-editor .cm-focused {
   outline: none;
 }
 
+/* Gutters — warm sand tone */
 .code-editor .cm-gutters {
-  background: #0b121e;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  color: #5b667a;
+  background: #f5f2ec;
+  border-right: 1px solid #e2ddd4;
+  color: #b0aa9e;
 }
 
 .code-editor .cm-activeLineGutter {
-  background: rgba(92, 132, 255, 0.08);
-  color: #8d98ad;
+  background: #ede9e1;
+  color: #7a756c;
 }
 
 .code-editor .cm-activeLine {
-  background: rgba(92, 132, 255, 0.04);
+  background: rgba(223, 159, 136, 0.06);
 }
 
+/* Selection — warm coral tint */
 .code-editor .cm-selectionBackground {
-  background: rgba(92, 132, 255, 0.18) !important;
+  background: rgba(223, 159, 136, 0.18) !important;
 }
 
 .code-editor .cm-cursor {
-  border-left-color: var(--accent);
+  border-left-color: #df9f88;
 }
 
 .code-editor .cm-content {
-  caret-color: #dbe4f4;
+  caret-color: #2e2c28;
   padding: 10px 0;
+}
+
+/* ── Syntax highlighting overrides ───────────── */
+
+/* CodeMirror default token classes — light warm theme */
+.code-editor .cm-editor .ͼ5,
+.code-editor .cm-editor .cm-keyword,
+.code-editor .ͼ5 {
+  color: #9b5d4c;
+}
+
+.code-editor .cm-editor .ͼ7,
+.code-editor .cm-editor .cm-string,
+.code-editor .ͼ7 {
+  color: #6b7e42;
+}
+
+.code-editor .cm-editor .ͼ8,
+.code-editor .cm-editor .cm-comment,
+.code-editor .ͼ8 {
+  color: #a39d93;
+  font-style: italic;
+}
+
+.code-editor .cm-editor .ͼ9,
+.code-editor .cm-editor .cm-variableName,
+.code-editor .ͼ9 {
+  color: #2e2c28;
+}
+
+.code-editor .cm-editor .ͼa,
+.code-editor .cm-editor .cm-number,
+.code-editor .ͼa {
+  color: #8b6a3d;
+}
+
+.code-editor .cm-editor .ͼb,
+.code-editor .cm-editor .cm-operator,
+.code-editor .ͼb {
+  color: #7a756c;
+}
+
+.code-editor .cm-editor .ͼc,
+.code-editor .cm-editor .cm-typeName,
+.code-editor .ͼc {
+  color: #5a7486;
+}
+
+.code-editor .cm-editor .ͼd,
+.code-editor .cm-editor .cm-atom,
+.code-editor .ͼd {
+  color: #7e6b8a;
+}
+
+/* LaTeX-specific: commands (\foo) */
+.code-editor .cm-editor .cm-tag,
+.code-editor .cm-editor .ͼ6 {
+  color: #9b5d4c;
+  font-weight: 500;
+}
+
+/* Matching brackets */
+.code-editor .cm-matchingBracket {
+  background: rgba(223, 159, 136, 0.22);
+  outline: 1px solid rgba(223, 159, 136, 0.4);
+}
+
+/* Search highlights */
+.code-editor .cm-searchMatch {
+  background: rgba(223, 159, 136, 0.25);
+}
+
+.code-editor .cm-searchMatch-selected {
+  background: rgba(223, 159, 136, 0.45);
+}
+
+/* Fold markers */
+.code-editor .cm-foldGutter .cm-gutterElement {
+  color: #c4bdb2;
+  cursor: pointer;
+}
+
+.code-editor .cm-foldGutter .cm-gutterElement:hover {
+  color: #8a857d;
+}
+
+/* Lint diagnostics */
+.code-editor .cm-lintRange-error {
+  background-image: none;
+  text-decoration: wavy underline #e5484d;
+  text-underline-offset: 3px;
+}
+
+.code-editor .cm-lintRange-warning {
+  background-image: none;
+  text-decoration: wavy underline #e6a23c;
+  text-underline-offset: 3px;
+}
+
+/* Tooltip / autocomplete */
+.code-editor .cm-tooltip {
+  background: #f5f2ec;
+  border: 1px solid #ddd8ce;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(46, 44, 40, 0.12);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.code-editor .cm-tooltip-autocomplete ul li {
+  padding: 3px 8px;
+  color: #2e2c28;
+}
+
+.code-editor .cm-tooltip-autocomplete ul li[aria-selected] {
+  background: rgba(223, 159, 136, 0.15);
+  color: #2e2c28;
+}
+
+/* Scrollbar styling */
+.code-editor .cm-scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.code-editor .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.code-editor .cm-scroller::-webkit-scrollbar-thumb {
+  background: #d4cec4;
+  border-radius: 4px;
+}
+
+.code-editor .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: #b8b2a6;
 }

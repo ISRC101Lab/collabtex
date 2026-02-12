@@ -84,6 +84,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
     // ── Extensions ──
     const extensions = [
       basicSetup,
+      EditorView.lineWrapping,
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           onChangeRef.current(update.state.doc.toString());

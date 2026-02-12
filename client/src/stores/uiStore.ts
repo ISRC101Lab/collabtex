@@ -80,9 +80,10 @@ interface UiState {
   sidebarOpen: boolean;
   inspectorOpen: boolean;
   inspectorView: InspectorView;
-  // Backward-compatible mirrors for existing consumers.
   pdfPanelOpen: boolean;
   aiPanelOpen: boolean;
+  aiBottomPanelOpen: boolean;
+  aiBottomPanelHeight: number;
   compileStatus: CompileStatus;
   compiler: Compiler;
   toasts: Toast[];
@@ -99,6 +100,8 @@ interface UiState {
   toggleInspector: () => void;
   setInspectorOpen: (open: boolean) => void;
   setInspectorView: (view: InspectorView) => void;
+  toggleAiBottomPanel: () => void;
+  setAiBottomPanelHeight: (h: number) => void;
   setCompileStatus: (status: CompileStatus) => void;
   setCompiler: (compiler: Compiler) => void;
   addToast: (message: string, type: Toast['type']) => void;
@@ -124,6 +127,8 @@ const initialInspectorView = loadInspectorView();
 export const useUiStore = create<UiState>((set) => ({
   sidebarOpen: true,
   ...panelFlags(true, initialInspectorView),
+  aiBottomPanelOpen: false,
+  aiBottomPanelHeight: 250,
   collabManagerOpen: false,
   compileStatus: 'idle',
   compiler: (localStorage.getItem('aitex-compiler') as Compiler) || 'xelatex',
@@ -170,6 +175,14 @@ export const useUiStore = create<UiState>((set) => ({
   setInspectorView(view) {
     saveInspectorView(view);
     set((state) => panelFlags(state.inspectorOpen, view));
+  },
+
+  toggleAiBottomPanel() {
+    set((state) => ({ aiBottomPanelOpen: !state.aiBottomPanelOpen }));
+  },
+
+  setAiBottomPanelHeight(h) {
+    set({ aiBottomPanelHeight: clamp(h, 120, 600) });
   },
 
   setCompileStatus(status) {

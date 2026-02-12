@@ -2,9 +2,17 @@ import { useState, useMemo } from 'react';
 import { parseLatexLog, type LogLevel, type LogEntry } from '@/lib/parse-latex-log';
 import './CompileLog.css';
 
+interface Diagnostic {
+  type: string;
+  severity: string;
+  message: string;
+  suggestion?: string;
+}
+
 interface CompileLogProps {
   log: string;
   visible: boolean;
+  diagnostics?: Diagnostic[];
   onClose: () => void;
   onJumpToLine?: (file: string | undefined, line: number) => void;
 }
@@ -54,7 +62,7 @@ function LogEntryRow({
   );
 }
 
-export default function CompileLog({ log, visible, onClose, onJumpToLine }: CompileLogProps) {
+export default function CompileLog({ log, visible, diagnostics, onClose, onJumpToLine }: CompileLogProps) {
   const [filter, setFilter] = useState<LogLevel | 'all'>('all');
   const [showRaw, setShowRaw] = useState(false);
 
@@ -91,6 +99,19 @@ export default function CompileLog({ log, visible, onClose, onJumpToLine }: Comp
         </div>
       </div>
       <div className="compile-log__body">
+        {/* Diagnostic hints from server analysis */}
+        {diagnostics && diagnostics.length > 0 && (
+          <div className="compile-log__diagnostics">
+            {diagnostics.map((d, i) => (
+              <div key={i} className={`compile-log__diag compile-log__diag--${d.severity}`}>
+                <span className="compile-log__diag-icon">
+                  {d.severity === 'error' ? '\u2716' : '\u26A0'}
+                </span>
+                <span className="compile-log__diag-msg">{d.message}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {!log ? (
           <span className="compile-log__empty">No compile output yet.</span>
         ) : entries.length === 0 || showRaw ? (
