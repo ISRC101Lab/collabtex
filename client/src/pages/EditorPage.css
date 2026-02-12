@@ -43,6 +43,37 @@
   background: none;
   border: none;
   padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-page__brand-text {
+  background: linear-gradient(135deg, #c4826e 0%, #a07840 50%, #5e9a5e 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: editor-brand-gradient 6s ease-in-out infinite;
+}
+
+@keyframes editor-brand-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.editor-page__brand-badge {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(223, 159, 136, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(223, 159, 136, 0.25);
+  -webkit-text-fill-color: var(--accent);
 }
 
 .editor-page__sidebar-brand-link:hover {

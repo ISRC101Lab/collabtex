@@ -7,6 +7,20 @@ import './LoginPage.css';
 
 const DEFAULT_HINT_DISMISSED_KEY = 'aitex-default-login-hint-dismissed';
 
+const AITEX_ASCII = ` \u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2557  \u2588\u2588\u2557
+\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2551\u255A\u2550\u2550\u2588\u2588\u2554\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u255A\u2588\u2588\u2557\u2588\u2588\u2554\u255D
+\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551   \u2588\u2588\u2588\u2588\u2588\u2557   \u255A\u2588\u2588\u2588\u2554\u255D
+\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551   \u2588\u2588\u2554\u2550\u2550\u255D   \u2588\u2588\u2554\u2588\u2588\u2557
+\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551   \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2554\u255D \u2588\u2588\u2557
+\u255A\u2550\u255D  \u255A\u2550\u255D\u255A\u2550\u255D   \u255A\u2550\u255D   \u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D\u255A\u2550\u255D  \u255A\u2550\u255D`;
+
+const CAPS = [
+  { icon: '\u25C6', label: 'Write LaTeX', cls: 'write' },
+  { icon: '\u270E', label: 'Edit Files', cls: 'edit' },
+  { icon: '\u25B8', label: 'Compile PDF', cls: 'compile' },
+  { icon: '\u2299', label: 'Fix Errors', cls: 'fix' },
+];
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading, login, checkAuth } = useAuthStore();
@@ -71,8 +85,23 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-hero">
+        {/* ── ASCII Art Brand ── */}
+        <pre className="login-hero__ascii" aria-label="Aitex">{AITEX_ASCII}</pre>
+        <p className="login-hero__tagline">AI-Powered LaTeX Editor</p>
+
+        {/* ── Capability Pills ── */}
+        <div className="login-hero__caps">
+          {CAPS.map((c) => (
+            <span key={c.cls} className={`login-hero__cap login-hero__cap--${c.cls}`}>
+              <span className="login-hero__cap-icon">{c.icon}</span>
+              {c.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
       <form className="login-card" onSubmit={handleSubmit}>
-        <h1 className="login-title">Aitex</h1>
         <p className="login-subtitle">Sign in to your account</p>
 
         {showDefaultHint && (

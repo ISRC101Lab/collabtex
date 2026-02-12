@@ -492,7 +492,10 @@ export default function ProjectListPage() {
     <div className="projects-dashboard">
       {/* ── Navbar ── */}
       <nav className="projects-navbar">
-        <span className="projects-navbar__brand">Aitex</span>
+        <span className="projects-navbar__brand">
+          <span className="projects-navbar__brand-text">Aitex</span>
+          <span className="projects-navbar__brand-badge">AI LaTeX</span>
+        </span>
 
         <div className="projects-navbar__right" ref={accountMenuRef}>
           <button
@@ -681,8 +684,34 @@ export default function ProjectListPage() {
             </div>
 
             {projects.length === 0 ? (
-              <div className="projects-table__empty">
-                {loading ? 'Loading projects...' : 'No projects found.'}
+              <div className="projects-empty">
+                <pre className="projects-empty__ascii" aria-hidden="true">{
+` \u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2557  \u2588\u2588\u2557
+\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2557\u2588\u2588\u2551\u255A\u2550\u2550\u2588\u2588\u2554\u2550\u2550\u255D\u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255D\u255A\u2588\u2588\u2557\u2588\u2588\u2554\u255D
+\u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551   \u2588\u2588\u2588\u2588\u2588\u2557   \u255A\u2588\u2588\u2588\u2554\u255D
+\u2588\u2588\u2554\u2550\u2550\u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551   \u2588\u2588\u2554\u2550\u2550\u255D   \u2588\u2588\u2554\u2588\u2588\u2557
+\u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551   \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2554\u255D \u2588\u2588\u2557
+\u255A\u2550\u255D  \u255A\u2550\u255D\u255A\u2550\u255D   \u255A\u2550\u255D   \u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D\u255A\u2550\u255D  \u255A\u2550\u255D`
+                }</pre>
+                <p className="projects-empty__title">
+                  {loading ? 'Loading projects...' : 'No projects yet'}
+                </p>
+                {!loading && (
+                  <>
+                    <p className="projects-empty__desc">
+                      Create your first project to start writing LaTeX with AI assistance.
+                    </p>
+                    <div className="projects-empty__caps">
+                      <span className="projects-empty__cap"><span className="projects-empty__cap-icon projects-empty__cap-icon--write">&#x25C6;</span> Write</span>
+                      <span className="projects-empty__cap-sep">&#xB7;</span>
+                      <span className="projects-empty__cap"><span className="projects-empty__cap-icon projects-empty__cap-icon--edit">&#x270E;</span> Edit</span>
+                      <span className="projects-empty__cap-sep">&#xB7;</span>
+                      <span className="projects-empty__cap"><span className="projects-empty__cap-icon projects-empty__cap-icon--compile">&#x25B8;</span> Compile</span>
+                      <span className="projects-empty__cap-sep">&#xB7;</span>
+                      <span className="projects-empty__cap"><span className="projects-empty__cap-icon projects-empty__cap-icon--fix">&#x2299;</span> Fix</span>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               projects.map((project) => {

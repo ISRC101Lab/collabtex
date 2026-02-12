@@ -378,7 +378,8 @@ export default function EditorPage() {
                 onClick={() => navigate('/')}
                 title="Back to projects"
               >
-                Aitex
+                <span className="editor-page__brand-text">Aitex</span>
+                <span className="editor-page__brand-badge">AI</span>
               </button>
             </div>
 
