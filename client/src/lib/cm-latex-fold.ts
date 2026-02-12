@@ -1,5 +1,4 @@
 import { foldService } from '@codemirror/language';
-import { foldGutter } from '@codemirror/language';
 
 /**
  * LaTeX fold strategy:
@@ -81,5 +80,4 @@ const latexFoldService = foldService.of((state, lineStart) => {
 
 export const latexFoldExtension = [
   latexFoldService,
-  foldGutter(),
 ];

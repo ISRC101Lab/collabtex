@@ -329,7 +329,7 @@ export default function PdfPreview({
           onClick={toggleLog}
           title="Toggle compile log"
         >
-          {logVisible ? 'Hide Log' : 'Show Log'}
+          Log
         </button>
 
         <span className="pdf-preview__toolbar-sep" />

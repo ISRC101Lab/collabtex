@@ -11,6 +11,10 @@ interface Toast {
   type: 'info' | 'success' | 'warning' | 'error';
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 interface PanelWidths {
   sidebar: number;
   inspector: number;
@@ -18,16 +22,20 @@ interface PanelWidths {
   ai: number;
 }
 
-const DEFAULT_WIDTHS: PanelWidths = {
-  sidebar: 248,
-  inspector: 420,
-  pdf: 420,
-  ai: 420,
-};
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function getDefaultWidths(): PanelWidths {
+  const total = typeof window !== 'undefined' ? window.innerWidth : 1200;
+  const sidebar = clamp(Math.round(total * 0.1), 160, 480);
+  const pdf = clamp(Math.round(total * 0.3), 240, 900);
+  const ai = clamp(Math.round(total * 0.3), 280, 600);
+  return {
+    sidebar,
+    inspector: pdf,
+    pdf,
+    ai,
+  };
 }
+
+const DEFAULT_WIDTHS: PanelWidths = getDefaultWidths();
 
 function loadPanelWidths(): PanelWidths {
   try {
@@ -142,6 +150,8 @@ interface UiState {
   cursorCol: number;
   wordCount: number;
   editorFontSize: FontSize;
+  aiDockExpanded: boolean;
+  aiDockVisible: boolean;
 
   toggleCollabManager: () => void;
   toggleSidebar: () => void;
@@ -159,6 +169,10 @@ interface UiState {
   setCursor: (line: number, col: number) => void;
   setWordCount: (count: number) => void;
   setEditorFontSize: (size: FontSize) => void;
+  setAiDockExpanded: (expanded: boolean) => void;
+  toggleAiDockExpanded: () => void;
+  setAiDockVisible: (visible: boolean) => void;
+  toggleAiDockVisible: () => void;
 }
 
 let toastCounter = 0;
@@ -187,6 +201,8 @@ export const useUiStore = create<UiState>((set) => ({
   cursorCol: 1,
   wordCount: 0,
   editorFontSize: loadEditorFontSize(),
+  aiDockExpanded: false,
+  aiDockVisible: false,
 
   toggleCollabManager() {
     set((state) => ({ collabManagerOpen: !state.collabManagerOpen }));
@@ -287,5 +303,21 @@ export const useUiStore = create<UiState>((set) => ({
     const clamped = clamp(size, 12, 28);
     saveEditorFontSize(clamped);
     set({ editorFontSize: clamped });
+  },
+
+  setAiDockExpanded(expanded) {
+    set({ aiDockExpanded: expanded });
+  },
+
+  toggleAiDockExpanded() {
+    set((state) => ({ aiDockExpanded: !state.aiDockExpanded }));
+  },
+
+  setAiDockVisible(visible) {
+    set({ aiDockVisible: visible, aiDockExpanded: visible ? false : false });
+  },
+
+  toggleAiDockVisible() {
+    set((state) => ({ aiDockVisible: !state.aiDockVisible, aiDockExpanded: false }));
   },
 }));

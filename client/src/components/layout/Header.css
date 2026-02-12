@@ -4,11 +4,13 @@
   gap: 14px;
   height: 44px;
   padding: 0 12px;
-  background: #0f141c;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(45, 42, 46, 0.6);
+  border-bottom: 1px solid var(--card-border);
+  backdrop-filter: blur(14px);
   flex-shrink: 0;
   z-index: 10;
   width: 100%;
+  border-radius: 0 0 calc(var(--card-radius) - 2px) calc(var(--card-radius) - 2px);
 }
 
 .header__brand {

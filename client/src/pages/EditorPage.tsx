@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState, useMemo, type CSSProperties } from 'react';
+import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useEditorStore } from '@/stores/editorStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -48,10 +48,10 @@ export default function EditorPage() {
   const isOwner = !!(username && currentProject && currentProject.owner === username);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const pdfPanelOpen = useUiStore((s) => s.pdfPanelOpen);
-  const aiPanelOpen = useUiStore((s) => s.aiPanelOpen);
-  const inspectorView = useUiStore((s) => s.inspectorView);
-  const inspectorSplit = useUiStore((s) => s.inspectorSplit);
-  const setInspectorSplit = useUiStore((s) => s.setInspectorSplit);
+  const aiDockExpanded = useUiStore((s) => s.aiDockExpanded);
+  const aiDockVisible = useUiStore((s) => s.aiDockVisible);
+  const setAiDockExpanded = useUiStore((s) => s.setAiDockExpanded);
+  const setAiDockVisible = useUiStore((s) => s.setAiDockVisible);
   const setCompileStatus = useUiStore((s) => s.setCompileStatus);
   const compiler = useUiStore((s) => s.compiler);
   const addToast = useUiStore((s) => s.addToast);
@@ -93,32 +93,37 @@ export default function EditorPage() {
     [panelWidths.pdf, setPanelWidth],
   );
 
-  const handleInspectorResize = useCallback(
-    (dx: number) => {
-      setPanelWidth('inspector', Math.max(240, Math.min(900, panelWidths.inspector - dx)));
-    },
-    [panelWidths.inspector, setPanelWidth],
-  );
 
-  const handleAiResize = useCallback(
-    (dx: number) => {
-      setPanelWidth('ai', Math.max(280, Math.min(600, panelWidths.ai - dx)));
-    },
-    [panelWidths.ai, setPanelWidth],
-  );
+  const editorStackRef = useRef<HTMLDivElement>(null);
+  const editorStackWrapRef = useRef<HTMLDivElement>(null);
+  const [aiDockHeight, setAiDockHeight] = useState(0);
 
-  const inspectorSplitRef = useRef<HTMLDivElement>(null);
+  const ensureAiDockHeight = useCallback(() => {
+    const el = editorStackWrapRef.current;
+    if (!el) return;
+    const height = el.clientHeight;
+    if (height <= 0) return;
+    const target = Math.round(height * 0.35);
+    const clamped = Math.max(56, Math.min(height, target));
+    setAiDockHeight(clamped);
+  }, []);
 
-  const handleInspectorSplitResize = useCallback(
+  useEffect(() => {
+    if (aiDockExpanded) {
+      ensureAiDockHeight();
+    }
+  }, [aiDockExpanded, ensureAiDockHeight]);
+
+  const handleAiDockResize = useCallback(
     (dy: number) => {
-      const el = inspectorSplitRef.current;
+      const el = editorStackWrapRef.current;
       if (!el) return;
       const height = el.clientHeight;
       if (height <= 0) return;
-      const next = (inspectorSplit * height + dy) / height;
-      setInspectorSplit(next);
+      const next = Math.max(56, Math.min(height, aiDockHeight - dy));
+      setAiDockHeight(next);
     },
-    [inspectorSplit, setInspectorSplit],
+    [aiDockHeight],
   );
 
   // Local state for compile results
@@ -426,7 +431,7 @@ export default function EditorPage() {
           onFontSizeChange={setEditorFontSize}
           disabled={!activeFile}
         />
-        <div className="editor-page__content">
+        <div className="editor-page__content editor-page__content--stack" ref={editorStackWrapRef}>
           {id && (
             <SearchPanel
               projectId={id}
@@ -435,55 +440,53 @@ export default function EditorPage() {
               onJump={handleSearchJump}
             />
           )}
-          {activeFile ? (
-            <CodeEditor
-              ref={editorRef}
-              key={activeFile}
-              content={activeContent}
-              onChange={handleChange}
-              language={getLanguage(activeFile)}
-              labels={projectLabels.labels}
-              bibKeys={projectLabels.bibKeys}
-              compileLog={compileLog}
-              activeFile={activeFile ?? undefined}
-            />
-          ) : (
-            <div className="editor-page__empty">
-              Select a file to start editing
+          <div className="editor-page__editor-surface" ref={editorStackRef}>
+            {activeFile ? (
+              <CodeEditor
+                ref={editorRef}
+                key={activeFile}
+                content={activeContent}
+                onChange={handleChange}
+                language={getLanguage(activeFile)}
+                labels={projectLabels.labels}
+                bibKeys={projectLabels.bibKeys}
+                compileLog={compileLog}
+                activeFile={activeFile ?? undefined}
+              />
+            ) : (
+              <div className="editor-page__empty">
+                Select a file to start editing
+              </div>
+            )}
+          </div>
+          {id && aiDockVisible && (
+            <div
+              className={`editor-page__ai-dock${aiDockExpanded ? ' editor-page__ai-dock--expanded' : ' editor-page__ai-dock--collapsed'}`}
+              style={{ height: aiDockExpanded ? aiDockHeight : 56 }}
+            >
+              {aiDockExpanded && (
+                <ResizeHandle
+                  onResize={handleAiDockResize}
+                  axis="y"
+                  className="resize-handle--row editor-page__ai-dock-resize"
+                />
+              )}
+              <div className="editor-page__ai-dock-panel">
+                <AiChatPanel
+                  projectId={id}
+                  onActivate={() => {
+                    setAiDockVisible(true);
+                    setAiDockExpanded(true);
+                    ensureAiDockHeight();
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>
         <UndoBar />
       </main>
-      {inspectorView === 'split' && id && (
-        <>
-          <ResizeHandle onResize={handleInspectorResize} />
-          <aside
-            className="editor-page__inspector-split"
-            style={{
-              width: panelWidths.inspector,
-              '--inspector-split-top': `${Math.round(inspectorSplit * 100)}%`,
-            } as CSSProperties}
-            ref={inspectorSplitRef}
-          >
-            <div className="editor-page__inspector-pane">
-              <PdfPreview
-                key={pdfKey}
-                projectId={id}
-                pdfExists={pdfExists}
-                compileLog={compileLog}
-                onRefresh={handlePdfRefresh}
-                onJumpToLine={(_file, line) => handleJumpToLine(line)}
-              />
-            </div>
-            <ResizeHandle onResize={handleInspectorSplitResize} axis="y" className="resize-handle--row" />
-            <div className="editor-page__inspector-pane">
-              <AiChatPanel projectId={id} />
-            </div>
-          </aside>
-        </>
-      )}
-      {inspectorView !== 'split' && pdfPanelOpen && id && (
+      {pdfPanelOpen && id && (
         <>
           <ResizeHandle onResize={handlePdfResize} />
           <aside
@@ -498,17 +501,6 @@ export default function EditorPage() {
               onRefresh={handlePdfRefresh}
               onJumpToLine={(_file, line) => handleJumpToLine(line)}
             />
-          </aside>
-        </>
-      )}
-      {inspectorView !== 'split' && aiPanelOpen && id && (
-        <>
-          <ResizeHandle onResize={handleAiResize} />
-          <aside
-            className="editor-page__ai-panel"
-            style={{ width: panelWidths.ai }}
-          >
-            <AiChatPanel projectId={id} />
           </aside>
         </>
       )}

@@ -19,7 +19,6 @@ function SidebarPanelIcon({ className }: { className?: string }) {
   );
 }
 
-
 function AiPanelIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
@@ -28,7 +27,6 @@ function AiPanelIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-
 
 const TabBar: React.FC = () => {
   const openFiles = useEditorStore((s) => s.openFiles);
@@ -39,24 +37,15 @@ const TabBar: React.FC = () => {
 
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const inspectorOpen = useUiStore((s) => s.inspectorOpen);
-  const inspectorView = useUiStore((s) => s.inspectorView);
-  const setInspectorSplit = useUiStore((s) => s.setInspectorSplit);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const setInspectorOpen = useUiStore((s) => s.setInspectorOpen);
-  const setInspectorView = useUiStore((s) => s.setInspectorView);
+  const aiDockVisible = useUiStore((s) => s.aiDockVisible);
+  const toggleAiDockVisible = useUiStore((s) => s.toggleAiDockVisible);
+
   const paths = Array.from(openFiles.keys());
 
-  const toggleAiSplit = () => {
-    if (inspectorOpen && inspectorView === 'split') {
-      setInspectorView('pdf');
-      setInspectorOpen(true);
-      return;
-    }
-    setInspectorSplit(0.55);
-    setInspectorView('split');
-    if (!inspectorOpen) {
-      setInspectorOpen(true);
-    }
+  const toggleAiDock = () => {
+    toggleAiDockVisible();
   };
 
   const toggleInspector = () => {
@@ -104,8 +93,8 @@ const TabBar: React.FC = () => {
         </button>
         <div className="tabbar__inspector-switch" role="group" aria-label="Inspector view">
           <button
-            className={'tabbar__inspector-btn' + (inspectorOpen && inspectorView === 'split' ? ' tabbar__inspector-btn--active' : '')}
-            onClick={toggleAiSplit}
+            className={'tabbar__inspector-btn' + (aiDockVisible ? ' tabbar__inspector-btn--active' : '')}
+            onClick={toggleAiDock}
             title="Toggle AI Assistant"
           >
             <AiPanelIcon className="tabbar__inspector-icon" />

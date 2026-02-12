@@ -106,7 +106,7 @@ function ThinkingBlock({ content }: { content: string }) {
 }
 
 const AiMessage: React.FC<AiMessageProps> = ({ message }) => {
-  const roleClass = `ai-message ai-message--${message.role}${message.streaming ? ' ai-message--streaming' : ''}`;
+  const roleClass = `ai-message-row ai-message-row--${message.role}${message.streaming ? ' ai-message-row--streaming' : ''}`;
   const contentRef = useRef<HTMLDivElement>(null);
   // Track accepted/rejected state per file change index
   const [changeStates, setChangeStates] = useState<Record<number, 'accepted' | 'rejected'>>({});
@@ -133,98 +133,102 @@ const AiMessage: React.FC<AiMessageProps> = ({ message }) => {
     return () => el.removeEventListener('click', handler);
   }, [renderedHtml]);
 
+  const wrapperClass = message.role === 'user' ? 'ai-message__bubble' : 'ai-message__assistant';
+
   return (
     <div className={roleClass}>
-      <div className="ai-message__role">
-        {message.role === 'user' ? 'You' : 'Aitex AI'}
-      </div>
-      {message.thinking && (
-        <ThinkingBlock content={message.thinking} />
-      )}
-      {message.content && (
-        message.role === 'assistant' ? (
-          <div className="ai-message__content ai-message__markdown" ref={contentRef}>
-            <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />
-            {message.streaming && <span className="ai-message__cursor" />}
-          </div>
-        ) : (
-          <div className="ai-message__content">
-            {message.content}
-          </div>
-        )
-      )}
-      {message.toolCalls && message.toolCalls.length > 0 && (
-        <div className="ai-message__tools">
-          {message.toolCalls.map((tc, i) => (
-            <div key={i} className="ai-tool-call">
-              <span className="ai-tool-call__icon">{toolIcon(tc.name)}</span>
-              {toolLabel(tc.name)}
-              {tc.args && (tc.args as Record<string, unknown>).path
-                ? `: ${(tc.args as Record<string, unknown>).path}`
-                : ''}
-            </div>
-          ))}
+      <div className={wrapperClass}>
+        <div className="ai-message__role">
+          {message.role === 'user' ? 'You' : 'Aitex AI'}
         </div>
-      )}
-      {message.fileChanges && message.fileChanges.length > 0 && (
-        <div className="ai-message__changes">
-          {message.fileChanges.map((fc, i) => {
-            const state = changeStates[i];
-            if (state) {
-              return (
-                <div key={i} className={`ai-change-resolved ai-change-resolved--${state}`}>
-                  <span className="ai-change-resolved__icon">
-                    {state === 'accepted' ? '\u2713' : '\u2717'}
-                  </span>
-                  <span className="ai-change-resolved__path">{fc.path}</span>
-                  <span className="ai-change-resolved__label">
-                    {state === 'accepted' ? 'Accepted' : 'Rejected'}
-                  </span>
-                </div>
-              );
-            }
-            const handleAccept = () => {
-              setChangeStates((s) => ({ ...s, [i]: 'accepted' }));
-            };
-            const handleReject = () => {
-              if (fc.oldContent !== null) {
-                window.dispatchEvent(
-                  new CustomEvent('aitex:revert-file', {
-                    detail: { path: fc.path, content: fc.oldContent },
-                  }),
+        {message.thinking && (
+          <ThinkingBlock content={message.thinking} />
+        )}
+        {message.content && (
+          message.role === 'assistant' ? (
+            <div className="ai-message__content ai-message__markdown" ref={contentRef}>
+              <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />
+              {message.streaming && <span className="ai-message__cursor" />}
+            </div>
+          ) : (
+            <div className="ai-message__content">
+              {message.content}
+            </div>
+          )
+        )}
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <div className="ai-message__tools">
+            {message.toolCalls.map((tc, i) => (
+              <div key={i} className="ai-tool-call">
+                <span className="ai-tool-call__icon">{toolIcon(tc.name)}</span>
+                {toolLabel(tc.name)}
+                {tc.args && (tc.args as Record<string, unknown>).path
+                  ? `: ${(tc.args as Record<string, unknown>).path}`
+                  : ''}
+              </div>
+            ))}
+          </div>
+        )}
+        {message.fileChanges && message.fileChanges.length > 0 && (
+          <div className="ai-message__changes">
+            {message.fileChanges.map((fc, i) => {
+              const state = changeStates[i];
+              if (state) {
+                return (
+                  <div key={i} className={`ai-change-resolved ai-change-resolved--${state}`}>
+                    <span className="ai-change-resolved__icon">
+                      {state === 'accepted' ? '\u2713' : '\u2717'}
+                    </span>
+                    <span className="ai-change-resolved__path">{fc.path}</span>
+                    <span className="ai-change-resolved__label">
+                      {state === 'accepted' ? 'Accepted' : 'Rejected'}
+                    </span>
+                  </div>
                 );
               }
-              setChangeStates((s) => ({ ...s, [i]: 'rejected' }));
-            };
-            const hasDiffContent = fc.oldContent !== null || fc.newContent !== null;
-            if (hasDiffContent) {
+              const handleAccept = () => {
+                setChangeStates((s) => ({ ...s, [i]: 'accepted' }));
+              };
+              const handleReject = () => {
+                if (fc.oldContent !== null) {
+                  window.dispatchEvent(
+                    new CustomEvent('aitex:revert-file', {
+                      detail: { path: fc.path, content: fc.oldContent },
+                    }),
+                  );
+                }
+                setChangeStates((s) => ({ ...s, [i]: 'rejected' }));
+              };
+              const hasDiffContent = fc.oldContent !== null || fc.newContent !== null;
+              if (hasDiffContent) {
+                return (
+                  <DiffView
+                    key={i}
+                    change={fc}
+                    onAccept={handleAccept}
+                    onReject={handleReject}
+                  />
+                );
+              }
               return (
-                <DiffView
-                  key={i}
-                  change={fc}
-                  onAccept={handleAccept}
-                  onReject={handleReject}
-                />
-              );
-            }
-            return (
-              <div key={i} className="ai-file-summary">
-                <span className={`ai-file-summary__badge ai-file-summary__badge--${fc.action}`}>
-                  {ACTION_LABELS[fc.action] ?? fc.action}
-                </span>
-                <span className="ai-file-summary__path">{fc.path}</span>
-                <div className="ai-file-summary__actions">
-                  <button className="ai-file-summary__btn ai-file-summary__btn--accept" onClick={handleAccept} title="Accept">&#x2713;</button>
-                  <button className="ai-file-summary__btn ai-file-summary__btn--reject" onClick={handleReject} title="Reject">&#x2717;</button>
+                <div key={i} className="ai-file-summary">
+                  <span className={`ai-file-summary__badge ai-file-summary__badge--${fc.action}`}>
+                    {ACTION_LABELS[fc.action] ?? fc.action}
+                  </span>
+                  <span className="ai-file-summary__path">{fc.path}</span>
+                  <div className="ai-file-summary__actions">
+                    <button className="ai-file-summary__btn ai-file-summary__btn--accept" onClick={handleAccept} title="Accept">&#x2713;</button>
+                    <button className="ai-file-summary__btn ai-file-summary__btn--reject" onClick={handleReject} title="Reject">&#x2717;</button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {!message.streaming && (
-        <span className="ai-message__timestamp">{formatTime(message.timestamp)}</span>
-      )}
+              );
+            })}
+          </div>
+        )}
+        {!message.streaming && (
+          <span className="ai-message__timestamp">{formatTime(message.timestamp)}</span>
+        )}
+      </div>
     </div>
   );
 };

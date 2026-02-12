@@ -10,6 +10,7 @@ import './AiChatPanel.css';
 
 interface AiChatPanelProps {
   projectId: string;
+  onActivate?: () => void;
 }
 
 // ── Multi-conversation persistence helpers ──────────────────────────
@@ -74,7 +75,7 @@ function deleteConvo(projectId: string, convoId: string) {
   localStorage.removeItem(CONV_KEY(projectId, convoId));
 }
 
-const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
+const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
   // Multi-conversation state
   const [convoList, setConvoList] = useState<ConvoMeta[]>(() => loadConvoList(projectId));
   const [activeConvoId, setActiveConvoId] = useState<string>(() => {
@@ -99,7 +100,8 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const setInspectorOpen = useUiStore((s) => s.setInspectorOpen);
+  const setAiDockVisible = useUiStore((s) => s.setAiDockVisible);
+  const setAiDockExpanded = useUiStore((s) => s.setAiDockExpanded);
   const addToast = useUiStore((s) => s.addToast);
   const fetchTree = useEditorStore((s) => s.fetchTree);
   const refreshFile = useEditorStore((s) => s.refreshFile);
@@ -424,12 +426,43 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
     <aside className="ai-chat-panel">
       {/* Header */}
       <div className="ai-chat-panel__header">
-        <span className="ai-chat-panel__title">
-          AI Assistant
-          {messages.length > 0 && (
-            <span className="ai-chat-panel__history-badge">{messages.length}</span>
-          )}
-        </span>
+        <div className="ai-chat-panel__header-left">
+          <span className="ai-chat-panel__title">
+            AI Assistant
+            {messages.length > 0 && (
+              <span className="ai-chat-panel__history-badge">{messages.length}</span>
+            )}
+          </span>
+          <div className="ai-chat-panel__header-meta">
+            {aiConfigured !== null && (
+              <span
+                className={
+                  'ai-chat-panel__status-inline' +
+                  (aiConfigured ? ' ai-chat-panel__status-inline--ok' : ' ai-chat-panel__status-inline--error')
+                }
+              >
+                {aiConfigured
+                  ? `Connected${aiProvider ? ` · ${aiProvider}` : ''}`
+                  : 'AI not configured'}
+              </span>
+            )}
+            {aiConfigured && models.length > 0 && (
+              <select
+                className="ai-chat-panel__header-select"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                disabled={loading}
+                title="Select model"
+              >
+                {models.map((m) => (
+                  <option key={m} value={m}>
+                    {m.replace('Qwen3-VL-', '').replace('-Instruct', '').replace('-Thinking', ' Think')}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
         <div className="ai-chat-panel__header-actions">
           <button
             className="ai-chat-panel__header-btn"
@@ -451,7 +484,10 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
           )}
           <button
             className="ai-chat-panel__header-btn"
-            onClick={() => setInspectorOpen(false)}
+            onClick={() => {
+              setAiDockExpanded(false);
+              setAiDockVisible(true);
+            }}
             type="button"
             title="Close panel"
           >
@@ -488,39 +524,6 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
               </button>
             </div>
           ))}
-        </div>
-      )}
-
-      {/* Status bar + model selector */}
-      {aiConfigured !== null && (
-        <div
-          className={`ai-chat-panel__status ${
-            aiConfigured
-              ? 'ai-chat-panel__status--ok'
-              : 'ai-chat-panel__status--error'
-          }`}
-        >
-          {aiConfigured ? (
-            <div className="ai-chat-panel__status-row">
-              <span>Connected</span>
-              {models.length > 0 && (
-                <select
-                  className="ai-chat-panel__model-select"
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  disabled={loading}
-                >
-                  {models.map((m) => (
-                    <option key={m} value={m}>
-                      {m.replace('Qwen3-VL-', '').replace('-Instruct', '').replace('-Thinking', ' Think')}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          ) : (
-            'AI not configured'
-          )}
         </div>
       )}
 
@@ -561,6 +564,7 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
           className="ai-chat-panel__input"
           placeholder="Ask about your project..."
           value={input}
+          onFocus={() => onActivate?.()}
           onChange={(e) => {
             const val = e.target.value;
             setInput(val);

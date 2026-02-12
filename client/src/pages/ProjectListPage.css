@@ -3,6 +3,8 @@
   height: 100%;
   min-width: 1280px;
   background: var(--bg-app);
+  padding: var(--card-gap);
+  gap: var(--card-gap);
 }
 
 .projects-loading {
@@ -17,9 +19,11 @@
   width: 288px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-sidebar);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
   padding: 16px 12px 14px;
+  border-radius: var(--card-radius);
 }
 
 .projects-nav__brand {
@@ -295,10 +299,11 @@
 .projects-main {
   flex: 1;
   min-width: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.012) 0%, rgba(255, 255, 255, 0) 20%), var(--bg-panel);
-  border-radius: 12px;
-  margin: 8px 10px 8px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--card-bg);
+  border-radius: var(--card-radius);
+  margin: 0;
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -310,7 +315,7 @@
   justify-content: space-between;
   min-height: 72px;
   padding: 12px 18px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--card-border);
   gap: 12px;
 }
 
@@ -460,19 +465,20 @@
   grid-template-columns: repeat(auto-fill, minmax(274px, 1fr));
   grid-auto-rows: 208px;
   align-content: start;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  border-left: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 16px;
+  gap: 14px;
 }
 
 .project-card {
   position: relative;
   min-height: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  background: transparent;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: rgba(40, 37, 42, 0.6);
+  box-shadow: var(--card-shadow-soft);
   padding: 14px 14px 12px;
   cursor: pointer;
-  transition: background var(--transition);
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -480,7 +486,9 @@
 }
 
 .project-card:hover {
-  background: rgba(255, 255, 255, 0.018);
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.42);
 }
 
 .project-card__header {
@@ -535,7 +543,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   cursor: pointer;
   transition: background var(--transition);
 }

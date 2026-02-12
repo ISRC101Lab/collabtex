@@ -5,26 +5,37 @@
 }
 
 :root {
-  --font-ui: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-ui: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
 
-  --accent: #5c84ff;
-  --accent-hover: #7397ff;
-  --accent-subtle: rgba(92, 132, 255, 0.14);
-  --accent-bg: rgba(92, 132, 255, 0.13);
+  --accent: #a9dc76;
+  --accent-hover: #bce88a;
+  --accent-subtle: rgba(169, 220, 118, 0.16);
+  --accent-bg: rgba(169, 220, 118, 0.12);
 
-  --bg: #090f18;
-  --bg-surface: #0f1623;
-  --bg-elevated: #131e2f;
+  --bg: #1c1a1f;
+  --bg-surface: #2d2a2e;
+  --bg-elevated: #3a363b;
   --bg-hover: rgba(255, 255, 255, 0.08);
 
-  --text: #e1e9f7;
-  --text-secondary: #c3cee2;
-  --text-muted: #7d8ba4;
+  --text: #fcfcfa;
+  --text-secondary: #e6e1d8;
+  --text-muted: #9a989c;
 
-  --border: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.2);
-  --border-hover: rgba(255, 255, 255, 0.16);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --border-hover: rgba(255, 255, 255, 0.18);
+
+  --glass-bg: rgba(45, 42, 46, 0.72);
+  --glass-strong: rgba(58, 54, 59, 0.78);
+  --surface-elevated: rgba(58, 54, 59, 0.9);
+
+  --card-bg: rgba(45, 42, 46, 0.6);
+  --card-border: rgba(255, 255, 255, 0.14);
+  --card-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+  --card-shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.3);
+  --card-radius: 16px;
+  --card-gap: 4px;
 
   --radius: 8px;
   --radius-sm: 6px;
@@ -36,10 +47,10 @@
 
   --transition: 0.15s ease;
 
-  --success: #34d399;
-  --error: #f87171;
-  --warning: #fbbf24;
-  --info: var(--accent);
+  --success: #a9dc76;
+  --error: #ff6188;
+  --warning: #ffd866;
+  --info: #78dce8;
 }
 
 html, body, #root {
@@ -52,7 +63,10 @@ body {
   font-family: var(--font-ui);
   font-size: 13px;
   color: var(--text);
-  background: var(--bg);
+  background:
+    radial-gradient(1200px 800px at 20% -10%, rgba(120, 220, 232, 0.08), transparent 60%),
+    radial-gradient(900px 700px at 100% 0%, rgba(255, 216, 102, 0.08), transparent 55%),
+    linear-gradient(135deg, #1b1a1e 0%, #2a262b 45%, #1d1a20 100%);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -20,7 +20,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--card-border);
+  background: rgba(45, 42, 46, 0.3);
   flex-shrink: 0;
 }
 
@@ -117,6 +118,7 @@
   gap: 6px;
   padding: 4px 12px;
   border-bottom: 1px solid var(--border);
+  border-radius: 14px 14px 0 0;
 }
 
 .ft-new-icon {
