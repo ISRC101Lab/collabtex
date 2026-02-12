@@ -8,6 +8,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
+const PDFJS_VERSION = (pdfjsLib as { version?: string }).version || '4.10.38';
+const CMAP_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
+const STANDARD_FONT_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
+
 type ThumbnailVariant = 'list' | 'card';
 
 interface ProjectThumbnailProps {
@@ -80,7 +84,13 @@ export default function ProjectThumbnail({
 
     const baseUrl = getPdfUrl(projectId);
     const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}thumb=1&t=${cacheBuster || Date.now()}`;
-    const loadingTask = pdfjsLib.getDocument(url);
+    const loadingTask = pdfjsLib.getDocument({
+      url,
+      // Keep thumbnails consistent with preview for CJK glyphs.
+      cMapUrl: CMAP_URL,
+      cMapPacked: true,
+      standardFontDataUrl: STANDARD_FONT_URL,
+    });
 
     (async () => {
       try {

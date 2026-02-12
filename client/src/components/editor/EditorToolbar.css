@@ -6,7 +6,14 @@
   background: #0f141d;
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
-  overflow-x: auto;
+  overflow: visible;
+}
+
+.editor-toolbar__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .editor-toolbar__btn {
@@ -26,10 +33,16 @@
   white-space: nowrap;
 }
 
+.editor-toolbar__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .editor-toolbar__btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+
 
 .editor-toolbar__btn--bold {
   font-weight: 700;
@@ -91,6 +104,39 @@
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   box-shadow: var(--shadow-md);
+}
+
+.editor-toolbar__font {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.editor-toolbar__font-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.editor-toolbar__font-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.editor-toolbar__font-label {
+  min-width: 44px;
+  text-align: center;
+  color: var(--text);
 }
 
 .editor-toolbar__dropdown-item {

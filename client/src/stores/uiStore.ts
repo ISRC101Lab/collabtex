@@ -2,7 +2,8 @@ import { create } from 'zustand';
 
 type CompileStatus = 'idle' | 'compiling' | 'success' | 'error';
 type Compiler = 'pdflatex' | 'xelatex' | 'lualatex' | 'latexmk';
-type InspectorView = 'pdf' | 'ai';
+type InspectorView = 'pdf' | 'ai' | 'split';
+type FontSize = number;
 
 interface Toast {
   id: string;
@@ -61,7 +62,7 @@ function savePanelWidths(widths: PanelWidths) {
 function loadInspectorView(): InspectorView {
   try {
     const stored = localStorage.getItem('aitex-inspector-view');
-    if (stored === 'pdf' || stored === 'ai') return stored;
+    if (stored === 'pdf' || stored === 'ai' || stored === 'split') return stored;
   } catch {
     // ignore
   }
@@ -76,10 +77,59 @@ function saveInspectorView(view: InspectorView) {
   }
 }
 
+const DEFAULT_INSPECTOR_SPLIT = 0.5;
+
+function loadInspectorSplit(): number {
+  try {
+    const raw = localStorage.getItem('aitex-inspector-split');
+    if (!raw) return DEFAULT_INSPECTOR_SPLIT;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) {
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_INSPECTOR_SPLIT;
+}
+
+function saveInspectorSplit(split: number) {
+  try {
+    localStorage.setItem('aitex-inspector-split', String(split));
+  } catch {
+    // ignore
+  }
+}
+
+const DEFAULT_EDITOR_FONT_SIZE = 16;
+
+function loadEditorFontSize(): FontSize {
+  try {
+    const raw = localStorage.getItem('aitex-editor-font-size');
+    if (!raw) return DEFAULT_EDITOR_FONT_SIZE;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 12 && parsed <= 28) {
+      return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_EDITOR_FONT_SIZE;
+}
+
+function saveEditorFontSize(size: FontSize) {
+  try {
+    localStorage.setItem('aitex-editor-font-size', String(size));
+  } catch {
+    // ignore
+  }
+}
+
 interface UiState {
   sidebarOpen: boolean;
   inspectorOpen: boolean;
   inspectorView: InspectorView;
+  inspectorSplit: number;
   // Backward-compatible mirrors for existing consumers.
   pdfPanelOpen: boolean;
   aiPanelOpen: boolean;
@@ -91,6 +141,7 @@ interface UiState {
   cursorLine: number;
   cursorCol: number;
   wordCount: number;
+  editorFontSize: FontSize;
 
   toggleCollabManager: () => void;
   toggleSidebar: () => void;
@@ -99,6 +150,7 @@ interface UiState {
   toggleInspector: () => void;
   setInspectorOpen: (open: boolean) => void;
   setInspectorView: (view: InspectorView) => void;
+  setInspectorSplit: (split: number) => void;
   setCompileStatus: (status: CompileStatus) => void;
   setCompiler: (compiler: Compiler) => void;
   addToast: (message: string, type: Toast['type']) => void;
@@ -106,6 +158,7 @@ interface UiState {
   setPanelWidth: (panel: keyof PanelWidths, width: number) => void;
   setCursor: (line: number, col: number) => void;
   setWordCount: (count: number) => void;
+  setEditorFontSize: (size: FontSize) => void;
 }
 
 let toastCounter = 0;
@@ -114,8 +167,8 @@ function panelFlags(open: boolean, view: InspectorView) {
   return {
     inspectorOpen: open,
     inspectorView: view,
-    pdfPanelOpen: open && view === 'pdf',
-    aiPanelOpen: open && view === 'ai',
+    pdfPanelOpen: open && (view === 'pdf' || view === 'split'),
+    aiPanelOpen: open && (view === 'ai' || view === 'split'),
   };
 }
 
@@ -124,6 +177,7 @@ const initialInspectorView = loadInspectorView();
 export const useUiStore = create<UiState>((set) => ({
   sidebarOpen: true,
   ...panelFlags(true, initialInspectorView),
+  inspectorSplit: loadInspectorSplit(),
   collabManagerOpen: false,
   compileStatus: 'idle',
   compiler: (localStorage.getItem('aitex-compiler') as Compiler) || 'xelatex',
@@ -132,6 +186,7 @@ export const useUiStore = create<UiState>((set) => ({
   cursorLine: 1,
   cursorCol: 1,
   wordCount: 0,
+  editorFontSize: loadEditorFontSize(),
 
   toggleCollabManager() {
     set((state) => ({ collabManagerOpen: !state.collabManagerOpen }));
@@ -170,6 +225,12 @@ export const useUiStore = create<UiState>((set) => ({
   setInspectorView(view) {
     saveInspectorView(view);
     set((state) => panelFlags(state.inspectorOpen, view));
+  },
+
+  setInspectorSplit(split) {
+    const clamped = clamp(split, 0, 1);
+    saveInspectorSplit(clamped);
+    set({ inspectorSplit: clamped });
   },
 
   setCompileStatus(status) {
@@ -220,5 +281,11 @@ export const useUiStore = create<UiState>((set) => ({
 
   setWordCount(count) {
     set({ wordCount: count });
+  },
+
+  setEditorFontSize(size) {
+    const clamped = clamp(size, 12, 28);
+    saveEditorFontSize(clamped);
+    set({ editorFontSize: clamped });
   },
 }));

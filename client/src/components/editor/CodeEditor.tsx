@@ -3,6 +3,8 @@ import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { StreamLanguage } from '@codemirror/language';
 import { autocompletion } from '@codemirror/autocomplete';
+import { keymap } from '@codemirror/view';
+import { undo, redo } from '@codemirror/commands';
 import { stex } from '@codemirror/legacy-modes/mode/stex';
 import {
   latexCommandCompletion,
@@ -30,8 +32,10 @@ interface CodeEditorProps {
 }
 
 export interface CodeEditorHandle {
-  insertText: (text: string) => void;
+  insertText: (text: string, wrapSelection?: boolean) => void;
   jumpToLine: (line: number) => void;
+  undo: () => void;
+  redo: () => void;
 }
 
 const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onChange, language, labels, bibKeys, compileLog, activeFile }, ref) => {
@@ -40,13 +44,28 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
   const onChangeRef = useRef(onChange);
   const projectDataRef = useRef({ labels: labels ?? [], bibKeys: bibKeys ?? [] });
   const compileLogRef = useRef(compileLog ?? '');
+  const editorFontSize = useUiStore((s) => s.editorFontSize);
 
   useImperativeHandle(ref, () => ({
-    insertText(text: string) {
+    insertText(text: string, wrapSelection?: boolean) {
       const view = viewRef.current;
       if (!view) return;
       const { from, to } = view.state.selection.main;
-      view.dispatch({ changes: { from, to, insert: text } });
+      const hasPlaceholder = text.includes('$');
+      const selected = wrapSelection ? view.state.doc.sliceString(from, to) : '';
+      let insert = text;
+      let cursorPos: number | null = null;
+
+      if (hasPlaceholder) {
+        const placeholderIndex = text.indexOf('$');
+        insert = text.replace('$', selected);
+        cursorPos = from + placeholderIndex + selected.length;
+      }
+
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: cursorPos === null ? undefined : { anchor: cursorPos },
+      });
       view.focus();
     },
     jumpToLine(lineNum: number) {
@@ -60,6 +79,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
         effects: EditorView.scrollIntoView(line.from, { y: 'center' }),
       });
       view.focus();
+    },
+    undo() {
+      const view = viewRef.current;
+      if (!view) return;
+      if (undo(view)) view.focus();
+    },
+    redo() {
+      const view = viewRef.current;
+      if (!view) return;
+      if (redo(view)) view.focus();
     },
   }));
 
@@ -84,6 +113,11 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
     // ── Extensions ──
     const extensions = [
       basicSetup,
+      keymap.of([
+        { key: 'Mod-z', run: undo },
+        { key: 'Mod-y', run: redo },
+        { key: 'Shift-Mod-z', run: redo },
+      ]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           onChangeRef.current(update.state.doc.toString());
@@ -156,7 +190,13 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, language]);
 
-  return <div className="code-editor" ref={containerRef} />;
+  return (
+    <div
+      className="code-editor"
+      ref={containerRef}
+      style={{ '--editor-font-size': `${editorFontSize}px` } as React.CSSProperties}
+    />
+  );
 });
 
 export default CodeEditor;

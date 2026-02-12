@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
+import { useEffect, useCallback, useRef, useState, useMemo, type CSSProperties } from 'react';
 import { useParams } from 'react-router-dom';
 import { useEditorStore } from '@/stores/editorStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -12,10 +12,10 @@ import TabBar from '@/components/editor/TabBar';
 import ChangeBanner from '@/components/editor/ChangeBanner';
 import UndoBar from '@/components/editor/UndoBar';
 import CodeEditor, { type CodeEditorHandle } from '@/components/editor/CodeEditor';
+import EditorToolbar from '@/components/editor/EditorToolbar';
 import PdfPreview from '@/components/pdf/PdfPreview';
 import AiChatPanel from '@/components/ai/AiChatPanel';
 import ResizeHandle from '@/components/layout/ResizeHandle';
-import StatusBar from '@/components/layout/StatusBar';
 import SearchPanel from '@/components/editor/SearchPanel';
 import CollabManager from '@/components/collab/CollabManager';
 import './EditorPage.css';
@@ -49,9 +49,14 @@ export default function EditorPage() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const pdfPanelOpen = useUiStore((s) => s.pdfPanelOpen);
   const aiPanelOpen = useUiStore((s) => s.aiPanelOpen);
+  const inspectorView = useUiStore((s) => s.inspectorView);
+  const inspectorSplit = useUiStore((s) => s.inspectorSplit);
+  const setInspectorSplit = useUiStore((s) => s.setInspectorSplit);
   const setCompileStatus = useUiStore((s) => s.setCompileStatus);
   const compiler = useUiStore((s) => s.compiler);
   const addToast = useUiStore((s) => s.addToast);
+  const editorFontSize = useUiStore((s) => s.editorFontSize);
+  const setEditorFontSize = useUiStore((s) => s.setEditorFontSize);
   const collabManagerOpen = useUiStore((s) => s.collabManagerOpen);
   const toggleCollabManager = useUiStore((s) => s.toggleCollabManager);
   const panelWidths = useUiStore((s) => s.panelWidths);
@@ -88,11 +93,32 @@ export default function EditorPage() {
     [panelWidths.pdf, setPanelWidth],
   );
 
+  const handleInspectorResize = useCallback(
+    (dx: number) => {
+      setPanelWidth('inspector', Math.max(240, Math.min(900, panelWidths.inspector - dx)));
+    },
+    [panelWidths.inspector, setPanelWidth],
+  );
+
   const handleAiResize = useCallback(
     (dx: number) => {
       setPanelWidth('ai', Math.max(280, Math.min(600, panelWidths.ai - dx)));
     },
     [panelWidths.ai, setPanelWidth],
+  );
+
+  const inspectorSplitRef = useRef<HTMLDivElement>(null);
+
+  const handleInspectorSplitResize = useCallback(
+    (dy: number) => {
+      const el = inspectorSplitRef.current;
+      if (!el) return;
+      const height = el.clientHeight;
+      if (height <= 0) return;
+      const next = (inspectorSplit * height + dy) / height;
+      setInspectorSplit(next);
+    },
+    [inspectorSplit, setInspectorSplit],
   );
 
   // Local state for compile results
@@ -219,6 +245,18 @@ export default function EditorPage() {
     },
     [activeFile, markDirty],
   );
+
+  const handleUndo = useCallback(() => {
+    editorRef.current?.undo();
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    editorRef.current?.redo();
+  }, []);
+
+  const handleInsert = useCallback((text: string, wrapSelection?: boolean) => {
+    editorRef.current?.insertText(text, wrapSelection);
+  }, []);
 
   // Compile handler
   const handleCompile = useCallback(async () => {
@@ -380,6 +418,14 @@ export default function EditorPage() {
       <main className="editor-page__main">
         <TabBar />
         <ChangeBanner />
+        <EditorToolbar
+          onInsert={handleInsert}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          fontSize={editorFontSize}
+          onFontSizeChange={setEditorFontSize}
+          disabled={!activeFile}
+        />
         <div className="editor-page__content">
           {id && (
             <SearchPanel
@@ -409,7 +455,35 @@ export default function EditorPage() {
         </div>
         <UndoBar />
       </main>
-      {pdfPanelOpen && id && (
+      {inspectorView === 'split' && id && (
+        <>
+          <ResizeHandle onResize={handleInspectorResize} />
+          <aside
+            className="editor-page__inspector-split"
+            style={{
+              width: panelWidths.inspector,
+              '--inspector-split-top': `${Math.round(inspectorSplit * 100)}%`,
+            } as CSSProperties}
+            ref={inspectorSplitRef}
+          >
+            <div className="editor-page__inspector-pane">
+              <PdfPreview
+                key={pdfKey}
+                projectId={id}
+                pdfExists={pdfExists}
+                compileLog={compileLog}
+                onRefresh={handlePdfRefresh}
+                onJumpToLine={(_file, line) => handleJumpToLine(line)}
+              />
+            </div>
+            <ResizeHandle onResize={handleInspectorSplitResize} axis="y" className="resize-handle--row" />
+            <div className="editor-page__inspector-pane">
+              <AiChatPanel projectId={id} />
+            </div>
+          </aside>
+        </>
+      )}
+      {inspectorView !== 'split' && pdfPanelOpen && id && (
         <>
           <ResizeHandle onResize={handlePdfResize} />
           <aside
@@ -427,7 +501,7 @@ export default function EditorPage() {
           </aside>
         </>
       )}
-      {aiPanelOpen && id && (
+      {inspectorView !== 'split' && aiPanelOpen && id && (
         <>
           <ResizeHandle onResize={handleAiResize} />
           <aside

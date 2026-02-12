@@ -4,6 +4,11 @@ import './EditorToolbar.css';
 
 interface EditorToolbarProps {
   onInsert: (text: string, wrapSelection?: boolean) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  fontSize: number;
+  onFontSizeChange: (size: number) => void;
+  disabled?: boolean;
 }
 
 function Separator() {
@@ -14,10 +19,12 @@ function DropdownBtn({
   label,
   items,
   onSelect,
+  disabled,
 }: {
   label: string;
   items: { label: string; value: string }[];
   onSelect: (value: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -28,6 +35,7 @@ function DropdownBtn({
         onClick={() => setOpen((v) => !v)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         type="button"
+        disabled={disabled}
       >
         <span className="editor-toolbar__dropdown-label">{label}</span>
         <span
@@ -45,8 +53,10 @@ function DropdownBtn({
               className="editor-toolbar__dropdown-item"
               onMouseDown={(e) => {
                 e.preventDefault();
-                onSelect(it.value);
-                setOpen(false);
+                if (!disabled) {
+                  onSelect(it.value);
+                  setOpen(false);
+                }
               }}
               type="button"
             >
@@ -74,63 +84,121 @@ const LIST_ITEMS = [
 
 const MATH_ITEMS = [
   { label: 'Inline $...$', value: '$$' },
-  { label: 'Display \\[...\\]', value: '\\[\n\n\\]' },
+  { label: 'Display \\[...]', value: '\\[\n\n\\]' },
   { label: 'Equation', value: '\\begin{equation}\n\n\\label{eq:}\n\\end{equation}' },
   { label: 'Align', value: '\\begin{align}\n\n\\end{align}' },
 ];
 
-const EditorToolbar: React.FC<EditorToolbarProps> = ({ onInsert }) => {
+const EditorToolbar: React.FC<EditorToolbarProps> = ({
+  onInsert,
+  onUndo,
+  onRedo,
+  fontSize,
+  onFontSizeChange,
+  disabled,
+}) => {
   const wrap = useCallback(
     (before: string, after: string) => {
-      onInsert(before + after, true);
+      onInsert(before + '$' + after, true);
     },
     [onInsert],
   );
 
+  const canShrink = fontSize > 12;
+  const canGrow = fontSize < 28;
+
   return (
     <div className="editor-toolbar">
-      <button
+      <div className="editor-toolbar__row">
+        <button
         className="editor-toolbar__btn editor-toolbar__btn--bold"
         onClick={() => wrap('\\textbf{', '}')}
         title="Bold (\\textbf)"
         type="button"
+        disabled={disabled}
       >
         B
-      </button>
-      <button
+        </button>
+        <button
         className="editor-toolbar__btn editor-toolbar__btn--italic"
         onClick={() => wrap('\\textit{', '}')}
         title="Italic (\\textit)"
         type="button"
+        disabled={disabled}
       >
         I
-      </button>
-      <button
+        </button>
+        <button
         className="editor-toolbar__btn"
         onClick={() => wrap('\\underline{', '}')}
         title="Underline"
         type="button"
+        disabled={disabled}
       >
         U
-      </button>
-      <button
+        </button>
+        <button
         className="editor-toolbar__btn"
         onClick={() => wrap('\\texttt{', '}')}
         title="Monospace (\\texttt)"
         type="button"
+        disabled={disabled}
       >
         TT
-      </button>
+        </button>
 
-      <Separator />
+        <Separator />
 
-      <DropdownBtn label="Section" items={SECTION_ITEMS} onSelect={onInsert} />
-      <DropdownBtn label="List" items={LIST_ITEMS} onSelect={onInsert} />
-      <DropdownBtn label="Math" items={MATH_ITEMS} onSelect={onInsert} />
+        <button
+        className="editor-toolbar__btn"
+        onClick={onUndo}
+        title="Undo (Ctrl+Z)"
+        type="button"
+        disabled={disabled}
+      >
+        Undo
+        </button>
+        <button
+        className="editor-toolbar__btn"
+        onClick={onRedo}
+        title="Redo (Ctrl+Y)"
+        type="button"
+        disabled={disabled}
+      >
+        Redo
+        </button>
 
-      <Separator />
+        <div className="editor-toolbar__font">
+        <button
+          className="editor-toolbar__font-btn"
+          onClick={() => onFontSizeChange(fontSize - 1)}
+          disabled={disabled || !canShrink}
+          title="Decrease editor font size"
+          type="button"
+        >
+          A-
+        </button>
+        <span className="editor-toolbar__font-label">{fontSize}px</span>
+        <button
+          className="editor-toolbar__font-btn"
+          onClick={() => onFontSizeChange(fontSize + 1)}
+          disabled={disabled || !canGrow}
+          title="Increase editor font size"
+          type="button"
+        >
+          A+
+        </button>
+        </div>
 
-      <button
+        <Separator />
+
+        <DropdownBtn label="Section" items={SECTION_ITEMS} onSelect={onInsert} disabled={disabled} />
+        <DropdownBtn label="List" items={LIST_ITEMS} onSelect={onInsert} disabled={disabled} />
+        <DropdownBtn label="Math" items={MATH_ITEMS} onSelect={onInsert} disabled={disabled} />
+
+        <Separator />
+
+        <button
         className="editor-toolbar__btn"
         onClick={() =>
           onInsert(
@@ -139,21 +207,24 @@ const EditorToolbar: React.FC<EditorToolbarProps> = ({ onInsert }) => {
         }
         title="Insert figure"
         type="button"
+        disabled={disabled}
       >
         Fig
-      </button>
-      <button
+        </button>
+        <button
         className="editor-toolbar__btn"
         onClick={() =>
           onInsert(
-            '\\begin{table}[htbp]\n\\centering\n\\begin{tabular}{lll}\n\\hline\n & & \\\\\n\\hline\n\\end{tabular}\n\\caption{}\n\\label{tab:}\n\\end{table}',
+            '\\begin{table}[htbp]\n\\centering\n\\begin{tabular}{lll}\n\\hline\n & & \\\\n\\hline\n\\end{tabular}\n\\caption{}\n\\label{tab:}\n\\end{table}',
           )
         }
         title="Insert table"
         type="button"
+        disabled={disabled}
       >
         Tab
-      </button>
+        </button>
+      </div>
     </div>
   );
 };

@@ -2,19 +2,21 @@ import React, { useCallback, useRef, useEffect } from 'react';
 
 interface ResizeHandleProps {
   /** Called continuously while dragging with the delta-x in pixels */
-  onResize: (deltaX: number) => void;
+  onResize: (delta: number) => void;
   /** Called once when drag ends */
   onResizeEnd?: () => void;
   className?: string;
+  axis?: 'x' | 'y';
 }
 
 const ResizeHandle: React.FC<ResizeHandleProps> = ({
   onResize,
   onResizeEnd,
   className = '',
+  axis = 'x',
 }) => {
   const dragging = useRef(false);
-  const lastX = useRef(0);
+  const lastPos = useRef(0);
   const onResizeRef = useRef(onResize);
   const onResizeEndRef = useRef(onResizeEnd);
 
@@ -26,17 +28,18 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragging.current = true;
-    lastX.current = e.clientX;
-    document.body.style.cursor = 'col-resize';
+    lastPos.current = axis === 'y' ? e.clientY : e.clientX;
+    document.body.style.cursor = axis === 'y' ? 'row-resize' : 'col-resize';
     document.body.style.userSelect = 'none';
-  }, []);
+  }, [axis]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragging.current) return;
-      const dx = e.clientX - lastX.current;
-      lastX.current = e.clientX;
-      onResizeRef.current(dx);
+      const current = axis === 'y' ? e.clientY : e.clientX;
+      const delta = current - lastPos.current;
+      lastPos.current = current;
+      onResizeRef.current(delta);
     };
 
     const handleMouseUp = () => {
@@ -60,7 +63,7 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({
       className={`resize-handle ${className}`}
       onMouseDown={handleMouseDown}
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={axis === 'y' ? 'horizontal' : 'vertical'}
     />
   );
 };

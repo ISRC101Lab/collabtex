@@ -101,138 +101,14 @@
   border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* ── Right actions separators ───────────────── */
+
 .tabbar__sep {
   width: 1px;
   height: 18px;
   background: rgba(255, 255, 255, 0.12);
   margin: 0 4px;
   flex-shrink: 0;
-}
-
-/* ── Compile split button ──────────────────── */
-
-.tabbar__compile-group {
-  display: flex;
-  align-items: stretch;
-  position: relative;
-}
-
-.tabbar__compile-btn {
-  font-family: var(--font-ui);
-  font-size: 12px;
-  font-weight: 620;
-  color: #1d2530;
-  background: #f4f7fd;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px 0 0 999px;
-  padding: 0 12px;
-  height: 30px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: background 0.15s;
-  white-space: nowrap;
-}
-
-.tabbar__compile-btn:hover {
-  filter: brightness(0.97);
-}
-
-.tabbar__compile-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.tabbar__compile-dropdown {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 30px;
-  background: #f4f7fd;
-  color: #1d2530;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-left: 1px solid rgba(0, 0, 0, 0.16);
-  border-radius: 0 999px 999px 0;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.tabbar__compile-dropdown:hover {
-  filter: brightness(0.97);
-}
-
-.tabbar__compile-dropdown:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.tabbar__compile-icon {
-  display: inline-flex;
-  font-size: 12px;
-  line-height: 1;
-}
-
-@keyframes tabbar-spin {
-  to { transform: rotate(360deg); }
-}
-
-.tabbar__compile-icon--spinning {
-  animation: tabbar-spin 0.8s linear infinite;
-}
-
-.tabbar__compile-icon--success {
-  color: #34d399;
-}
-
-.tabbar__compile-icon--error {
-  color: #f87171;
-}
-
-/* ── Compiler dropdown menu ────────────────── */
-
-.tabbar__compiler-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 6px;
-  background: #121a27;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
-  min-width: 130px;
-  z-index: 100;
-  padding: 4px;
-}
-
-.tabbar__compiler-opt {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 8px;
-  background: none;
-  border: none;
-  color: #d4ddeb;
-  font-size: 12px;
-  font-family: var(--font-ui);
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s;
-}
-
-.tabbar__compiler-opt:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.tabbar__compiler-opt--active {
-  color: #e8eefb;
-}
-
-.tabbar__compiler-check {
-  font-size: 11px;
-  color: #34d399;
 }
 
 /* ── Panel toggle buttons ──────────────────── */

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { getPdfUrl, getDownloadUrl } from '@/api/client';
 import ChevronIcon from '@/components/common/ChevronIcon';
+import { useUiStore } from '@/stores/uiStore';
 import CompileLog from './CompileLog';
 import './PdfPreview.css';
 
@@ -11,7 +12,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
+const PDFJS_VERSION = (pdfjsLib as { version?: string }).version || '4.10.38';
+const CMAP_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/cmaps/`;
+const STANDARD_FONT_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`;
+
 type ZoomMode = 'fit-width' | 'fit-page' | 'custom';
+
+const COMPILERS = [
+  { value: 'pdflatex', label: 'pdfLaTeX' },
+  { value: 'xelatex', label: 'XeLaTeX' },
+  { value: 'lualatex', label: 'LuaLaTeX' },
+  { value: 'latexmk', label: 'Latexmk' },
+] as const;
 
 interface PdfPreviewProps {
   projectId: string;
@@ -58,6 +70,11 @@ export default function PdfPreview({
   const [zoomMode, setZoomMode] = useState<ZoomMode>('fit-width');
   const [pageInput, setPageInput] = useState('1');
   const [loading, setLoading] = useState(false);
+  const [compilerMenuOpen, setCompilerMenuOpen] = useState(false);
+
+  const compileStatus = useUiStore((s) => s.compileStatus);
+  const compiler = useUiStore((s) => s.compiler);
+  const setCompiler = useUiStore((s) => s.setCompiler);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -85,7 +102,13 @@ export default function PdfPreview({
     const url = `${getPdfUrl(projectId)}&t=${cacheBuster}`;
     setLoading(true);
 
-    const loadingTask = pdfjsLib.getDocument(url);
+    const loadingTask = pdfjsLib.getDocument({
+      url,
+      // Enable CMaps/standard fonts so CJK glyphs render correctly.
+      cMapUrl: CMAP_URL,
+      cMapPacked: true,
+      standardFontDataUrl: STANDARD_FONT_URL,
+    });
     let cancelled = false;
 
     loadingTask.promise.then(
@@ -237,11 +260,80 @@ export default function PdfPreview({
 
   const zoomPercent = Math.round(scale * 100);
   const pageDisplayTotal = numPages || 1;
+  const isCompiling = compileStatus === 'compiling';
+
+  function renderCompileIcon() {
+    if (isCompiling) {
+      return <span className="pdf-preview__compile-icon pdf-preview__compile-icon--spinning">&#x21BB;</span>;
+    }
+    if (compileStatus === 'success') {
+      return <span className="pdf-preview__compile-icon pdf-preview__compile-icon--success">&#x2713;</span>;
+    }
+    if (compileStatus === 'error') {
+      return <span className="pdf-preview__compile-icon pdf-preview__compile-icon--error">&#x2717;</span>;
+    }
+    return <span className="pdf-preview__compile-icon">&#x25B6;</span>;
+  }
 
   return (
     <div className="pdf-preview">
       {/* Toolbar */}
       <div className="pdf-preview__toolbar">
+        <div className="pdf-preview__compile-group">
+          <button
+            className="pdf-preview__compile-btn"
+            onClick={() => window.dispatchEvent(new CustomEvent('aitex:compile'))}
+            disabled={isCompiling}
+            title="Compile (Ctrl+Shift+B)"
+          >
+            {renderCompileIcon()}
+            {isCompiling ? 'Compiling...' : 'Compile'}
+          </button>
+          <button
+            className="pdf-preview__compile-dropdown"
+            onClick={() => setCompilerMenuOpen((v) => !v)}
+            disabled={isCompiling}
+            title="Select compiler"
+          >
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3 6l5 5 5-5H3z" />
+            </svg>
+          </button>
+          {compilerMenuOpen && (
+            <div className="pdf-preview__compiler-menu">
+              {COMPILERS.map((c) => (
+                <button
+                  key={c.value}
+                  className={`pdf-preview__compiler-opt${compiler === c.value ? ' pdf-preview__compiler-opt--active' : ''}`}
+                  onClick={() => { setCompiler(c.value as typeof compiler); setCompilerMenuOpen(false); }}
+                >
+                  {compiler === c.value && <span className="pdf-preview__compiler-check">&#x2713;</span>}
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <a
+          className="pdf-preview__toolbar-btn"
+          href={getDownloadUrl(projectId).replace('/download', '/pdf')}
+          download
+          title="Download PDF"
+        >
+          <DownloadIcon className="pdf-preview__toolbar-icon" />
+          <span className="pdf-preview__toolbar-label">PDF</span>
+        </a>
+        <button
+          className={'pdf-preview__toolbar-btn' + (logVisible ? ' pdf-preview__toolbar-btn--active' : '')}
+          onClick={toggleLog}
+          title="Toggle compile log"
+        >
+          {logVisible ? 'Hide Log' : 'Show Log'}
+        </button>
+
+        <span className="pdf-preview__toolbar-sep" />
+
         <button
           className="pdf-preview__toolbar-btn"
           onClick={() => goToPage(currentPage - 1)}
@@ -298,21 +390,6 @@ export default function PdfPreview({
 
         <button className="pdf-preview__toolbar-btn" onClick={handleRefresh} title="Refresh PDF">
           <RefreshIcon className="pdf-preview__toolbar-icon" />
-        </button>
-        <a
-          className="pdf-preview__toolbar-btn"
-          href={getDownloadUrl(projectId).replace('/download', '/pdf')}
-          download
-          title="Download PDF"
-        >
-          <DownloadIcon className="pdf-preview__toolbar-icon" />
-        </a>
-        <button
-          className={'pdf-preview__toolbar-btn' + (logVisible ? ' pdf-preview__toolbar-btn--active' : '')}
-          onClick={toggleLog}
-          title="Toggle compile log"
-        >
-          {logVisible ? 'Hide Log' : 'Show Log'}
         </button>
       </div>
 
