@@ -445,7 +445,9 @@
 }
 
 .projects-empty__cap-icon {
-  font-size: 11px;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .projects-empty__cap-icon--write  { color: #5e9a5e; }
@@ -576,13 +578,14 @@
 .projects-nav__account {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: none;
   border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 4px 8px;
+  border-radius: 10px;
+  padding: 5px 10px 5px 5px;
   cursor: pointer;
   color: #4f4a43;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .projects-nav__account:hover {
@@ -590,18 +593,28 @@
   border-color: #d7d2c8;
 }
 
-.projects-nav__avatar {
-  width: 28px;
-  height: 28px;
+.projects-nav__avatar-ring {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: #d86e8f;
-  color: #fff;
-  display: inline-flex;
+  padding: 2px;
+  background: linear-gradient(135deg, #df9f88, #c09553, #7db87d);
+  background-size: 200% 200%;
+  animation: brand-gradient 6s ease-in-out infinite;
+}
+
+.projects-nav__avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #f1eee8;
+  color: #2e2c28;
+  display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 700;
-  flex-shrink: 0;
 }
 
 .projects-nav__identity {
@@ -644,13 +657,73 @@
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  width: 240px;
+  width: 260px;
   border: 1px solid #d7d2c8;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fbf9f5;
-  box-shadow: 0 8px 24px rgba(67, 62, 51, 0.12);
-  padding: 4px;
+  box-shadow: 0 12px 32px rgba(67, 62, 51, 0.14);
+  padding: 6px;
   z-index: 50;
+}
+
+.projects-nav__account-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid #e8e4dc;
+  margin-bottom: 4px;
+}
+
+.projects-nav__account-header-avatar {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  padding: 2px;
+  background: linear-gradient(135deg, #df9f88, #c09553, #7db87d);
+  background-size: 200% 200%;
+  animation: brand-gradient 6s ease-in-out infinite;
+}
+
+.projects-nav__account-header-avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #fbf9f5;
+  color: #2e2c28;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.projects-nav__account-header-info {
+  min-width: 0;
+}
+
+.projects-nav__account-header-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2e2c28;
+  line-height: 1.3;
+}
+
+.projects-nav__account-header-role {
+  font-size: 11px;
+  color: #8a857d;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.projects-nav__account-header-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #30a46c;
+  box-shadow: 0 0 4px rgba(48, 164, 108, 0.3);
 }
 
 .projects-nav__account-action {

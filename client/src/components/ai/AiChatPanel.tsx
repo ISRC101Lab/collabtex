@@ -9,6 +9,7 @@ import { useConversationStore, loadConvoMessages, saveConvoMessages } from '@/st
 import type { ChatMessage } from '@/components/ai/AiMessage';
 import FileMentionPopup from '@/components/ai/FileMentionPopup';
 import ChevronIcon from '@/components/common/ChevronIcon';
+import { WriteIcon, EditIcon, CompileIcon, FixIcon, CheckIcon, XIcon, StopIcon, ToolIcon } from '@/components/common/Icons';
 import './AiChatPanel.css';
 
 /* ── Welcome Screen (isrc101-agent inspired) ──── */
@@ -39,22 +40,22 @@ function WelcomeScreen() {
       {/* ── Capabilities ── */}
       <div className="ai-welcome__caps">
         <div className="ai-welcome__cap">
-          <span className="ai-welcome__cap-icon ai-welcome__cap-icon--write">&#x25C6;</span>
+          <WriteIcon className="ai-welcome__cap-icon ai-welcome__cap-icon--write" />
           <span className="ai-welcome__cap-name">write</span>
           <span className="ai-welcome__cap-desc">Generate LaTeX from natural language</span>
         </div>
         <div className="ai-welcome__cap">
-          <span className="ai-welcome__cap-icon ai-welcome__cap-icon--edit">&#x270E;</span>
+          <EditIcon className="ai-welcome__cap-icon ai-welcome__cap-icon--edit" />
           <span className="ai-welcome__cap-name">edit</span>
           <span className="ai-welcome__cap-desc">Modify existing files with precision</span>
         </div>
         <div className="ai-welcome__cap">
-          <span className="ai-welcome__cap-icon ai-welcome__cap-icon--compile">&#x25B8;</span>
+          <CompileIcon className="ai-welcome__cap-icon ai-welcome__cap-icon--compile" />
           <span className="ai-welcome__cap-name">compile</span>
           <span className="ai-welcome__cap-desc">Build and preview your document</span>
         </div>
         <div className="ai-welcome__cap">
-          <span className="ai-welcome__cap-icon ai-welcome__cap-icon--fix">&#x2299;</span>
+          <FixIcon className="ai-welcome__cap-icon ai-welcome__cap-icon--fix" />
           <span className="ai-welcome__cap-name">fix</span>
           <span className="ai-welcome__cap-desc">Diagnose and resolve compile errors</span>
         </div>
@@ -186,7 +187,7 @@ function CliEntry({
         const tcPath = tc.args ? (tc.args as Record<string, unknown>).path : undefined;
         return (
           <div key={i} className="ai-cli__tool">
-            <span className="ai-cli__tool-icon">$</span>
+            <ToolIcon className="ai-cli__tool-icon" />
             <span className="ai-cli__tool-name">{TOOL_LABELS[tc.name] || tc.name}</span>
             {tcPath ? <span className="ai-cli__tool-args">{String(tcPath)}</span> : null}
           </div>
@@ -210,7 +211,7 @@ function CliEntry({
               return (
                 <div key={i} className={`ai-cli__change-resolved ai-cli__change-resolved--${state}`}>
                   <span className="ai-cli__change-resolved-icon">
-                    {state === 'accepted' ? '\u2713' : '\u2717'}
+                    {state === 'accepted' ? <CheckIcon className="ai-cli__icon-svg" /> : <XIcon className="ai-cli__icon-svg" />}
                   </span>
                   <span>{fc.path}</span>
                   <span style={{ marginLeft: 'auto', fontSize: 10 }}>
@@ -230,12 +231,12 @@ function CliEntry({
                     className="ai-cli__change-btn ai-cli__change-btn--accept"
                     onClick={() => onChangeState(i, 'accepted', fc)}
                     title="Accept"
-                  >&#x2713;</button>
+                  ><CheckIcon className="ai-cli__icon-svg" /></button>
                   <button
                     className="ai-cli__change-btn ai-cli__change-btn--reject"
                     onClick={() => onChangeState(i, 'rejected', fc)}
                     title="Reject"
-                  >&#x2717;</button>
+                  ><XIcon className="ai-cli__icon-svg" /></button>
                 </div>
               </div>
             );
@@ -564,7 +565,7 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
             type="button"
             aria-label="Stop"
           >
-            &#x25A0;
+            <StopIcon className="ai-cli__icon-svg" />
           </button>
         )}
       </div>

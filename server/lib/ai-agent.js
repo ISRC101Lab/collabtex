@@ -129,15 +129,47 @@ const TOOLS = [
 
 // ── System prompt ───────────────────────────────────────────────────
 
-function buildSystemPrompt(projectName, fileList) {
+function buildSystemPrompt(projectName, fileList, compiler) {
   const filesSection = fileList && fileList.length > 0
     ? `\n## Current Project Files\n\n${fileList.map(f => `- ${f}`).join('\n')}\n`
     : ''
 
+  // Infer language context from compiler choice
+  let compilerHint = ''
+  if (compiler === 'xelatex' || compiler === 'lualatex') {
+    compilerHint = `
+## Language & Compiler Context
+
+The user has selected **${compiler}** as their compiler, which supports Unicode/CJK natively.
+This strongly suggests the user is working on a **Chinese or multilingual** document.
+- Default to writing content in **Chinese** unless the user explicitly writes in English.
+- Use CJK-compatible packages (ctex, xeCJK) when needed.
+- When compiling, always use **${compiler}**.`
+  } else if (compiler === 'pdflatex') {
+    compilerHint = `
+## Language & Compiler Context
+
+The user has selected **pdflatex** as their compiler, which does NOT support CJK/Unicode natively.
+This strongly suggests the user is working on an **English-only** document.
+- **NEVER** insert Chinese characters, Japanese, Korean, or other CJK text into the document.
+- **NEVER** add CJK packages (ctex, xeCJK, CJKutf8) — they are incompatible with pdflatex.
+- If the user needs CJK support, advise them to switch to xelatex or lualatex first.
+- When compiling, always use **pdflatex**.`
+  } else if (compiler === 'latexmk') {
+    compilerHint = `
+## Language & Compiler Context
+
+The user has selected **latexmk** as their compiler (auto-detection mode).
+- Follow the content language already present in the document.
+- If the document uses CJK packages, write in the corresponding language.
+- If the document is English-only, do NOT introduce CJK characters.`
+  }
+
   return `You are Aitex AI — an expert LaTeX writing assistant embedded in a collaborative LaTeX editor called Aitex.
 
 Project: "${projectName}"
-${filesSection}
+Compiler: ${compiler || 'xelatex'}
+${filesSection}${compilerHint}
 ## Your Capabilities
 
 You have access to these tools to directly operate on the project:
@@ -159,13 +191,13 @@ You have access to these tools to directly operate on the project:
 
 4. **Prefer edit_file over write_file.** For modifications, use edit_file with precise old_text/new_text. Only use write_file when creating new files or when changes are so extensive that rewriting is simpler.
 
-5. **Compile proactively.** After making changes that affect the PDF output, compile the project automatically using compile_project. Use xelatex for Chinese/CJK content, pdflatex for English-only projects.
+5. **Compile proactively.** After making changes that affect the PDF output, compile the project automatically using compile_project. Always use the compiler that matches the project setting: ${compiler || 'xelatex'}.
 
 6. **Handle multi-step tasks autonomously.** If a task requires multiple operations (e.g., "translate this file to Chinese"), break it down and execute all steps: read the file, edit/rewrite it, then compile. Don't stop halfway.
 
 ## Common Task Patterns
 
-**Translation:** Read the file → rewrite with translated content (preserving all LaTeX commands, \\cite{}, \\ref{}, \\label{}, environments) → compile with xelatex.
+**Translation:** Read the file → rewrite with translated content (preserving all LaTeX commands, \\cite{}, \\ref{}, \\label{}, environments) → compile with the appropriate compiler.
 
 **Adding content:** Read the target file → use edit_file to insert new content at the right location → compile.
 
@@ -477,7 +509,7 @@ async function consumeStream(stream, onContentDelta) {
 
 const MAX_TOOL_ROUNDS = 8
 
-export async function runAgent({ dataDir, projectId, projectName, message, history }) {
+export async function runAgent({ dataDir, projectId, projectName, message, history, compiler }) {
   const dir = projectDir(dataDir, projectId)
   const allFileChanges = []
   const toolCalls = []
@@ -488,7 +520,7 @@ export async function runAgent({ dataDir, projectId, projectName, message, histo
 
   // Build messages
   const messages = [
-    { role: 'system', content: buildSystemPrompt(projectName, fileList) },
+    { role: 'system', content: buildSystemPrompt(projectName, fileList, compiler) },
     ...history,
     { role: 'user', content: message },
   ]
@@ -542,13 +574,17 @@ export async function runAgent({ dataDir, projectId, projectName, message, histo
 // ── Streaming agent loop ────────────────────────────────────────────
 // emit(event, data) sends SSE events to the client
 
-export async function runAgentStream({ dataDir, projectId, projectName, message, history, model, emit }) {
+export async function runAgentStream({ dataDir, projectId, projectName, message, history, model, compiler, emit }) {
   const dir = projectDir(dataDir, projectId)
   const chosenModel = (model && AVAILABLE_MODELS.includes(model)) ? model : AI_MODEL
   const isThinkingModel = chosenModel.includes('Thinking')
 
+  // Auto-fetch file list for context injection
+  let fileList = []
+  try { fileList = await listTree(dir) } catch { /* ignore */ }
+
   const messages = [
-    { role: 'system', content: buildSystemPrompt(projectName) },
+    { role: 'system', content: buildSystemPrompt(projectName, fileList, compiler) },
     ...history,
     { role: 'user', content: message },
   ]
@@ -571,15 +607,18 @@ export async function runAgentStream({ dataDir, projectId, projectName, message,
       if (isThinkingModel) {
         if (!inThinking && contentBuffer.includes('<think>')) {
           inThinking = true
-          thinkingBuffer = contentBuffer.slice(contentBuffer.indexOf('<think>') + 7)
-          emit('thinking_content', { content: thinkingBuffer })
+          // Only emit the portion of this delta that falls after <think>
+          const tagPos = contentBuffer.indexOf('<think>')
+          thinkingBuffer = contentBuffer.slice(tagPos + 7)
+          if (thinkingBuffer) emit('thinking_content', { content: thinkingBuffer })
           return
         }
         if (inThinking) {
           if (contentBuffer.includes('</think>')) {
-            // Thinking block closed
+            // Thinking block closed — emit the final full thinking text
+            const openIdx = contentBuffer.indexOf('<think>') + 7
             const closeIdx = contentBuffer.indexOf('</think>')
-            const fullThinking = contentBuffer.slice(contentBuffer.indexOf('<think>') + 7, closeIdx)
+            const fullThinking = contentBuffer.slice(openIdx, closeIdx)
             emit('thinking_done', { content: fullThinking })
             inThinking = false
             const afterThink = contentBuffer.slice(closeIdx + 8).trim()
@@ -587,6 +626,8 @@ export async function runAgentStream({ dataDir, projectId, projectName, message,
             // Reset buffer to only post-think content
             contentBuffer = afterThink
           } else {
+            // Still inside <think> — emit only the new delta
+            thinkingBuffer += delta
             emit('thinking_content', { content: delta })
           }
           return

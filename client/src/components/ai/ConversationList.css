@@ -85,10 +85,10 @@
 }
 
 .convo-list__new-icon {
-  font-size: 15px;
-  font-weight: 300;
+  width: 14px;
+  height: 14px;
   color: var(--text-muted);
-  line-height: 1;
+  flex-shrink: 0;
 }
 
 /* ── Items list ───────────────────────────── */
@@ -175,6 +175,11 @@
 .convo-list__item-delete:hover {
   background: var(--bg-hover);
   color: var(--error);
+}
+
+.convo-list__delete-icon {
+  width: 10px;
+  height: 10px;
 }
 
 /* ── Empty state ──────────────────────────── */

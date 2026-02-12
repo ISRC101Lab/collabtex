@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import * as api from '@/api/client';
 import { useConversationStore } from '@/stores/conversationStore';
+import { PlusIcon, XIcon } from '@/components/common/Icons';
 import './ConversationList.css';
 
 function formatRelative(ts: number): string {
@@ -74,7 +75,7 @@ const ConversationList: React.FC = () => {
       </div>
 
       <button className="convo-list__new" onClick={newConvo} type="button">
-        <span className="convo-list__new-icon">+</span>
+        <PlusIcon className="convo-list__new-icon" />
         New chat
       </button>
       <div className="convo-list__items">
@@ -97,7 +98,7 @@ const ConversationList: React.FC = () => {
               type="button"
               title="Delete conversation"
             >
-              &#x2715;
+              <XIcon className="convo-list__delete-icon" />
             </button>
           </div>
         ))}

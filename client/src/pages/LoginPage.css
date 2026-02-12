@@ -91,7 +91,9 @@
 }
 
 .login-hero__cap-icon {
-  font-size: 10px;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
 .login-hero__cap--write  .login-hero__cap-icon { color: #5e9a5e; }

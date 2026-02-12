@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Spinner } from '@/components/common';
+import { WriteIcon, EditIcon, CompileIcon, FixIcon } from '@/components/common/Icons';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
 import './LoginPage.css';
@@ -14,11 +15,11 @@ const AITEX_ASCII = ` \u2588\u2588\u2588\u2588\u2588\u2557 \u2588\u2588\u2557\u2
 \u2588\u2588\u2551  \u2588\u2588\u2551\u2588\u2588\u2551   \u2588\u2588\u2551   \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557\u2588\u2588\u2554\u255D \u2588\u2588\u2557
 \u255A\u2550\u255D  \u255A\u2550\u255D\u255A\u2550\u255D   \u255A\u2550\u255D   \u255A\u2550\u2550\u2550\u2550\u2550\u2550\u255D\u255A\u2550\u255D  \u255A\u2550\u255D`;
 
-const CAPS = [
-  { icon: '\u25C6', label: 'Write LaTeX', cls: 'write' },
-  { icon: '\u270E', label: 'Edit Files', cls: 'edit' },
-  { icon: '\u25B8', label: 'Compile PDF', cls: 'compile' },
-  { icon: '\u2299', label: 'Fix Errors', cls: 'fix' },
+const CAPS: { icon: React.FC<{ className?: string }>; label: string; cls: string }[] = [
+  { icon: WriteIcon, label: 'Write LaTeX', cls: 'write' },
+  { icon: EditIcon, label: 'Edit Files', cls: 'edit' },
+  { icon: CompileIcon, label: 'Compile PDF', cls: 'compile' },
+  { icon: FixIcon, label: 'Fix Errors', cls: 'fix' },
 ];
 
 export default function LoginPage() {
@@ -94,7 +95,7 @@ export default function LoginPage() {
         <div className="login-hero__caps">
           {CAPS.map((c) => (
             <span key={c.cls} className={`login-hero__cap login-hero__cap--${c.cls}`}>
-              <span className="login-hero__cap-icon">{c.icon}</span>
+              <c.icon className="login-hero__cap-icon" />
               {c.label}
             </span>
           ))}

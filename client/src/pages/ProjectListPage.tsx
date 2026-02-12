@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Modal, Spinner } from '@/components/common';
 import ChevronIcon from '@/components/common/ChevronIcon';
+import { WriteIcon, EditIcon, CompileIcon, FixIcon } from '@/components/common/Icons';
 import { useProjectStore } from '@/stores/projectStore';
 import { useUiStore } from '@/stores/uiStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -509,7 +510,9 @@ export default function ProjectListPage() {
             aria-haspopup="menu"
             aria-expanded={accountMenuOpen}
           >
-            <span className="projects-nav__avatar">{avatarLetter}</span>
+            <span className="projects-nav__avatar-ring">
+              <span className="projects-nav__avatar">{avatarLetter}</span>
+            </span>
             <span className="projects-nav__identity">
               <span className="projects-nav__name">{username}</span>
               <span className="projects-nav__meta">
@@ -526,6 +529,20 @@ export default function ProjectListPage() {
 
           {accountMenuOpen && (
             <div className="projects-nav__account-menu" role="menu">
+              {/* User card header */}
+              <div className="projects-nav__account-header">
+                <div className="projects-nav__account-header-avatar">
+                  <div className="projects-nav__account-header-avatar-inner">{avatarLetter}</div>
+                </div>
+                <div className="projects-nav__account-header-info">
+                  <div className="projects-nav__account-header-name">{username}</div>
+                  <div className="projects-nav__account-header-role">
+                    <span className="projects-nav__account-header-dot" />
+                    {isAdmin ? 'Admin' : 'Personal'}
+                  </div>
+                </div>
+              </div>
+
               {accountPanelMode === 'menu' ? (
                 <>
                   <button
@@ -702,13 +719,13 @@ export default function ProjectListPage() {
                       Create your first project to start writing LaTeX with AI assistance.
                     </p>
                     <div className="projects-empty__caps">
-                      <span className="projects-empty__cap"><span className="projects-empty__cap-icon projects-empty__cap-icon--write">&#x25C6;</span> Write</span>
+                      <span className="projects-empty__cap"><WriteIcon className="projects-empty__cap-icon projects-empty__cap-icon--write" /> Write</span>
                       <span className="projects-empty__cap-sep">&#xB7;</span>
-                      <span className="projects-empty__cap"><span className="projects-empty__cap-icon projects-empty__cap-icon--edit">&#x270E;</span> Edit</span>
+                      <span className="projects-empty__cap"><EditIcon className="projects-empty__cap-icon projects-empty__cap-icon--edit" /> Edit</span>
                       <span className="projects-empty__cap-sep">&#xB7;</span>
-                      <span className="projects-empty__cap"><span className="projects-empty__cap-icon projects-empty__cap-icon--compile">&#x25B8;</span> Compile</span>
+                      <span className="projects-empty__cap"><CompileIcon className="projects-empty__cap-icon projects-empty__cap-icon--compile" /> Compile</span>
                       <span className="projects-empty__cap-sep">&#xB7;</span>
-                      <span className="projects-empty__cap"><span className="projects-empty__cap-icon projects-empty__cap-icon--fix">&#x2299;</span> Fix</span>
+                      <span className="projects-empty__cap"><FixIcon className="projects-empty__cap-icon projects-empty__cap-icon--fix" /> Fix</span>
                     </div>
                   </>
                 )}

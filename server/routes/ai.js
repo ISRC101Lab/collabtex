@@ -37,6 +37,7 @@ export function registerAiRoutes({ app, dataDir, session }) {
         message,
         history: Array.isArray(history) ? history.slice(-20) : [],
         model: model || undefined,
+        compiler: project.compiler || 'xelatex',
         emit,
       })
     } catch (err) {

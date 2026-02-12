@@ -424,10 +424,32 @@ export default function EditorPage() {
 
             {/* User footer */}
             <div className="editor-page__sidebar-footer">
-              <div className="editor-page__sidebar-avatar">{userInitial}</div>
-              <div className="editor-page__sidebar-user">
-                <div className="editor-page__sidebar-username">{username || 'Guest'}</div>
-                <div className="editor-page__sidebar-project">{currentProject?.name || 'No project'}</div>
+              <div className="editor-page__user-card">
+                <div className="editor-page__user-avatar-ring">
+                  <div className="editor-page__user-avatar">{userInitial}</div>
+                  <span className="editor-page__user-status" />
+                </div>
+                <div className="editor-page__user-info">
+                  <div className="editor-page__user-name">{username || 'Guest'}</div>
+                  <div className="editor-page__user-project">
+                    <svg className="editor-page__user-project-icon" viewBox="0 0 12 12" fill="none">
+                      <rect x="1.5" y="2.5" width="9" height="7" rx="1" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M1.5 4.5H10.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M4 2.5V1.5H8V2.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                    </svg>
+                    <span className="editor-page__user-project-name">{currentProject?.name || 'No project'}</span>
+                  </div>
+                </div>
+                <button
+                  className="editor-page__user-action"
+                  onClick={() => navigate('/')}
+                  title="Back to projects"
+                  type="button"
+                >
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <path d="M6 4L10 8L6 12" />
+                  </svg>
+                </button>
               </div>
             </div>
           </aside>

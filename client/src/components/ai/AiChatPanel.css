@@ -412,6 +412,14 @@
   50% { opacity: 0; }
 }
 
+/* ── SVG icon sizing ──────────────────────── */
+
+.ai-cli__icon-svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
 /* ── Tool calls ────────────────────────────── */
 
 .ai-cli__tool {
@@ -426,6 +434,8 @@
 .ai-cli__tool-icon {
   color: #df9f88;
   flex-shrink: 0;
+  width: 12px;
+  height: 12px;
 }
 
 .ai-cli__tool-name {
@@ -641,6 +651,11 @@
 
 .ai-cli__stop-btn:hover {
   background: rgba(201, 112, 112, 0.15);
+}
+
+.ai-cli__stop-btn .ai-cli__icon-svg {
+  width: 10px;
+  height: 10px;
 }
 
 /* ── Scrollbar ─────────────────────────────── */
