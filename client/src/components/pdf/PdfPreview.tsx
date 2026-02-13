@@ -110,13 +110,15 @@ export default function PdfPreview({
     // Clear container
     container.innerHTML = '';
 
-    const renderPage = async (pageNum: number) => {
+    // Track which pages have been rendered
+    const renderedPages = new Set<number>();
+
+    const renderPage = async (pageNum: number, wrapper: HTMLElement) => {
+      if (renderedPages.has(pageNum)) return;
+      renderedPages.add(pageNum);
+
       const page = await doc.getPage(pageNum);
       const viewport = page.getViewport({ scale });
-
-      const wrapper = document.createElement('div');
-      wrapper.className = 'pdf-preview__page';
-      wrapper.dataset.page = String(pageNum);
 
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(viewport.width * window.devicePixelRatio);
@@ -125,7 +127,6 @@ export default function PdfPreview({
       canvas.style.height = `${viewport.height}px`;
 
       wrapper.appendChild(canvas);
-      container.appendChild(wrapper);
 
       const ctx = canvas.getContext('2d')!;
       ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
@@ -141,10 +142,47 @@ export default function PdfPreview({
       renderTaskRef.current.delete(pageNum);
     };
 
-    // Render all pages
-    for (let i = 1; i <= doc.numPages; i++) {
-      renderPage(i);
-    }
+    // Create placeholders for all pages, render only visible ones
+    const createPlaceholders = async () => {
+      const firstPage = await doc.getPage(1);
+      const baseViewport = firstPage.getViewport({ scale });
+
+      for (let i = 1; i <= doc.numPages; i++) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'pdf-preview__page';
+        wrapper.dataset.page = String(i);
+        wrapper.style.width = `${baseViewport.width}px`;
+        wrapper.style.height = `${baseViewport.height}px`;
+        container.appendChild(wrapper);
+      }
+
+      // Use IntersectionObserver to lazy-render visible pages
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              const pageNum = Number((entry.target as HTMLElement).dataset.page);
+              if (pageNum && !renderedPages.has(pageNum)) {
+                renderPage(pageNum, entry.target as HTMLElement);
+              }
+            }
+          }
+        },
+        { root: containerRef.current, rootMargin: '200px' },
+      );
+
+      const wrappers = container.querySelectorAll('.pdf-preview__page');
+      wrappers.forEach((el) => observer.observe(el));
+
+      return observer;
+    };
+
+    let observer: IntersectionObserver | undefined;
+    createPlaceholders().then((obs) => { observer = obs; });
+
+    return () => {
+      observer?.disconnect();
+    };
   }, [pdfDocRef.current, scale]);
 
   // Compute scale from zoom mode
@@ -168,30 +206,38 @@ export default function PdfPreview({
     });
   }, [pdfDocRef.current, zoomMode, numPages]);
 
-  // Track current page on scroll
+  // Track current page on scroll (rAF throttled)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
+    let rafId = 0;
     const handleScroll = () => {
-      const pages = container.querySelectorAll('.pdf-preview__page');
-      const scrollTop = container.scrollTop + container.clientHeight / 3;
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        const pages = container.querySelectorAll('.pdf-preview__page');
+        const scrollTop = container.scrollTop + container.clientHeight / 3;
 
-      for (let i = pages.length - 1; i >= 0; i--) {
-        const el = pages[i] as HTMLElement;
-        if (el.offsetTop <= scrollTop) {
-          const pageNum = Number(el.dataset.page);
-          if (pageNum && pageNum !== currentPage) {
-            setCurrentPage(pageNum);
-            setPageInput(String(pageNum));
+        for (let i = pages.length - 1; i >= 0; i--) {
+          const el = pages[i] as HTMLElement;
+          if (el.offsetTop <= scrollTop) {
+            const pageNum = Number(el.dataset.page);
+            if (pageNum && pageNum !== currentPage) {
+              setCurrentPage(pageNum);
+              setPageInput(String(pageNum));
+            }
+            break;
           }
-          break;
         }
-      }
+      });
     };
 
     container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (rafId) cancelAnimationFrame(rafId);
+    };
   }, [currentPage]);
 
   // Navigation

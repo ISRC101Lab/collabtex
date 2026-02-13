@@ -22,7 +22,7 @@
   background: #1c1b19;
   overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13px;
   color: #e2ded6;
 }
 
@@ -32,10 +32,10 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 10px 14px;
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 10px;
 }
 
 /* ══════════════════════════════════════════════
@@ -48,7 +48,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
+  padding: 32px 24px;
   gap: 0;
   min-height: 0;
   user-select: none;
@@ -58,7 +58,7 @@
 
 .ai-welcome__brand {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 36px;
 }
 
 .ai-welcome__ascii {
@@ -73,17 +73,10 @@
     #c09553 40%,
     #7db87d 100%
   );
-  background-size: 200% 200%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  animation: welcome-gradient 6s ease-in-out infinite;
   white-space: pre;
-}
-
-@keyframes welcome-gradient {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
 }
 
 .ai-welcome__tagline {
@@ -230,7 +223,7 @@
 .ai-cli__prompt-line {
   display: flex;
   gap: 0;
-  padding: 4px 0;
+  padding: 8px 0;
   min-height: 0;
 }
 
@@ -253,7 +246,7 @@
 /* ── AI response block ─────────────────────── */
 
 .ai-cli__response {
-  padding: 2px 0 8px 18px;
+  padding: 6px 0 14px 20px;
   border-left: 2px solid transparent;
 }
 
@@ -266,6 +259,7 @@
   white-space: normal;
   word-break: break-word;
   line-height: 1.55;
+  overflow: hidden;
 }
 
 /* Markdown inside response */
@@ -286,9 +280,9 @@
   line-height: 1.3;
 }
 
-.ai-cli__response-text h1 { font-size: 13.5px; }
-.ai-cli__response-text h2 { font-size: 13px; }
-.ai-cli__response-text h3 { font-size: 12.5px; }
+.ai-cli__response-text h1 { font-size: 15px; }
+.ai-cli__response-text h2 { font-size: 14px; }
+.ai-cli__response-text h3 { font-size: 13.5px; }
 
 .ai-cli__response-text ul,
 .ai-cli__response-text ol {
@@ -319,8 +313,8 @@
 }
 
 .ai-cli__response-text pre {
-  margin: 4px 0;
-  padding: 6px 8px;
+  margin: 8px 0;
+  padding: 10px 12px;
   background: #141310;
   border: 1px solid #2e2b26;
   border-radius: 6px;
@@ -595,7 +589,7 @@
   display: flex;
   align-items: center;
   gap: 0;
-  padding: 8px 14px;
+  padding: 14px 18px;
   border-top: 1px solid #2e2b26;
   flex-shrink: 0;
   background: #17160f;
@@ -618,7 +612,7 @@
   border: none;
   color: #e2ded6;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 13.5px;
   outline: none;
   padding: 4px 0;
   line-height: 1.4;

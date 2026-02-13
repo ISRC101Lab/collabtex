@@ -2,6 +2,8 @@ import { requireAuth } from '../lib/session.js'
 import { loadProjects, saveProjects, createProject, canAccess, addCollaborator, removeCollaborator, listTree } from '../lib/projects.js'
 import { projectDir } from '../lib/paths.js'
 import { getProjectListPreferences, updateProjectListPreferences } from '../lib/project-preferences.js'
+import fs from 'node:fs'
+import path from 'node:path'
 
 function applyScope(projects, username, isAdmin, scope) {
   if (scope === 'owned') {
@@ -86,7 +88,12 @@ export function registerProjectRoutes({ app, dataDir, session }) {
     }
     const dir = projectDir(dataDir, project.id)
     const tree = await listTree(dir).catch(() => [])
-    res.json({ tree, mainFile: project.mainFile, compiler: project.compiler })
+    const mainFile = project.mainFile || 'main.tex'
+    const pdfName = mainFile.replace(/\.tex$/, '.pdf')
+    const pdfPath = path.join(dir, 'build', pdfName)
+    let pdfExists = false
+    try { await fs.promises.access(pdfPath); pdfExists = true } catch { /* no pdf yet */ }
+    res.json({ tree, mainFile: project.mainFile, compiler: project.compiler, pdfExists })
   })
 
   // Delete project
@@ -103,13 +110,13 @@ export function registerProjectRoutes({ app, dataDir, session }) {
     res.json({ ok: true })
   })
 
-  // Update project metadata
+  // Update project metadata (owner only)
   app.post('/api/projects/:id/meta', auth, async (req, res) => {
     const db = await loadProjects(dataDir)
     const project = db.projects.find(p => p.id === req.params.id)
     if (!project) return res.status(404).json({ error: 'not found' })
-    if (!canAccess(project, req.user.username) && !req.user.isAdmin) {
-      return res.status(403).json({ error: 'forbidden' })
+    if (project.owner !== req.user.username && !req.user.isAdmin) {
+      return res.status(403).json({ error: 'only owner can modify project settings' })
     }
     const { name, compiler, mainFile } = req.body || {}
     if (name) project.name = name

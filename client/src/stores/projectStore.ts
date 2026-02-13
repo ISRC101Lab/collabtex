@@ -37,7 +37,7 @@ let latestListRequestId = 0;
 
 function safeSessionKey(): string {
   try {
-    return localStorage.getItem('token') ?? 'anon';
+    return sessionStorage.getItem('token') ?? 'anon';
   } catch {
     return 'anon';
   }

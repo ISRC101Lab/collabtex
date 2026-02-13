@@ -5,6 +5,24 @@ import { spawn } from 'node:child_process'
 import { projectDir, ensureDir } from './paths.js'
 import { listTree } from './projects.js'
 
+// ── File tree TTL cache ─────────────────────────────────────────────
+const _fileTreeCache = new Map() // dir -> { tree, expires }
+const FILE_TREE_TTL = 30_000
+
+async function getCachedFileTree(dir) {
+  const cached = _fileTreeCache.get(dir)
+  if (cached && cached.expires > Date.now()) {
+    return cached.tree
+  }
+  const tree = await listTree(dir)
+  _fileTreeCache.set(dir, { tree, expires: Date.now() + FILE_TREE_TTL })
+  return tree
+}
+
+function invalidateFileTreeCache(dir) {
+  _fileTreeCache.delete(dir)
+}
+
 // ── Config ──────────────────────────────────────────────────────────
 
 const AI_BASE_URL = process.env.AI_BASE_URL || 'https://llmapi.blsc.cn/v1'
@@ -114,7 +132,7 @@ const TOOLS = [
           compiler: {
             type: 'string',
             enum: ['pdflatex', 'xelatex', 'lualatex', 'latexmk'],
-            description: 'LaTeX compiler to use. Default: xelatex. Use xelatex for Chinese/Unicode content.',
+            description: 'LaTeX compiler to use. If omitted, the user\'s currently selected compiler will be used automatically. Only specify if the user explicitly asks for a different compiler.',
           },
           main_file: {
             type: 'string',
@@ -129,7 +147,7 @@ const TOOLS = [
 
 // ── System prompt ───────────────────────────────────────────────────
 
-function buildSystemPrompt(projectName, fileList, compiler) {
+function buildSystemPrompt(projectName, fileList, compiler, isOwner) {
   const filesSection = fileList && fileList.length > 0
     ? `\n## Current Project Files\n\n${fileList.map(f => `- ${f}`).join('\n')}\n`
     : ''
@@ -165,55 +183,83 @@ The user has selected **latexmk** as their compiler (auto-detection mode).
 - If the document is English-only, do NOT introduce CJK characters.`
   }
 
-  return `You are Aitex AI — an expert LaTeX writing assistant embedded in a collaborative LaTeX editor called Aitex.
+  const role = isOwner ? 'owner' : 'collaborator'
+  const permissionSection = isOwner
+    ? `## Your Permissions (Owner)
 
-Project: "${projectName}"
-Compiler: ${compiler || 'xelatex'}
-${filesSection}${compilerHint}
-## Your Capabilities
-
-You have access to these tools to directly operate on the project:
+You have **full access** to all project operations:
 - **list_files** — See all files in the project
 - **read_file(path)** — Read a file's content
-- **write_file(path, content)** — Create or fully rewrite a file
+- **write_file(path, content)** — Create new files or fully rewrite existing files
 - **edit_file(path, old_text, new_text)** — Targeted find-and-replace edit
 - **delete_file(path)** — Delete a file
 - **rename_file(from, to)** — Rename or move a file
-- **compile_project(compiler, main_file)** — Compile LaTeX to PDF
+- **compile_project(compiler, main_file)** — Compile LaTeX to PDF`
+    : `## Your Permissions (Collaborator)
+
+You are assisting a **collaborator** (not the project owner). Your permissions are **limited**:
+- **list_files** — See all files in the project ✅
+- **read_file(path)** — Read a file's content ✅
+- **edit_file(path, old_text, new_text)** — Edit existing files ✅
+- **write_file(path, content)** — **Only rewrite existing files** ✅ (creating new files is BLOCKED)
+- **compile_project(compiler, main_file)** — Compile LaTeX to PDF ✅
+- **delete_file(path)** — ❌ **NOT ALLOWED** (owner only)
+- **rename_file(from, to)** — ❌ **NOT ALLOWED** (owner only)
+
+**IMPORTANT:** Do NOT attempt to create new files, delete files, or rename files. These operations will fail. If the task requires creating or deleting files, tell the user to ask the project owner to do it, or to perform the operation themselves in the file tree.
+When using write_file, only use it on files that already exist — never to create a new file path.`
+
+  return `You are Aitex AI — an expert LaTeX writing assistant embedded in a collaborative LaTeX editor called Aitex.
+
+Project: "${projectName}"
+User role: ${role}
+Compiler: ${compiler || 'pdflatex'}
+${filesSection}${compilerHint}
+${permissionSection}
+
+## CRITICAL: Always Use Tools — Never Just Show Code
+
+**ABSOLUTE RULE:** When the user asks you to write, edit, fix, add, translate, or modify ANY content, you MUST use the tools (write_file, edit_file, etc.) to apply the changes directly. NEVER just display code/LaTeX in your response and ask the user to copy it. Your response text should only contain brief explanations of what you did — the actual work must be done through tool calls.
+
+❌ WRONG: "Here is the updated content: \`\`\`latex ... \`\`\`"
+✅ RIGHT: Call edit_file or write_file to apply the change, then say "I've updated sections/intro.tex with the new paragraph."
+
+If you catch yourself about to write a code block containing a proposed change, STOP — use a tool instead.
 
 ## Core Principles
 
-1. **Explore before acting.** When you receive a task, first understand the project: check the file list above, then read_file on the key files (especially main.tex) to understand the structure, packages, and conventions. Never make blind changes.
+1. **Read first, then act immediately.** When you receive a task, read_file on the relevant files to understand the current content. Then immediately use edit_file or write_file to make the changes. Do this in a single response — do not split into "let me read" and "now let me edit" across multiple turns.
 
-2. **Act, don't just describe.** When the user asks you to do something (translate, fix, add content, restructure), USE THE TOOLS to make the changes directly. Do not just show code snippets — apply them.
+2. **edit_file for small changes, write_file for large changes.** Use edit_file when changing a few lines. If edit_file fails (old_text not found), immediately retry with write_file to rewrite the entire file — do NOT give up and describe the change in text.
 
-3. **Always read before editing.** Before modifying any file, read it first with read_file so you know the exact current content. The edit_file tool requires exact string matching.
+3. **Always read before editing.** Before modifying any file, read it first with read_file so you know the exact current content. The edit_file tool requires EXACT string matching — copy the old_text character-for-character from the read_file output.
 
-4. **Prefer edit_file over write_file.** For modifications, use edit_file with precise old_text/new_text. Only use write_file when creating new files or when changes are so extensive that rewriting is simpler.
+4. **Compile with the user's compiler.** When compiling, do NOT specify the compiler parameter — it will automatically use the user's selected compiler (**${compiler || 'pdflatex'}**). Only override if the user explicitly asks you to use a different compiler.
 
-5. **Compile proactively.** After making changes that affect the PDF output, compile the project automatically using compile_project. Always use the compiler that matches the project setting: ${compiler || 'xelatex'}.
+5. **Handle multi-step tasks autonomously.** If a task requires multiple operations (e.g., "translate this file to Chinese"), break it down and execute all steps in one go: read the file, edit/rewrite it, then compile. Don't stop halfway.
 
-6. **Handle multi-step tasks autonomously.** If a task requires multiple operations (e.g., "translate this file to Chinese"), break it down and execute all steps: read the file, edit/rewrite it, then compile. Don't stop halfway.
+6. **Self-recover from errors.** If edit_file returns "old_text not found", do NOT describe the change in text. Instead: re-read the file with read_file, then retry with corrected old_text, or use write_file to rewrite the whole file.
 
 ## Common Task Patterns
 
-**Translation:** Read the file → rewrite with translated content (preserving all LaTeX commands, \\cite{}, \\ref{}, \\label{}, environments) → compile with the appropriate compiler.
+**Translation:** Read the file → rewrite with write_file using translated content (preserving all LaTeX commands, \\cite{}, \\ref{}, \\label{}, environments) → compile.
 
 **Adding content:** Read the target file → use edit_file to insert new content at the right location → compile.
 
 **Fixing errors:** Read the file → identify the issue → use edit_file to fix → compile to verify.
 
-**Restructuring:** List files to understand project structure → read relevant files → create/edit/delete as needed → compile.
+**Restructuring (owner only):** List files to understand project structure → read relevant files → create/edit/delete as needed → compile. If you are a collaborator, only edit existing files and suggest structural changes to the owner.
 
-**Creating new sections/chapters:** Read main file to understand structure → create new .tex file if needed → add \\input{} or \\include{} to main file → compile.
+**Creating new sections/chapters (owner only):** Read main file to understand structure → create new .tex file if needed → add \\input{} or \\include{} to main file → compile. If you are a collaborator, suggest the new file structure to the owner instead of creating files.
 
 ## Important Rules
 
-- When the user provides file content via @filename context blocks, use that content directly — no need to read_file again.
+- When the user provides file content via @filename context blocks, use that content directly — no need to read_file again. But STILL use tools to apply changes.
 - Respond in the same language the user writes in.
 - Be concise in explanations. Focus on what you changed and why.
 - If compilation fails, read the log, diagnose the error, fix it, and recompile.
-- For large files, you may need multiple edit_file calls. That's fine — be thorough.`
+- For large files, prefer write_file to rewrite the whole file rather than many fragile edit_file calls.
+- NEVER output LaTeX source code in your response as a substitute for using tools. The user cannot copy-paste from the chat — you must apply changes directly.`
 }
 
 // ── Path safety ─────────────────────────────────────────────────────
@@ -228,12 +274,13 @@ function safePath(p) {
 
 // ── Tool execution ──────────────────────────────────────────────────
 
-async function executeTool(name, args, dir) {
+async function executeTool(name, args, dir, userCompiler, isOwner = true) {
   const fileChanges = []
 
   switch (name) {
     case 'list_files': {
       const tree = await listTree(dir)
+      _fileTreeCache.set(dir, { tree, expires: Date.now() + FILE_TREE_TTL })
       return { result: JSON.stringify(tree), fileChanges }
     }
 
@@ -255,6 +302,10 @@ async function executeTool(name, args, dir) {
       // Read old content for diff
       let oldContent = null
       try { oldContent = await fs.readFile(full, 'utf8') } catch { /* new file */ }
+      // Collaborators can only edit existing files, not create new ones
+      if (oldContent === null && !isOwner) {
+        return { result: 'Error: only the project owner can create new files', fileChanges }
+      }
       await fs.mkdir(path.dirname(full), { recursive: true })
       await fs.writeFile(full, args.content, 'utf8')
       fileChanges.push({
@@ -263,6 +314,7 @@ async function executeTool(name, args, dir) {
         oldContent,
         newContent: args.content,
       })
+      invalidateFileTreeCache(dir)
       return { result: `File "${sp}" written successfully.`, fileChanges }
     }
 
@@ -273,7 +325,7 @@ async function executeTool(name, args, dir) {
       try {
         const oldContent = await fs.readFile(full, 'utf8')
         if (!oldContent.includes(args.old_text)) {
-          return { result: `Error: old_text not found in "${sp}"`, fileChanges }
+          return { result: `Error: old_text not found in "${sp}". The exact text you specified does not exist in the file. Please re-read the file with read_file to see its current content, then either retry edit_file with the correct old_text, or use write_file to rewrite the entire file.`, fileChanges }
         }
         const newContent = oldContent.replace(args.old_text, args.new_text)
         await fs.writeFile(full, newContent, 'utf8')
@@ -283,6 +335,7 @@ async function executeTool(name, args, dir) {
           oldContent,
           newContent,
         })
+        invalidateFileTreeCache(dir)
         return { result: `File "${sp}" edited successfully.`, fileChanges }
       } catch {
         return { result: `Error: file "${sp}" not found`, fileChanges }
@@ -290,12 +343,14 @@ async function executeTool(name, args, dir) {
     }
 
     case 'delete_file': {
+      if (!isOwner) return { result: 'Error: only the project owner can delete files', fileChanges }
       const sp = safePath(args.path)
       if (!sp) return { result: 'Error: invalid path', fileChanges }
       try {
         const oldContent = await fs.readFile(path.join(dir, sp), 'utf8')
         await fs.unlink(path.join(dir, sp))
         fileChanges.push({ action: 'delete', path: sp, oldContent, newContent: null })
+        invalidateFileTreeCache(dir)
         return { result: `File "${sp}" deleted.`, fileChanges }
       } catch {
         return { result: `Error: file "${sp}" not found`, fileChanges }
@@ -303,6 +358,7 @@ async function executeTool(name, args, dir) {
     }
 
     case 'rename_file': {
+      if (!isOwner) return { result: 'Error: only the project owner can rename/move files', fileChanges }
       const from = safePath(args.from)
       const to = safePath(args.to)
       if (!from || !to) return { result: 'Error: invalid path', fileChanges }
@@ -312,6 +368,7 @@ async function executeTool(name, args, dir) {
         await fs.mkdir(path.dirname(destFull), { recursive: true })
         await fs.rename(path.join(dir, from), destFull)
         fileChanges.push({ action: 'rename', path: to, oldPath: from, oldContent, newContent: oldContent })
+        invalidateFileTreeCache(dir)
         return { result: `Renamed "${from}" → "${to}".`, fileChanges }
       } catch {
         return { result: `Error: file "${from}" not found`, fileChanges }
@@ -319,7 +376,7 @@ async function executeTool(name, args, dir) {
     }
 
     case 'compile_project': {
-      const compiler = args.compiler || 'xelatex'
+      const compiler = args.compiler || userCompiler || 'pdflatex'
       const mainFile = args.main_file || 'main.tex'
       const allowed = ['pdflatex', 'xelatex', 'lualatex', 'latexmk']
       if (!allowed.includes(compiler)) {
@@ -382,8 +439,8 @@ async function callLLM(messages, useTools = true) {
   const body = {
     model: AI_MODEL,
     messages,
-    temperature: 0.7,
-    max_tokens: 8192,
+    temperature: 0.3,
+    max_tokens: 16384,
   }
   if (useTools) {
     body.tools = TOOLS
@@ -413,8 +470,8 @@ async function callLLMStream(messages, model, useTools = true) {
   const body = {
     model: model || AI_MODEL,
     messages,
-    temperature: 0.7,
-    max_tokens: 4096,
+    temperature: 0.3,
+    max_tokens: 16384,
     stream: true,
   }
   if (useTools) {
@@ -507,20 +564,20 @@ async function consumeStream(stream, onContentDelta) {
 
 // ── Agent loop ──────────────────────────────────────────────────────
 
-const MAX_TOOL_ROUNDS = 8
+const MAX_TOOL_ROUNDS = 12
 
-export async function runAgent({ dataDir, projectId, projectName, message, history, compiler }) {
+export async function runAgent({ dataDir, projectId, projectName, message, history, compiler, isOwner }) {
   const dir = projectDir(dataDir, projectId)
   const allFileChanges = []
   const toolCalls = []
 
   // Auto-fetch file list for context injection
   let fileList = []
-  try { fileList = await listTree(dir) } catch { /* ignore */ }
+  try { fileList = await getCachedFileTree(dir) } catch { /* ignore */ }
 
   // Build messages
   const messages = [
-    { role: 'system', content: buildSystemPrompt(projectName, fileList, compiler) },
+    { role: 'system', content: buildSystemPrompt(projectName, fileList, compiler, isOwner) },
     ...history,
     { role: 'user', content: message },
   ]
@@ -551,7 +608,7 @@ export async function runAgent({ dataDir, projectId, projectName, message, histo
           : tc.function.arguments || {}
       } catch { /* parse error — empty args */ }
 
-      const { result, fileChanges } = await executeTool(tc.function.name, args, dir)
+      const { result, fileChanges } = await executeTool(tc.function.name, args, dir, compiler, isOwner)
       allFileChanges.push(...fileChanges)
       toolCalls.push({ name: tc.function.name, args, result: result.slice(0, 200) })
 
@@ -574,17 +631,17 @@ export async function runAgent({ dataDir, projectId, projectName, message, histo
 // ── Streaming agent loop ────────────────────────────────────────────
 // emit(event, data) sends SSE events to the client
 
-export async function runAgentStream({ dataDir, projectId, projectName, message, history, model, compiler, emit }) {
+export async function runAgentStream({ dataDir, projectId, projectName, message, history, model, compiler, isOwner, emit }) {
   const dir = projectDir(dataDir, projectId)
   const chosenModel = (model && AVAILABLE_MODELS.includes(model)) ? model : AI_MODEL
   const isThinkingModel = chosenModel.includes('Thinking')
 
   // Auto-fetch file list for context injection
   let fileList = []
-  try { fileList = await listTree(dir) } catch { /* ignore */ }
+  try { fileList = await getCachedFileTree(dir) } catch { /* ignore */ }
 
   const messages = [
-    { role: 'system', content: buildSystemPrompt(projectName, fileList, compiler) },
+    { role: 'system', content: buildSystemPrompt(projectName, fileList, compiler, isOwner) },
     ...history,
     { role: 'user', content: message },
   ]
@@ -665,7 +722,7 @@ export async function runAgentStream({ dataDir, projectId, projectName, message,
 
       emit('tool_call', { name: tc.function.name, args })
 
-      const { result, fileChanges } = await executeTool(tc.function.name, args, dir)
+      const { result, fileChanges } = await executeTool(tc.function.name, args, dir, compiler, isOwner)
 
       emit('tool_result', {
         name: tc.function.name,

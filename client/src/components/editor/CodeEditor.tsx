@@ -17,6 +17,9 @@ import { linter, type Diagnostic } from '@codemirror/lint';
 import { logEntriesToDiagnostics } from '@/lib/compile-diagnostics';
 import { parseLatexLog } from '@/lib/parse-latex-log';
 import { useUiStore } from '@/stores/uiStore';
+import { yCollab } from 'y-codemirror.next';
+import type * as Y from 'yjs';
+import type { Awareness } from 'y-protocols/awareness';
 import './CodeEditor.css';
 
 interface CodeEditorProps {
@@ -27,6 +30,9 @@ interface CodeEditorProps {
   bibKeys?: string[];
   compileLog?: string;
   activeFile?: string;
+  ydoc?: Y.Doc | null;
+  awareness?: Awareness | null;
+  yConnected?: boolean;
 }
 
 export interface CodeEditorHandle {
@@ -34,12 +40,14 @@ export interface CodeEditorHandle {
   jumpToLine: (line: number) => void;
 }
 
-const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onChange, language, labels, bibKeys, compileLog, activeFile }, ref) => {
+const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onChange, language, labels, bibKeys, compileLog, activeFile, ydoc, awareness, yConnected }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   const projectDataRef = useRef({ labels: labels ?? [], bibKeys: bibKeys ?? [] });
   const compileLogRef = useRef(compileLog ?? '');
+  const isInternalChange = useRef(false);
+  const cachedLintRef = useRef<{ log: string; diagnostics: Diagnostic[] }>({ log: '', diagnostics: [] });
 
   useImperativeHandle(ref, () => ({
     insertText(text: string) {
@@ -76,6 +84,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
     compileLogRef.current = compileLog ?? '';
   }, [compileLog]);
 
+  // Determine if Y.js mode is active
+  const useYjs = !!(ydoc && awareness && yConnected);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -85,23 +96,54 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
     const extensions = [
       basicSetup,
       EditorView.lineWrapping,
-      EditorView.updateListener.of((update) => {
-        if (update.docChanged) {
-          onChangeRef.current(update.state.doc.toString());
-        }
-        if (update.selectionSet || update.docChanged) {
-          const pos = update.state.selection.main.head;
-          const line = update.state.doc.lineAt(pos);
-          const col = pos - line.from + 1;
-          useUiStore.getState().setCursor(line.number, col);
-          if (update.docChanged) {
-            const text = update.state.doc.toString();
-            const wc = text.trim() ? text.trim().split(/\s+/).length : 0;
-            useUiStore.getState().setWordCount(wc);
-          }
-        }
-      }),
     ];
+
+    if (useYjs) {
+      // Y.js collaborative mode — yCollab handles sync + remote cursors
+      const ytext = ydoc!.getText('content');
+      extensions.push(yCollab(ytext, awareness!));
+
+      // Still track cursor position and word count for the status bar
+      extensions.push(
+        EditorView.updateListener.of((update) => {
+          if (update.selectionSet || update.docChanged) {
+            const pos = update.state.selection.main.head;
+            const line = update.state.doc.lineAt(pos);
+            const col = pos - line.from + 1;
+            useUiStore.getState().setCursor(line.number, col);
+            if (update.docChanged) {
+              const text = update.state.doc.toString();
+              const wc = text.trim() ? text.trim().split(/\s+/).length : 0;
+              useUiStore.getState().setWordCount(wc);
+              // Notify onChange for dirty tracking
+              isInternalChange.current = true;
+              onChangeRef.current(text);
+            }
+          }
+        }),
+      );
+    } else {
+      // Plain text mode (fallback when Y.js not available)
+      extensions.push(
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            isInternalChange.current = true;
+            onChangeRef.current(update.state.doc.toString());
+          }
+          if (update.selectionSet || update.docChanged) {
+            const pos = update.state.selection.main.head;
+            const line = update.state.doc.lineAt(pos);
+            const col = pos - line.from + 1;
+            useUiStore.getState().setCursor(line.number, col);
+            if (update.docChanged) {
+              const text = update.state.doc.toString();
+              const wc = text.trim() ? text.trim().split(/\s+/).length : 0;
+              useUiStore.getState().setWordCount(wc);
+            }
+          }
+        }),
+      );
+    }
 
     if (isTex) {
       extensions.push(StreamLanguage.define(stex));
@@ -129,17 +171,24 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
         linter((view) => {
           const log = compileLogRef.current;
           if (!log) return [];
-          return logEntriesToDiagnostics(
+          const cached = cachedLintRef.current;
+          if (cached.log === log) return cached.diagnostics;
+          const diagnostics = logEntriesToDiagnostics(
             parseLatexLog(log),
             view,
             activeFile,
           );
+          cachedLintRef.current = { log, diagnostics };
+          return diagnostics;
         }),
       );
     }
 
+    // In Y.js mode, use ytext content; otherwise use content prop
+    const docContent = useYjs ? ydoc!.getText('content').toString() : content;
+
     const state = EditorState.create({
-      doc: content,
+      doc: docContent,
       extensions,
     });
 
@@ -155,7 +204,24 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({ content, onC
       viewRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, language]);
+  }, [language, useYjs]);
+
+  // Sync external content changes without recreating the editor
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || useYjs) return;
+    // Skip if this content update was triggered by our own onChange
+    if (isInternalChange.current) {
+      isInternalChange.current = false;
+      return;
+    }
+    const current = view.state.doc.toString();
+    if (current !== content) {
+      view.dispatch({
+        changes: { from: 0, to: current.length, insert: content },
+      });
+    }
+  }, [content, useYjs]);
 
   return <div className="code-editor" ref={containerRef} />;
 });

@@ -25,13 +25,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
+  padding: 18px 20px;
   border-bottom: 1px solid #ddd8ce;
 }
 
 .collab-manager__title {
   margin: 0;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 650;
   color: #2e2c28;
 }

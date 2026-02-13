@@ -28,15 +28,17 @@ export function verifyToken(secret, token) {
 }
 
 export function getTokenFromReq(req, session) {
-  // Cookie
-  const cookies = parseCookies(req.headers.cookie)
-  let token = cookies[session.cookieName]
-  // Bearer header
-  if (!token) {
-    const auth = req.headers.authorization || ''
-    if (auth.toLowerCase().startsWith('bearer ')) token = auth.slice(7).trim()
+  // Prefer Authorization header (per-tab isolated via sessionStorage)
+  const auth = req.headers.authorization || ''
+  if (auth.toLowerCase().startsWith('bearer ')) {
+    const token = auth.slice(7).trim()
+    if (token) return token
   }
-  return token || ''
+  // Query parameter ?token= for direct browser requests (PDF, download)
+  if (req.query?.token) return req.query.token
+  // Fall back to cookie for legacy requests
+  const cookies = parseCookies(req.headers.cookie)
+  return cookies[session.cookieName] || ''
 }
 
 export function getSessionFromReq(req, session) {

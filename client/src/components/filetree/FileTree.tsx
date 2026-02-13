@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import './FileTree.css';
 
 interface FileTreeProps {
@@ -64,12 +64,21 @@ function shouldHide(name: string, path: string): boolean {
 
 function buildTree(paths: string[]): TreeNode[] {
   const root: TreeNode[] = [];
+  const childMaps = new Map<TreeNode[], Map<string, TreeNode>>();
+  function getChildMap(children: TreeNode[]) {
+    let map = childMaps.get(children);
+    if (!map) {
+      map = new Map();
+      childMaps.set(children, map);
+    }
+    return map;
+  }
+
   for (const raw of paths) {
     const isExplicitDir = raw.endsWith('/');
     const p = isExplicitDir ? raw.slice(0, -1) : raw;
     if (!p) continue;
 
-    // Filter out build artifacts and hidden files
     const fileName = p.split('/').pop() || '';
     if (shouldHide(fileName, p)) continue;
 
@@ -81,14 +90,16 @@ function buildTree(paths: string[]): TreeNode[] {
       const part = parts[i];
       if (!part) continue;
       accumulated = accumulated ? `${accumulated}/${part}` : part;
-      // Skip if any parent directory is hidden
       if (shouldHide(part, accumulated)) { skip = true; break; }
       const isLast = i === parts.length - 1;
       const isDir = !isLast || isExplicitDir;
-      let node = current.find((n) => n.name === part && n.isDir === isDir);
+      const key = `${part}:${isDir ? 'd' : 'f'}`;
+      const map = getChildMap(current);
+      let node = map.get(key);
       if (!node) {
         node = { name: part, path: accumulated, children: [], isDir };
         current.push(node);
+        map.set(key, node);
       }
       current = node.children;
     }
@@ -98,12 +109,14 @@ function buildTree(paths: string[]): TreeNode[] {
 }
 
 function sortTree(nodes: TreeNode[]): TreeNode[] {
-  return nodes
-    .map((n) => ({ ...n, children: sortTree(n.children) }))
-    .sort((a, b) => {
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
+  for (const n of nodes) {
+    sortTree(n.children);
+  }
+  nodes.sort((a, b) => {
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return nodes;
 }
 
 function fileTypeClass(name: string): string {
@@ -170,7 +183,7 @@ function ChevronDown() {
 
 /* ── TreeItem ──────────────────────────────────────────────────── */
 
-function TreeItem({
+const TreeItem = React.memo(function TreeItem({
   node,
   activeFile,
   onSelect,
@@ -303,7 +316,7 @@ function TreeItem({
         ))}
     </>
   );
-}
+});
 
 /* ── FileTree (main) ───────────────────────────────────────────── */
 
@@ -319,6 +332,7 @@ export default function FileTree({
   onRenameFile,
   onMoveFile,
   onUpload,
+  onShare,
 }: FileTreeProps) {
   const tree = useMemo(() => buildTree(files), [files]);
   const [showNew, setShowNew] = useState<false | 'file' | 'folder'>(false);
@@ -416,6 +430,16 @@ export default function FileTree({
       <div className="ft-toolbar">
         <span className="ft-toolbar__label">Files</span>
         <div className="ft-toolbar__actions">
+          {onShare && (
+            <button className="ft-toolbar__btn" onClick={onShare} title="Share project">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="3" r="2" />
+                <circle cx="12" cy="13" r="2" />
+                <circle cx="4" cy="8" r="2" />
+                <path d="M5.8 6.9L10.2 4.1M5.8 9.1L10.2 11.9" />
+              </svg>
+            </button>
+          )}
           {downloadUrl && (
             <a className="ft-toolbar__btn" href={downloadUrl} title="Download ZIP">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

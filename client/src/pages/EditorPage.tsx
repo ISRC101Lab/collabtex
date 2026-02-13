@@ -11,10 +11,12 @@ import ResizeHandle from '@/components/layout/ResizeHandle';
 import ConversationList from '@/components/ai/ConversationList';
 import { extractBibKeys, extractLabels } from '@/lib/tex-labels';
 import { useAuthStore } from '@/stores/authStore';
+import { useCollabStore } from '@/stores/collabStore';
 import { useConversationStore } from '@/stores/conversationStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useUiStore } from '@/stores/uiStore';
+import { useShallow } from 'zustand/react/shallow';
 import './EditorPage.css';
 
 const CodeEditor = lazy(() => import('@/components/editor/CodeEditor'));
@@ -39,36 +41,65 @@ type SidebarTab = 'chat' | 'cowork';
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const ensureCurrentProject = useProjectStore((s) => s.ensureCurrentProject);
-  const fetchTree = useEditorStore((s) => s.fetchTree);
-  const fileTree = useEditorStore((s) => s.fileTree);
-  const openFile = useEditorStore((s) => s.openFile);
-  const openFiles = useEditorStore((s) => s.openFiles);
-  const activeFile = useEditorStore((s) => s.activeFile);
-  const saveFile = useEditorStore((s) => s.saveFile);
-  const createFile = useEditorStore((s) => s.createFile);
-  const createFolder = useEditorStore((s) => s.createFolder);
-  const deleteFileAction = useEditorStore((s) => s.deleteFile);
-  const renameFileAction = useEditorStore((s) => s.renameFile);
-  const markDirty = useEditorStore((s) => s.markDirty);
+  const { ensureCurrentProject, currentProject } = useProjectStore(
+    useShallow((s) => ({
+      ensureCurrentProject: s.ensureCurrentProject,
+      currentProject: s.currentProject,
+    })),
+  );
+  const {
+    fetchTree, fileTree, cachedPdfExists, openFile, openFiles, activeFile,
+    saveFile, createFile, createFolder,
+    deleteFile: deleteFileAction, renameFile: renameFileAction, markDirty,
+  } = useEditorStore(
+    useShallow((s) => ({
+      fetchTree: s.fetchTree,
+      fileTree: s.fileTree,
+      cachedPdfExists: s.cachedPdfExists,
+      openFile: s.openFile,
+      openFiles: s.openFiles,
+      activeFile: s.activeFile,
+      saveFile: s.saveFile,
+      createFile: s.createFile,
+      createFolder: s.createFolder,
+      deleteFile: s.deleteFile,
+      renameFile: s.renameFile,
+      markDirty: s.markDirty,
+    })),
+  );
   const user = useAuthStore((s) => s.user);
   const username = user?.username;
-  const currentProject = useProjectStore((s) => s.currentProject);
   const isOwner = !!(username && currentProject && currentProject.owner === username);
-  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
-  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
-  const inspectorView = useUiStore((s) => s.inspectorView);
-  const setInspectorView = useUiStore((s) => s.setInspectorView);
-  const inspectorOpen = useUiStore((s) => s.inspectorOpen);
-  const compileStatus = useUiStore((s) => s.compileStatus);
-  const setCompileStatus = useUiStore((s) => s.setCompileStatus);
-  const compiler = useUiStore((s) => s.compiler);
-  const addToast = useUiStore((s) => s.addToast);
-  const collabManagerOpen = useUiStore((s) => s.collabManagerOpen);
-  const toggleCollabManager = useUiStore((s) => s.toggleCollabManager);
-  const panelWidths = useUiStore((s) => s.panelWidths);
-  const setPanelWidth = useUiStore((s) => s.setPanelWidth);
+  const {
+    sidebarOpen, toggleSidebar, inspectorView, setInspectorView,
+    inspectorOpen, compileStatus, setCompileStatus, compiler, addToast,
+    collabManagerOpen, toggleCollabManager, panelWidths, setPanelWidth,
+  } = useUiStore(
+    useShallow((s) => ({
+      sidebarOpen: s.sidebarOpen,
+      toggleSidebar: s.toggleSidebar,
+      inspectorView: s.inspectorView,
+      setInspectorView: s.setInspectorView,
+      inspectorOpen: s.inspectorOpen,
+      compileStatus: s.compileStatus,
+      setCompileStatus: s.setCompileStatus,
+      compiler: s.compiler,
+      addToast: s.addToast,
+      collabManagerOpen: s.collabManagerOpen,
+      toggleCollabManager: s.toggleCollabManager,
+      panelWidths: s.panelWidths,
+      setPanelWidth: s.setPanelWidth,
+    })),
+  );
   const initConversationProject = useConversationStore((s) => s.initProject);
+  const { onlineUsers, connectionStatus, ydoc: collabYdoc, provider: collabProvider } = useCollabStore(
+    useShallow((s) => ({
+      onlineUsers: s.onlineUsers,
+      connectionStatus: s.connectionStatus,
+      ydoc: s.ydoc,
+      provider: s.provider,
+    })),
+  );
 
   const contentRef = useRef<string>('');
   const editorRef = useRef<CodeEditorHandle>(null);
@@ -77,6 +108,7 @@ export default function EditorPage() {
   const [compileLogOpen, setCompileLogOpen] = useState(false);
   const [compileLogHeight, setCompileLogHeight] = useState(180);
   const compileLogDragRef = useRef<{ startY: number; startH: number } | null>(null);
+  const [onlineDropdownOpen, setOnlineDropdownOpen] = useState(false);
 
   const handleJumpToLine = useCallback((line: number) => {
     editorRef.current?.jumpToLine(line);
@@ -114,6 +146,28 @@ export default function EditorPage() {
     fetchTree(id);
     initConversationProject(id);
   }, [id, ensureCurrentProject, fetchTree, initConversationProject]);
+
+  // Auto-open main.tex when entering a project
+  useEffect(() => {
+    if (!id || fileTree.length === 0) return;
+    const { activeFile, openFiles } = useEditorStore.getState();
+    if (activeFile || openFiles.size > 0) return;
+    const mainFile = fileTree.find((f) => f === 'main.tex') || fileTree.find((f) => f.endsWith('.tex'));
+    if (mainFile) {
+      openFile(id, mainFile);
+    }
+  }, [id, fileTree, openFile]);
+
+  // Sync cached PDF status from tree fetch (shows previously compiled PDF on load)
+  useEffect(() => {
+    if (cachedPdfExists) {
+      setPdfExists(true);
+      setPdfKey((k) => k + 1);
+      // Auto-show PDF preview when entering project
+      setInspectorView('pdf');
+      useUiStore.getState().setInspectorOpen(true);
+    }
+  }, [cachedPdfExists, setInspectorView]);
 
   const handleFileSelect = useCallback(
     (path: string) => {
@@ -290,7 +344,7 @@ export default function EditorPage() {
     setPdfKey((k) => k + 1);
   }, []);
 
-  // Ctrl+S / Ctrl+Shift+B / Ctrl+Shift+F shortcuts
+  // Window event listeners (merged)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -310,26 +364,14 @@ export default function EditorPage() {
         setSearchOpen((v) => !v);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [id, activeFile, saveFile, addToast, handleCompile]);
-
-  useEffect(() => {
     const onCompileEvent = () => handleCompile();
-    window.addEventListener('aitex:compile', onCompileEvent);
-    return () => window.removeEventListener('aitex:compile', onCompileEvent);
-  }, [handleCompile]);
-
-  useEffect(() => {
     const onAiCompileDone = () => {
       setPdfExists(true);
       setPdfKey((k) => k + 1);
+      setInspectorView('pdf');
+      useUiStore.getState().setInspectorOpen(true);
+      addToast('AI compilation successful', 'success');
     };
-    window.addEventListener('aitex:compile-done', onAiCompileDone);
-    return () => window.removeEventListener('aitex:compile-done', onAiCompileDone);
-  }, []);
-
-  useEffect(() => {
     const onRevert = (e: Event) => {
       const { path, content } = (e as CustomEvent).detail as { path: string; content: string };
       if (id && path && typeof content === 'string') {
@@ -337,9 +379,19 @@ export default function EditorPage() {
         addToast(`Reverted ${path}`, 'info');
       }
     };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('aitex:compile', onCompileEvent);
+    window.addEventListener('aitex:compile-done', onAiCompileDone);
     window.addEventListener('aitex:revert-file', onRevert);
-    return () => window.removeEventListener('aitex:revert-file', onRevert);
-  }, [id, saveFile, addToast]);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('aitex:compile', onCompileEvent);
+      window.removeEventListener('aitex:compile-done', onAiCompileDone);
+      window.removeEventListener('aitex:revert-file', onRevert);
+    };
+  }, [id, activeFile, saveFile, addToast, handleCompile, setInspectorView]);
 
   // Compile log vertical drag-to-resize
   const handleCompileLogDragStart = useCallback((e: React.MouseEvent) => {
@@ -417,7 +469,7 @@ export default function EditorPage() {
                   onRenameFile={handleRenameFile}
                   onMoveFile={handleMoveFile}
                   onUpload={handleUpload}
-                  onShare={toggleCollabManager}
+                  onShare={isOwner ? toggleCollabManager : undefined}
                 />
               )}
             </div>
@@ -427,7 +479,7 @@ export default function EditorPage() {
               <div className="editor-page__user-card">
                 <div className="editor-page__user-avatar-ring">
                   <div className="editor-page__user-avatar">{userInitial}</div>
-                  <span className="editor-page__user-status" />
+                  <span className={`editor-page__user-status editor-page__user-status--${connectionStatus}`} />
                 </div>
                 <div className="editor-page__user-info">
                   <div className="editor-page__user-name">{username || 'Guest'}</div>
@@ -440,16 +492,44 @@ export default function EditorPage() {
                     <span className="editor-page__user-project-name">{currentProject?.name || 'No project'}</span>
                   </div>
                 </div>
-                <button
-                  className="editor-page__user-action"
-                  onClick={() => navigate('/')}
-                  title="Back to projects"
-                  type="button"
-                >
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                    <path d="M6 4L10 8L6 12" />
-                  </svg>
-                </button>
+                <div className="editor-page__online-indicator">
+                  <button
+                    className="editor-page__online-btn"
+                    onClick={() => setOnlineDropdownOpen((v) => !v)}
+                    title={`${onlineUsers.length} user${onlineUsers.length !== 1 ? 's' : ''} online`}
+                    type="button"
+                  >
+                    <span className="editor-page__online-dots">
+                      {onlineUsers.slice(0, 3).map((u, i) => (
+                        <span
+                          key={u.clientId}
+                          className="editor-page__online-dot"
+                          style={{ backgroundColor: u.color, zIndex: 3 - i }}
+                        />
+                      ))}
+                    </span>
+                    <span className="editor-page__online-count">
+                      {onlineUsers.length} online
+                    </span>
+                  </button>
+                  {onlineDropdownOpen && (
+                    <div className="editor-page__online-dropdown">
+                      {onlineUsers.length === 0 ? (
+                        <div className="editor-page__online-dropdown-empty">No users online</div>
+                      ) : (
+                        onlineUsers.map((u) => (
+                          <div key={u.clientId} className="editor-page__online-dropdown-item">
+                            <span
+                              className="editor-page__online-dot"
+                              style={{ backgroundColor: u.color }}
+                            />
+                            <span className="editor-page__online-dropdown-name">{u.name}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </aside>
@@ -485,6 +565,9 @@ export default function EditorPage() {
                   bibKeys={projectLabels.bibKeys}
                   compileLog={compileLog}
                   activeFile={activeFile ?? undefined}
+                  ydoc={collabYdoc}
+                  awareness={collabProvider?.awareness ?? null}
+                  yConnected={connectionStatus === 'connected'}
                 />
               </Suspense>
             ) : (

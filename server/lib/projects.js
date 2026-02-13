@@ -1,14 +1,43 @@
 import fs from 'node:fs/promises'
+import fsSync from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { ensureDir, projectDir } from './paths.js'
 
 const PROJECTS_FILE = 'projects.json'
 
+// ── Module-level projects cache ─────────────────────────────────────
+let _cache = null // { dataDir, data }
+const _watchers = new Map()
+
+function _ensureWatcher(dataDir) {
+  const file = path.join(dataDir, PROJECTS_FILE)
+  if (_watchers.has(file)) return
+  try {
+    const watcher = fsSync.watch(file, { persistent: false }, () => {
+      if (_cache?.dataDir === dataDir) _cache = null
+    })
+    watcher.unref()
+    _watchers.set(file, watcher)
+  } catch {
+    // File may not exist yet
+  }
+}
+
+export function invalidateProjectCache(dataDir) {
+  if (!dataDir || _cache?.dataDir === dataDir) _cache = null
+}
+
 export async function loadProjects(dataDir) {
+  if (_cache && _cache.dataDir === dataDir) {
+    return _cache.data
+  }
   const file = path.join(dataDir, PROJECTS_FILE)
   try {
-    return JSON.parse(await fs.readFile(file, 'utf8'))
+    const data = JSON.parse(await fs.readFile(file, 'utf8'))
+    _cache = { dataDir, data }
+    _ensureWatcher(dataDir)
+    return data
   } catch {
     return { projects: [] }
   }
@@ -17,6 +46,7 @@ export async function loadProjects(dataDir) {
 export async function saveProjects(dataDir, db) {
   const file = path.join(dataDir, PROJECTS_FILE)
   await fs.writeFile(file, JSON.stringify(db, null, 2), 'utf8')
+  _cache = { dataDir, data: db }
 }
 
 export async function createProject(dataDir, { owner, name, mainFile }) {

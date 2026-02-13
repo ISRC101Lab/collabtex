@@ -50,6 +50,14 @@ export function registerFileRoutes({ app, dataDir, session }) {
     if (typeof content !== 'string') return res.status(400).json({ error: 'missing content' })
 
     const full = path.join(projectDir(dataDir, project.id), safePath)
+
+    // Collaborators can only edit existing files, not create new ones
+    if (project.owner !== req.user.username && !req.user.isAdmin) {
+      try { await fs.access(full) } catch {
+        return res.status(403).json({ error: 'only owner can create new files' })
+      }
+    }
+
     ensureDir(path.dirname(full))
     await fs.writeFile(full, content, 'utf8')
     res.json({ ok: true, path: safePath })

@@ -15,13 +15,27 @@ export default defineConfig({
       '/api': 'http://localhost:4092',
       '/ws': { target: 'ws://localhost:4093', ws: true },
     },
-    watch: {
-      usePolling: true,
-      interval: 1000,
-    },
   },
   build: {
     outDir: path.resolve(__dirname, 'client/dist'),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          codemirror: [
+            'codemirror',
+            '@codemirror/state',
+            '@codemirror/language',
+            '@codemirror/autocomplete',
+            '@codemirror/lint',
+            '@codemirror/legacy-modes/mode/stex',
+          ],
+          pdfjs: ['pdfjs-dist'],
+          collab: ['yjs', 'y-codemirror.next', '@hocuspocus/provider'],
+          markdown: ['marked'],
+        },
+      },
+    },
   },
 })

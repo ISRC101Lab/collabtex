@@ -14,8 +14,10 @@ export function registerAiRoutes({ app, dataDir, session }) {
       return res.status(403).json({ error: 'forbidden' })
     }
 
-    const { message, history, model } = req.body || {}
+    const { message, history, model, compiler } = req.body || {}
     if (!message) return res.status(400).json({ error: 'missing message' })
+
+    const isOwner = project.owner === req.user.username
 
     // Set up SSE headers
     res.writeHead(200, {
@@ -37,7 +39,8 @@ export function registerAiRoutes({ app, dataDir, session }) {
         message,
         history: Array.isArray(history) ? history.slice(-20) : [],
         model: model || undefined,
-        compiler: project.compiler || 'xelatex',
+        compiler: compiler || project.compiler || 'pdflatex',
+        isOwner,
         emit,
       })
     } catch (err) {

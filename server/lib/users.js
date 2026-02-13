@@ -1,17 +1,19 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { promisify } from 'node:util'
 
 const USERS_FILE = 'users.json'
+const scrypt = promisify(crypto.scrypt)
 
-function hashPassword(password, salt) {
+async function hashPassword(password, salt) {
   salt = salt || crypto.randomBytes(16).toString('hex')
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex')
+  const hash = (await scrypt(password, salt, 64)).toString('hex')
   return { salt, hash }
 }
 
-function verifyPassword(password, salt, hash) {
-  const result = crypto.scryptSync(password, salt, 64).toString('hex')
+async function verifyPassword(password, salt, hash) {
+  const result = (await scrypt(password, salt, 64)).toString('hex')
   return result === hash
 }
 
@@ -34,11 +36,11 @@ export async function ensureDefaultUsers(dataDir) {
   const db = await loadUsers(dataDir)
   if (db.users.length > 0) return db
 
-  const initPwd = process.env.INIT_PASSWORD || 'ChangeMe!2026'
+  const initPwd = process.env.INIT_PASSWORD || '123456'
   const defaults = ['admin', ...Array.from({ length: 9 }, (_, i) => `user0${i + 1}`)]
 
   for (const username of defaults) {
-    const { salt, hash } = hashPassword(initPwd)
+    const { salt, hash } = await hashPassword(initPwd)
     db.users.push({
       username,
       salt,
@@ -57,7 +59,7 @@ export async function authenticate(dataDir, username, password) {
   const db = await loadUsers(dataDir)
   const user = db.users.find(u => u.username === username)
   if (!user) return null
-  if (!verifyPassword(password, user.salt, user.hash)) return null
+  if (!(await verifyPassword(password, user.salt, user.hash))) return null
   return { username: user.username, isAdmin: user.isAdmin }
 }
 

@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import * as api from '@/api/client';
+import { useCollabStore } from '@/stores/collabStore';
 
 interface EditorState {
   openFiles: Map<string, string>;
   activeFile: string | null;
   fileTree: string[];
   dirty: Set<string>;
+  cachedPdfExists: boolean;
 
   fetchTree: (projectId: string) => Promise<void>;
   openFile: (projectId: string, path: string) => Promise<void>;
@@ -26,10 +28,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   activeFile: null,
   fileTree: [],
   dirty: new Set(),
+  cachedPdfExists: false,
 
   async fetchTree(projectId) {
     const res = await api.getProjectTree(projectId);
-    set({ fileTree: res.tree });
+    set({ fileTree: res.tree, cachedPdfExists: !!res.pdfExists });
   },
 
   async openFile(projectId, path) {
@@ -42,6 +45,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     } else {
       set({ activeFile: path });
     }
+    // Connect Y.js for the active file
+    useCollabStore.getState().connectToDocument(projectId, path);
   },
 
   closeFile(path) {
@@ -57,6 +62,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         : get().activeFile;
 
     set({ openFiles: next, dirty: nextDirty, activeFile });
+
+    // Disconnect Y.js if no more files are open
+    if (next.size === 0) {
+      useCollabStore.getState().disconnect();
+    }
   },
 
   setActiveFile(path) {

@@ -13,11 +13,11 @@
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 11px 14px;
+  padding: 14px 18px;
   border-radius: 13px;
   background: #fbf9f5;
   box-shadow: 0 4px 12px rgba(68, 63, 52, 0.08);
-  font-size: 12.5px;
+  font-size: 13.5px;
   color: #2e2c28;
   pointer-events: auto;
   animation: toast-in 0.28s ease-out;

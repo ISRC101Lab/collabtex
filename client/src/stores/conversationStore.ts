@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ChatMessage } from '@/components/ai/AiMessage';
+import { useAuthStore } from '@/stores/authStore';
 
 export interface ConvoMeta {
   id: string;
@@ -7,8 +8,12 @@ export interface ConvoMeta {
   updatedAt: number;
 }
 
-const CONVOS_KEY = (pid: string) => `aitex-convos-${pid}`;
-const CONV_KEY = (pid: string, cid: string) => `aitex-conv-${pid}-${cid}`;
+function getUsername(): string {
+  return useAuthStore.getState().user?.username || 'anon';
+}
+
+const CONVOS_KEY = (pid: string) => `aitex-convos-${getUsername()}-${pid}`;
+const CONV_KEY = (pid: string, cid: string) => `aitex-conv-${getUsername()}-${pid}-${cid}`;
 const MAX_PERSISTED = 50;
 
 function genId() {
@@ -32,7 +37,12 @@ export function loadConvoMessages(projectId: string, convoId: string): ChatMessa
   try {
     const raw = localStorage.getItem(CONV_KEY(projectId, convoId));
     if (!raw) return [];
-    return (JSON.parse(raw) as ChatMessage[]).map((m) => ({ ...m, streaming: false }));
+    const all = (JSON.parse(raw) as ChatMessage[]).map((m) => ({ ...m, streaming: false }));
+    // Load only the tail for faster perceived restore on long conversations
+    if (all.length > MAX_PERSISTED) {
+      return all.slice(-MAX_PERSISTED);
+    }
+    return all;
   } catch { return []; }
 }
 
@@ -90,8 +100,8 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   initProject(projectId) {
     if (get().projectId === projectId) return;
     const list = loadList(projectId);
-    const activeId = list.length > 0 ? list[0].id : genId();
-    set({ projectId, convoList: list, activeConvoId: activeId });
+    // Always start a fresh conversation — user can restore old ones from the list
+    set({ projectId, convoList: list, activeConvoId: genId() });
   },
 
   newConvo() {

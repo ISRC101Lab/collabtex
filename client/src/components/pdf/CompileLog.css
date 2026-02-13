@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 10px;
+  padding: 6px 12px;
   background: var(--bg-panel-muted);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
@@ -98,7 +98,7 @@
 .compile-log__body {
   flex: 1;
   overflow: auto;
-  padding: 6px 8px;
+  padding: 8px 10px;
   background: #1a1a2e;
 }
 
@@ -131,7 +131,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  padding: 3px 6px;
+  padding: 4px 7px;
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 11px;
@@ -206,7 +206,7 @@
   padding: 8px 10px;
   border-radius: 6px;
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 

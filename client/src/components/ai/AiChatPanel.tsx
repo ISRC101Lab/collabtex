@@ -267,8 +267,17 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
   const prevConvoRef = useRef(activeConvoId);
 
   const addToast = useUiStore((s) => s.addToast);
+  const compiler = useUiStore((s) => s.compiler);
   const fetchTree = useEditorStore((s) => s.fetchTree);
   const refreshFile = useEditorStore((s) => s.refreshFile);
+
+  // Debounced fetchTree to batch rapid AI file changes
+  const fetchTreeTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const fetchTreeDebounced = useCallback((pid: string) => {
+    clearTimeout(fetchTreeTimerRef.current);
+    fetchTreeTimerRef.current = setTimeout(() => fetchTree(pid), 300);
+  }, [fetchTree]);
+
   const fileTree = useEditorStore((s) => s.fileTree);
 
   // @ mention state
@@ -427,7 +436,7 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
               fileChangeCount++;
               updateStream({ fileChanges: [...fileChanges] });
               if (refreshFile) refreshFile(projectId, event.path);
-              fetchTree(projectId);
+              fetchTreeDebounced(projectId);
               break;
             case 'done':
               content = event.reply || content;
@@ -442,6 +451,7 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
           }
         },
         abort.signal,
+        compiler,
       );
 
       if (fileChangeCount > 0) {
@@ -457,7 +467,7 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId }) => {
       abortRef.current = null;
       inputRef.current?.focus();
     }
-  }, [input, loading, projectId, buildHistory, addToast, selectedModel, fetchTree, refreshFile, fileTree]);
+  }, [input, loading, projectId, buildHistory, addToast, selectedModel, fetchTreeDebounced, refreshFile, fileTree]);
 
   // @ mention select
   const handleMentionSelect = useCallback(

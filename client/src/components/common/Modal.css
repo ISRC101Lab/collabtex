@@ -24,19 +24,19 @@
 }
 
 .modal-header {
-  padding: 18px 22px;
+  padding: 22px 28px;
   border-bottom: 1px solid #ddd8ce;
 }
 
 .modal-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 650;
   letter-spacing: 0.01em;
   color: #2e2c28;
 }
 
 .modal-body {
-  padding: 22px;
+  padding: 28px;
   overflow-y: auto;
   flex: 1;
   color: #5f5a52;

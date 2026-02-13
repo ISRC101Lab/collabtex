@@ -21,7 +21,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   async login(username, password) {
     const res = await api.login(username, password);
     if (res.token) {
-      localStorage.setItem('token', res.token);
+      sessionStorage.setItem('token', res.token);
     }
     set({ user: { username: res.username, isAdmin: res.isAdmin } });
   },
@@ -31,8 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       await api.logout();
     } catch {
     } finally {
-      localStorage.removeItem('token');
-      document.cookie = 'token=; Max-Age=0; path=/';
+      sessionStorage.removeItem('token');
       set({ user: null });
     }
   },
@@ -42,6 +41,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const res = await api.getMe();
       if (res.authenticated) {
+        if (res.token) {
+          sessionStorage.setItem('token', res.token);
+        }
         set({ user: { username: res.username, isAdmin: res.isAdmin } });
       } else {
         set({ user: null });

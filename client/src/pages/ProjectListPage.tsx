@@ -245,11 +245,8 @@ export default function ProjectListPage() {
     setSwitchingUser(true);
     try {
       await login(switchUsername.trim(), switchPassword);
-      setAccountMenuOpen(false);
-      setAccountPanelMode('menu');
-      setSwitchUsername('');
-      setSwitchPassword('');
-      addToast('User switched.', 'success');
+      // Force full reload to clear all in-memory stores (editor, projects, collab, AI history)
+      window.location.replace('/');
     } catch {
       addToast('Switch user failed.', 'error');
     } finally {
@@ -259,11 +256,8 @@ export default function ProjectListPage() {
 
   const handleSignOut = async () => {
     await logout();
-    setAccountMenuOpen(false);
-    setAccountPanelMode('menu');
-    setSwitchUsername('');
-    setSwitchPassword('');
-    navigate('/login', { replace: true });
+    // Force full reload to clear all in-memory stores
+    window.location.replace('/login');
   };
 
   const handleScopeChange = (nextScope: ProjectListScope) => {
@@ -693,7 +687,6 @@ export default function ProjectListPage() {
           {/* Table */}
           <div className="projects-table">
             <div className="projects-table__header">
-              <span className="projects-table__checkbox" />
               <span className="projects-table__header-cell">Name</span>
               <span className="projects-table__header-cell">Owner</span>
               <span className="projects-table__header-cell">Modified</span>
@@ -739,9 +732,6 @@ export default function ProjectListPage() {
                     className="projects-table__row"
                     onClick={() => navigate(`/project/${project.id}`)}
                   >
-                    <span className="projects-table__checkbox" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" aria-label={`Select ${project.name}`} />
-                    </span>
                     <span className="projects-table__name">{project.name}</span>
                     <span className="projects-table__owner">
                       {showOwnerMeta ? project.owner : 'You'}

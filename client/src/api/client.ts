@@ -13,12 +13,7 @@ function createApiError(message: string, status: number, body?: unknown): ApiErr
 }
 
 function getToken(): string | null {
-  // Check localStorage first, fall back to cookie
-  const stored = localStorage.getItem('token');
-  if (stored) return stored;
-
-  const match = document.cookie.match(/(?:^|;\s*)token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  return sessionStorage.getItem('token');
 }
 
 async function request<T>(
@@ -39,7 +34,6 @@ async function request<T>(
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers,
-    credentials: 'include',
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
@@ -76,7 +70,7 @@ export function logout() {
 }
 
 export function getMe() {
-  return request<{ authenticated: boolean; username: string; isAdmin: boolean }>(
+  return request<{ authenticated: boolean; username: string; isAdmin: boolean; token?: string }>(
     'GET', '/me',
   );
 }
@@ -146,7 +140,7 @@ export function createProject(name: string, mainFile = 'main.tex') {
 }
 
 export function getProjectTree(id: string) {
-  return request<{ tree: string[]; mainFile: string; compiler: string }>(
+  return request<{ tree: string[]; mainFile: string; compiler: string; pdfExists?: boolean }>(
     'GET', `/projects/${id}/tree`,
   );
 }
@@ -216,7 +210,6 @@ export async function uploadFiles(
   const res = await fetch(`${BASE}/projects/${projectId}/upload${qs}`, {
     method: 'POST',
     headers,
-    credentials: 'include',
     body: form,
   });
 
@@ -323,6 +316,7 @@ export async function aiChatStream(
   model: string | undefined,
   onEvent: (event: AiStreamEvent) => void,
   signal?: AbortSignal,
+  compiler?: string,
 ): Promise<void> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -333,8 +327,7 @@ export async function aiChatStream(
   const res = await fetch(`${BASE}/projects/${projectId}/ai/chat`, {
     method: 'POST',
     headers,
-    credentials: 'include',
-    body: JSON.stringify({ message, history, model }),
+    body: JSON.stringify({ message, history, model, compiler }),
     signal,
   });
 

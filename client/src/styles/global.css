@@ -34,21 +34,21 @@
   --border-strong: #cfcac0;
   --border-hover: #c8c2b8;
 
-  --radius: 10px;
-  --radius-sm: 8px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  --radius: 12px;
+  --radius-sm: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-pill: 999px;
 
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 16px;
+  --space-4: 20px;
+  --space-5: 28px;
+  --space-6: 36px;
 
-  --shadow-sm: 0 4px 12px rgba(68, 63, 52, 0.08);
-  --shadow-md: 0 12px 28px rgba(68, 63, 52, 0.1);
+  --shadow-sm: 0 2px 8px rgba(68, 63, 52, 0.06);
+  --shadow-md: 0 8px 24px rgba(68, 63, 52, 0.08);
   --shadow-lg: 0 22px 50px rgba(68, 63, 52, 0.12);
 
   --focus-ring: 0 0 0 2px rgba(150, 140, 123, 0.5);
@@ -68,8 +68,8 @@ html, body, #root {
 
 body {
   font-family: var(--font-ui);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--text);
   background: var(--bg-app);
   -webkit-font-smoothing: antialiased;
