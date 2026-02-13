@@ -20,6 +20,11 @@
   类似 Overleaf 的自托管方案，内置 AI 助手，支持多人实时协作
 </p>
 
+<p align="center">
+  <img src="docs/editor-screenshot.png" alt="Aitex 编辑器界面 — 左侧文件树与 AI 对话，中间 LaTeX 编辑器，右侧 AI 助手面板" width="900" />
+</p>
+<p align="center"><sub>三栏布局：文件树 + AI 对话历史 | CodeMirror LaTeX 编辑器 | AI 助手面板</sub></p>
+
 ---
 
 ## 核心能力
