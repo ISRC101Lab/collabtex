@@ -4,6 +4,8 @@ type CompileStatus = 'idle' | 'compiling' | 'success' | 'error';
 type Compiler = 'pdflatex' | 'xelatex' | 'lualatex' | 'latexmk';
 type InspectorView = 'pdf' | 'ai' | 'split';
 type FontSize = number;
+type Theme = 'dark' | 'light';
+type AiConfigStatus = boolean | null;
 
 interface Toast {
   id: string;
@@ -133,6 +135,26 @@ function saveEditorFontSize(size: FontSize) {
   }
 }
 
+const DEFAULT_THEME: Theme = 'light';
+
+function loadTheme(): Theme {
+  try {
+    const raw = localStorage.getItem('aitex-theme');
+    if (raw === 'dark' || raw === 'light') return raw;
+  } catch {
+    // ignore
+  }
+  return DEFAULT_THEME;
+}
+
+function saveTheme(theme: Theme) {
+  try {
+    localStorage.setItem('aitex-theme', theme);
+  } catch {
+    // ignore
+  }
+}
+
 interface UiState {
   sidebarOpen: boolean;
   inspectorOpen: boolean;
@@ -152,6 +174,13 @@ interface UiState {
   editorFontSize: FontSize;
   aiDockExpanded: boolean;
   aiDockVisible: boolean;
+  theme: Theme;
+  aiConfigured: AiConfigStatus;
+  aiProvider: string;
+  aiModels: string[];
+  aiSelectedModel: string;
+  aiShowHistory: boolean;
+  aiNewChatToken: number;
 
   toggleCollabManager: () => void;
   toggleSidebar: () => void;
@@ -173,6 +202,14 @@ interface UiState {
   toggleAiDockExpanded: () => void;
   setAiDockVisible: (visible: boolean) => void;
   toggleAiDockVisible: () => void;
+  setTheme: (theme: Theme) => void;
+  setAiConfigured: (configured: AiConfigStatus) => void;
+  setAiProvider: (provider: string) => void;
+  setAiModels: (models: string[]) => void;
+  setAiSelectedModel: (model: string) => void;
+  setAiShowHistory: (show: boolean) => void;
+  toggleAiShowHistory: () => void;
+  requestAiNewChat: () => void;
 }
 
 let toastCounter = 0;
@@ -203,6 +240,13 @@ export const useUiStore = create<UiState>((set) => ({
   editorFontSize: loadEditorFontSize(),
   aiDockExpanded: false,
   aiDockVisible: false,
+  theme: loadTheme(),
+  aiConfigured: null,
+  aiProvider: '',
+  aiModels: [],
+  aiSelectedModel: '',
+  aiShowHistory: false,
+  aiNewChatToken: 0,
 
   toggleCollabManager() {
     set((state) => ({ collabManagerOpen: !state.collabManagerOpen }));
@@ -303,6 +347,39 @@ export const useUiStore = create<UiState>((set) => ({
     const clamped = clamp(size, 12, 28);
     saveEditorFontSize(clamped);
     set({ editorFontSize: clamped });
+  },
+
+  setTheme(theme) {
+    saveTheme(theme);
+    set({ theme });
+  },
+
+  setAiConfigured(configured) {
+    set({ aiConfigured: configured });
+  },
+
+  setAiProvider(provider) {
+    set({ aiProvider: provider });
+  },
+
+  setAiModels(models) {
+    set({ aiModels: models });
+  },
+
+  setAiSelectedModel(model) {
+    set({ aiSelectedModel: model });
+  },
+
+  setAiShowHistory(show) {
+    set({ aiShowHistory: show });
+  },
+
+  toggleAiShowHistory() {
+    set((state) => ({ aiShowHistory: !state.aiShowHistory }));
+  },
+
+  requestAiNewChat() {
+    set((state) => ({ aiNewChatToken: state.aiNewChatToken + 1, aiShowHistory: false }));
   },
 
   setAiDockExpanded(expanded) {

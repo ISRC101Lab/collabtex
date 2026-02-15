@@ -200,3 +200,55 @@
   display: block;
   flex-shrink: 0;
 }
+
+:root[data-theme='light'] .tabbar {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: none;
+  border-radius: 0;
+}
+
+:root[data-theme='light'] .tabbar__tab {
+  background: #f4f1eb;
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+:root[data-theme='light'] .tabbar__tab:hover {
+  background: #efeae3;
+  color: var(--text);
+}
+
+:root[data-theme='light'] .tabbar__tab--active {
+  background: #f0e5db;
+  border-color: #e0cfc0;
+  color: var(--text);
+}
+
+:root[data-theme='light'] .tabbar__dirty {
+  background: #e6a23c;
+}
+
+:root[data-theme='light'] .tabbar__actions {
+  border-left: 1px solid var(--border-subtle);
+}
+
+:root[data-theme='light'] .tabbar__toggle,
+:root[data-theme='light'] .tabbar__inspector-switch {
+  border-color: var(--border-subtle);
+  background: #f6f2ec;
+}
+
+:root[data-theme='light'] .tabbar__toggle:hover,
+:root[data-theme='light'] .tabbar__inspector-btn:hover {
+  background: #efeae3;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+:root[data-theme='light'] .tabbar__toggle--active,
+:root[data-theme='light'] .tabbar__inspector-btn--active {
+  background: #f0e5db;
+  border-color: #e0cfc0;
+  color: var(--text);
+}

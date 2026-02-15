@@ -8,7 +8,7 @@
   flex: 1;
   min-width: 0;
   font-family: var(--font-ui);
-  font-size: 13px;
+  font-size: 14px;
   user-select: none;
   background: transparent;
 }
@@ -19,34 +19,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--card-border);
-  background: rgba(45, 42, 46, 0.3);
+  padding: 12px 16px;
+  border-bottom: none;
+  background: transparent;
   flex-shrink: 0;
 }
 
 .ft-toolbar__label {
   font-weight: 600;
-  font-size: 17px;
-  color: var(--text);
-  letter-spacing: 0;
-}
-
-.ft-toolbar__label--brand {
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: color 0.12s ease;
-}
-
-.ft-toolbar__label--brand:hover {
-  color: #edf2fb;
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .ft-toolbar__actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .ft-toolbar__btn {
@@ -55,18 +44,156 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: transparent;
+  border: none;
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: 8px;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  border-radius: 6px;
+  transition: background 0.12s, color 0.12s;
+  text-decoration: none;
 }
 
 .ft-toolbar__btn:hover {
   background: var(--bg-hover);
   color: var(--text);
-  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Settings modal ───────────────────────────────────────────── */
+
+.ft-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ft-settings__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ft-settings__section:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.ft-settings__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ft-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.ft-settings__stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+}
+
+.ft-settings__stepper button {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.ft-settings__stepper button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ft-settings__select {
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(20, 18, 22, 0.7);
+  color: #eef1f8;
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+}
+
+.ft-settings__select option {
+  background: #1b1820;
+  color: #e6e9f2;
+}
+
+.ft-settings__toggle input {
+  width: 36px;
+  height: 18px;
+}
+
+.ft-settings__hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ft-settings__close {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.ft-settings__close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+:root[data-theme='light'] .ft-toolbar {
+  background: transparent;
+  border-bottom: none;
+}
+
+:root[data-theme='light'] .ft-toolbar__btn {
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+:root[data-theme='light'] .ft-toolbar__btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+:root[data-theme='light'] .ft-settings__section {
+  border-bottom-color: var(--border-subtle);
+}
+
+:root[data-theme='light'] .ft-settings__stepper,
+:root[data-theme='light'] .ft-settings__close {
+  background: #f6f2ec;
+  border-color: var(--border-subtle);
+}
+
+:root[data-theme='light'] .ft-settings__select {
+  background: #f8f6f2;
+  color: #2e2c28;
+  border-color: var(--border-subtle);
+}
+
+:root[data-theme='light'] .ft-settings__select option {
+  background: #fbf9f5;
+  color: #2e2c28;
 }
 
 /* ── Add menu (dropdown) ───────────────────────────────────────── */
@@ -82,11 +209,11 @@
   margin-top: 4px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.36);
-  min-width: 150px;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(46, 44, 40, 0.12);
+  min-width: 140px;
   z-index: 100;
-  padding: 4px 0;
+  padding: 4px;
 }
 
 .ft-add-menu__item {
@@ -97,17 +224,18 @@
   padding: 7px 12px;
   background: none;
   border: none;
-  color: var(--text);
+  color: var(--text-secondary);
   font-size: 13px;
   font-family: var(--font-ui);
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s, color 0.12s;
+  border-radius: 6px;
+  transition: background 0.1s, color 0.1s;
 }
 
 .ft-add-menu__item:hover {
   background: var(--bg-hover);
-  color: #ecf1fb;
+  color: var(--text);
 }
 
 /* ── New file/folder input row ─────────────────────────────────── */
@@ -116,15 +244,14 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  border-bottom: 1px solid var(--border);
-  border-radius: 14px 14px 0 0;
+  padding: 3px 12px;
+  margin: 0 4px;
 }
 
 .ft-new-icon {
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   color: var(--text-muted);
@@ -132,13 +259,13 @@
 
 .ft-new-input,
 .ft-rename-input {
-  background: var(--bg);
-  border: 1px solid var(--accent, #4f8ff7);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   color: var(--text);
   font-size: 13px;
   font-family: var(--font-ui);
   padding: 3px 6px;
-  border-radius: 3px;
+  border-radius: 6px;
   outline: none;
   flex: 1;
   min-width: 0;
@@ -158,14 +285,14 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   cursor: pointer;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   position: relative;
-  height: 28px;
+  height: 30px;
   border-radius: 7px;
   transition: background 0.1s;
 }
@@ -198,8 +325,8 @@
 
 .ft-chevron {
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -211,8 +338,8 @@
 
 .ft-icon {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -238,7 +365,7 @@
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 
 /* ── File type tag ─────────────────────────────────────────────── */

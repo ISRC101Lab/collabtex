@@ -12,17 +12,27 @@
   --accent-hover: #bce88a;
   --accent-subtle: rgba(169, 220, 118, 0.16);
   --accent-bg: rgba(169, 220, 118, 0.12);
+  --accent-text: #1f1f1f;
 
   --bg: #1c1a1f;
   --bg-surface: #2d2a2e;
   --bg-elevated: #3a363b;
   --bg-hover: rgba(255, 255, 255, 0.08);
+  --bg-app:
+    radial-gradient(1200px 800px at 20% -10%, rgba(120, 220, 232, 0.08), transparent 60%),
+    radial-gradient(900px 700px at 100% 0%, rgba(255, 216, 102, 0.08), transparent 55%),
+    linear-gradient(135deg, #1b1a1e 0%, #2a262b 45%, #1d1a20 100%);
+  --bg-sidebar: #2a272b;
+  --bg-panel: #262329;
+  --bg-panel-muted: #2d2a30;
 
   --text: #fcfcfa;
+  --text-primary: var(--text);
   --text-secondary: #e6e1d8;
   --text-muted: #9a989c;
 
   --border: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.06);
   --border-strong: rgba(255, 255, 255, 0.22);
   --border-hover: rgba(255, 255, 255, 0.18);
 
@@ -40,12 +50,19 @@
   --radius: 8px;
   --radius-sm: 6px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
 
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 8px 22px rgba(0, 0, 0, 0.32);
   --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.4);
 
   --transition: 0.15s ease;
+
+  --selection-bg: rgba(92, 132, 255, 0.24);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
+  --focus-ring: rgba(123, 155, 255, 0.72);
 
   --success: #a9dc76;
   --error: #ff6188;
@@ -63,10 +80,7 @@ body {
   font-family: var(--font-ui);
   font-size: 13px;
   color: var(--text);
-  background:
-    radial-gradient(1200px 800px at 20% -10%, rgba(120, 220, 232, 0.08), transparent 60%),
-    radial-gradient(900px 700px at 100% 0%, rgba(255, 216, 102, 0.08), transparent 55%),
-    linear-gradient(135deg, #1b1a1e 0%, #2a262b 45%, #1d1a20 100%);
+  background: var(--bg-app);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -83,23 +97,77 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* ── Selection ───────────────────────────────────────────────────── */
 
 ::selection {
-  background: rgba(92, 132, 255, 0.24);
+  background: var(--selection-bg);
 }
 
 /* ── Focus ring ──────────────────────────────────────────────────── */
 
 :focus-visible {
-  outline: 1px solid rgba(123, 155, 255, 0.72);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 1px;
+}
+
+:root[data-theme='light'] {
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+  --accent: #df9f88;
+  --accent-hover: #d4917a;
+  --accent-subtle: rgba(223, 159, 136, 0.16);
+  --accent-bg: rgba(223, 159, 136, 0.2);
+  --accent-text: #ffffff;
+
+  --bg: #ebe7de;
+  --bg-surface: #f5f3ef;
+  --bg-elevated: #f8f6f2;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-app:
+    radial-gradient(130% 120% at 18% -20%, rgba(223, 159, 136, 0.12) 0%, rgba(223, 159, 136, 0) 48%),
+    radial-gradient(120% 100% at 100% 0%, rgba(150, 140, 123, 0.08) 0%, rgba(150, 140, 123, 0) 44%),
+    #ebe7de;
+  --bg-sidebar: #f1eee8;
+  --bg-panel: #f5f3ef;
+  --bg-panel-muted: #f1eee8;
+
+  --text: #2e2c28;
+  --text-primary: var(--text);
+  --text-secondary: #5f5a52;
+  --text-muted: #8a857d;
+
+  --border: #d7d2c8;
+  --border-subtle: #ddd8ce;
+  --border-strong: #cfcac0;
+  --border-hover: #c8c2b8;
+
+  --glass-bg: rgba(245, 243, 239, 0.7);
+  --glass-strong: rgba(251, 249, 245, 0.82);
+  --surface-elevated: #fbf9f5;
+
+  --card-bg: rgba(245, 243, 239, 0.86);
+  --card-border: rgba(200, 194, 184, 0.6);
+  --card-shadow: 0 12px 28px rgba(68, 63, 52, 0.12);
+  --card-shadow-soft: 0 8px 18px rgba(68, 63, 52, 0.08);
+
+  --shadow-sm: 0 2px 8px rgba(68, 63, 52, 0.06);
+  --shadow-md: 0 8px 24px rgba(68, 63, 52, 0.08);
+  --shadow-lg: 0 22px 50px rgba(68, 63, 52, 0.12);
+
+  --success: #30a46c;
+  --error: #e5484d;
+  --warning: #e6a23c;
+  --info: var(--accent);
+
+  --selection-bg: rgba(223, 159, 136, 0.3);
+  --scrollbar-thumb: rgba(150, 140, 123, 0.3);
+  --scrollbar-thumb-hover: rgba(150, 140, 123, 0.45);
+  --focus-ring: rgba(150, 140, 123, 0.7);
 }

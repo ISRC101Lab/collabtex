@@ -35,6 +35,15 @@ export interface ChatMessage {
 
 interface AiMessageProps {
   message: ChatMessage;
+  canEdit?: boolean;
+  isEditing?: boolean;
+  editValue?: string;
+  onEditStart?: () => void;
+  onEditChange?: (value: string) => void;
+  onEditCancel?: () => void;
+  onEditSave?: () => void;
+  onCopy?: () => void;
+  onRegenerate?: () => void;
 }
 
 function formatTime(ts: number): string {
@@ -105,7 +114,18 @@ function ThinkingBlock({ content }: { content: string }) {
   );
 }
 
-const AiMessage: React.FC<AiMessageProps> = ({ message }) => {
+const AiMessage: React.FC<AiMessageProps> = ({
+  message,
+  canEdit,
+  isEditing,
+  editValue,
+  onEditStart,
+  onEditChange,
+  onEditCancel,
+  onEditSave,
+  onCopy,
+  onRegenerate,
+}) => {
   const roleClass = `ai-message-row ai-message-row--${message.role}${message.streaming ? ' ai-message-row--streaming' : ''}`;
   const contentRef = useRef<HTMLDivElement>(null);
   // Track accepted/rejected state per file change index
@@ -115,6 +135,14 @@ const AiMessage: React.FC<AiMessageProps> = ({ message }) => {
     if (!message.content || message.role === 'user') return '';
     return marked.parse(message.content) as string;
   }, [message.content, message.role]);
+
+  const editCols = useMemo(() => {
+    if (!editValue) return 24;
+    const maxLineLength = editValue
+      .split('\n')
+      .reduce((max, line) => Math.max(max, line.length), 0);
+    return Math.max(16, maxLineLength + 2);
+  }, [editValue]);
 
   // Delegate click on copy buttons inside rendered markdown
   useEffect(() => {
@@ -135,26 +163,93 @@ const AiMessage: React.FC<AiMessageProps> = ({ message }) => {
 
   const wrapperClass = message.role === 'user' ? 'ai-message__bubble' : 'ai-message__assistant';
 
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onEditSave?.();
+    }
+  };
+
   return (
     <div className={roleClass}>
       <div className={wrapperClass}>
-        <div className="ai-message__role">
-          {message.role === 'user' ? 'You' : 'Aitex AI'}
+        <div className="ai-message__meta">
+          <span className="ai-message__role">
+            {message.role === 'user' ? 'You' : 'Aitex AI'}
+          </span>
+          {!message.streaming && (
+            <span className="ai-message__timestamp">{formatTime(message.timestamp)}</span>
+          )}
         </div>
         {message.thinking && (
           <ThinkingBlock content={message.thinking} />
         )}
-        {message.content && (
+        {message.role === 'user' && isEditing ? (
+          <div className="ai-message__edit-area">
+            <textarea
+              className="ai-message__edit-input"
+              value={editValue}
+              onChange={(e) => onEditChange?.(e.target.value)}
+              onKeyDown={handleEditKeyDown}
+              cols={editCols}
+              rows={3}
+            />
+            <div className="ai-message__edit-actions">
+              <button className="ai-message__edit-action" onClick={onEditCancel} type="button">Cancel</button>
+              <button className="ai-message__edit-action ai-message__edit-action--primary" onClick={onEditSave} type="button">Regenerate</button>
+            </div>
+          </div>
+        ) : message.content ? (
           message.role === 'assistant' ? (
             <div className="ai-message__content ai-message__markdown" ref={contentRef}>
               <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />
               {message.streaming && <span className="ai-message__cursor" />}
             </div>
           ) : (
-            <div className="ai-message__content">
+            <div
+              className="ai-message__content"
+              onDoubleClick={() => {
+                if (canEdit) onEditStart?.();
+              }}
+            >
               {message.content}
             </div>
           )
+        ) : null}
+        {!message.streaming && !isEditing && message.content && (
+          <div className="ai-message__actions">
+            {message.role === 'user' ? (
+              <>
+                <button className="ai-message__action" onClick={onCopy} type="button" title="Copy">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+                    <rect x="7" y="7" width="9" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="4" y="3" width="9" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                </button>
+                <button className="ai-message__action" onClick={onEditStart} type="button" title="Edit">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+                    <path d="M4 13.5V16H6.5L15 7.5L12.5 5L4 13.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                    <path d="M11.5 6L14 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="ai-message__action" onClick={onCopy} type="button" title="Copy">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+                    <rect x="7" y="7" width="9" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                    <rect x="4" y="3" width="9" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                  </svg>
+                </button>
+                <button className="ai-message__action" onClick={onRegenerate} type="button" title="Regenerate">
+                  <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+                    <path d="M4 10a6 6 0 1 0 2-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M4 4v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
         )}
         {message.toolCalls && message.toolCalls.length > 0 && (
           <div className="ai-message__tools">
@@ -224,9 +319,6 @@ const AiMessage: React.FC<AiMessageProps> = ({ message }) => {
               );
             })}
           </div>
-        )}
-        {!message.streaming && (
-          <span className="ai-message__timestamp">{formatTime(message.timestamp)}</span>
         )}
       </div>
     </div>

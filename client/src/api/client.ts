@@ -251,6 +251,24 @@ export function getCompileLog(projectId: string) {
   return request<{ log: string }>('GET', `/projects/${projectId}/compile/log`);
 }
 
+// ── SyncTeX ───────────────────────────────────────────────────────
+
+export function synctexForward(projectId: string, params: { file: string; line: number; column?: number }) {
+  return request<{ ok: boolean; page: number; x: number; y: number }>(
+    'POST',
+    `/projects/${projectId}/synctex/forward`,
+    params,
+  );
+}
+
+export function synctexInverse(projectId: string, params: { page: number; x: number; y: number }) {
+  return request<{ ok: boolean; file: string; line: number; column?: number }>(
+    'POST',
+    `/projects/${projectId}/synctex/inverse`,
+    params,
+  );
+}
+
 // ── Download ────────────────────────────────────────────────────────
 
 export function getDownloadUrl(projectId: string): string {

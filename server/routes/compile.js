@@ -86,8 +86,8 @@ function runLatex(compiler, mainFile, srcDir, buildDir) {
   }
 
   const args = compiler === 'latexmk'
-    ? ['-pdf', '-interaction=nonstopmode', `-output-directory=${buildDir}`, mainFile]
-    : ['-interaction=nonstopmode', `-output-directory=${buildDir}`, mainFile]
+    ? ['-pdf', '-synctex=1', '-interaction=nonstopmode', `-output-directory=${buildDir}`, mainFile]
+    : ['-synctex=1', '-interaction=nonstopmode', `-output-directory=${buildDir}`, mainFile]
 
   return new Promise((resolve, reject) => {
     const proc = spawn(compiler, args, {

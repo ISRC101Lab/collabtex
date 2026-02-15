@@ -8,6 +8,7 @@ import { registerAuthRoutes } from './routes/auth.js'
 import { registerProjectRoutes } from './routes/projects.js'
 import { registerFileRoutes } from './routes/files.js'
 import { registerCompileRoutes } from './routes/compile.js'
+import { registerSyncTexRoutes } from './routes/synctex.js'
 import { registerAiRoutes } from './routes/ai.js'
 import { registerUploadRoutes } from './routes/upload.js'
 import { registerDownloadRoutes } from './routes/download.js'
@@ -44,6 +45,7 @@ async function main() {
   registerProjectRoutes(ctx)
   registerFileRoutes(ctx)
   registerCompileRoutes(ctx)
+  registerSyncTexRoutes(ctx)
   registerAiRoutes(ctx)
   registerUploadRoutes(ctx)
   registerDownloadRoutes(ctx)

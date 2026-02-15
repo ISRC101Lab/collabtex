@@ -66,3 +66,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+:root[data-theme='light'] .header {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: none;
+  border-radius: 0;
+}
+
+:root[data-theme='light'] .header__brand {
+  color: var(--text-primary);
+}
+
+:root[data-theme='light'] .header__breadcrumb-project {
+  color: var(--text);
+}

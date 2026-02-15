@@ -1,23 +1,25 @@
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useEditorStore } from '@/stores/editorStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useUiStore } from '@/stores/uiStore';
 import { useCollabStore } from '@/stores/collabStore';
-import { compile, uploadFiles, getDownloadUrl } from '@/api/client';
+import { useConversationStore } from '@/stores/conversationStore';
+import { compile, uploadFiles, getDownloadUrl, synctexForward } from '@/api/client';
 import { extractLabels, extractBibKeys } from '@/lib/tex-labels';
 import FileTree from '@/components/filetree/FileTree';
+import ConversationList from '@/components/ai/ConversationList';
 import TabBar from '@/components/editor/TabBar';
 import ChangeBanner from '@/components/editor/ChangeBanner';
 import UndoBar from '@/components/editor/UndoBar';
 import CodeEditor, { type CodeEditorHandle } from '@/components/editor/CodeEditor';
-import EditorToolbar from '@/components/editor/EditorToolbar';
 import PdfPreview from '@/components/pdf/PdfPreview';
 import AiChatPanel from '@/components/ai/AiChatPanel';
 import ResizeHandle from '@/components/layout/ResizeHandle';
 import SearchPanel from '@/components/editor/SearchPanel';
 import CollabManager from '@/components/collab/CollabManager';
+import Modal from '@/components/common/Modal';
 import './EditorPage.css';
 
 function getLanguage(path: string): string | undefined {
@@ -29,6 +31,7 @@ function getLanguage(path: string): string | undefined {
 
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const selectProject = useProjectStore((s) => s.selectProject);
   const fetchTree = useEditorStore((s) => s.fetchTree);
   const fileTree = useEditorStore((s) => s.fileTree);
@@ -43,7 +46,6 @@ export default function EditorPage() {
   const markDirty = useEditorStore((s) => s.markDirty);
   const user = useAuthStore((s) => s.user);
   const username = user?.username;
-  const isAdmin = !!user?.isAdmin;
   const currentProject = useProjectStore((s) => s.currentProject);
   const isOwner = !!(username && currentProject && currentProject.owner === username);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
@@ -54,18 +56,29 @@ export default function EditorPage() {
   const setAiDockVisible = useUiStore((s) => s.setAiDockVisible);
   const setCompileStatus = useUiStore((s) => s.setCompileStatus);
   const compiler = useUiStore((s) => s.compiler);
+  const setCompiler = useUiStore((s) => s.setCompiler);
   const addToast = useUiStore((s) => s.addToast);
+  const cursorLine = useUiStore((s) => s.cursorLine);
+  const cursorCol = useUiStore((s) => s.cursorCol);
   const editorFontSize = useUiStore((s) => s.editorFontSize);
   const setEditorFontSize = useUiStore((s) => s.setEditorFontSize);
+  const theme = useUiStore((s) => s.theme);
+  const setTheme = useUiStore((s) => s.setTheme);
   const collabManagerOpen = useUiStore((s) => s.collabManagerOpen);
   const toggleCollabManager = useUiStore((s) => s.toggleCollabManager);
   const panelWidths = useUiStore((s) => s.panelWidths);
   const setPanelWidth = useUiStore((s) => s.setPanelWidth);
   const onlineUsers = useCollabStore((s) => s.onlineUsers);
+  const initConversationProject = useConversationStore((s) => s.initProject);
 
   const contentRef = useRef<string>('');
   const editorRef = useRef<CodeEditorHandle>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'cowork' | 'chat'>('cowork');
+  const [onlineDropdownOpen, setOnlineDropdownOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [pdfSyncTarget, setPdfSyncTarget] = useState<{ page: number; x: number; y: number } | null>(null);
+  const suppressForwardSyncRef = useRef(false);
 
 
   const handleJumpToLine = useCallback((line: number) => {
@@ -78,6 +91,18 @@ export default function EditorPage() {
     setTimeout(() => editorRef.current?.jumpToLine(line), 100);
   }, [id, openFile]);
 
+  const handlePdfJump = useCallback((file: string | undefined, line: number) => {
+    suppressForwardSyncRef.current = true;
+    if (file) {
+      handleSearchJump(file, line);
+    } else {
+      handleJumpToLine(line);
+    }
+    window.setTimeout(() => {
+      suppressForwardSyncRef.current = false;
+    }, 200);
+  }, [handleSearchJump, handleJumpToLine]);
+
   // Resize handlers for draggable panels
   const handleSidebarResize = useCallback(
     (dx: number) => {
@@ -88,7 +113,7 @@ export default function EditorPage() {
 
   const handlePdfResize = useCallback(
     (dx: number) => {
-      setPanelWidth('pdf', Math.max(240, Math.min(900, panelWidths.pdf - dx)));
+      setPanelWidth('pdf', Math.max(360, Math.min(900, panelWidths.pdf - dx)));
     },
     [panelWidths.pdf, setPanelWidth],
   );
@@ -136,7 +161,8 @@ export default function EditorPage() {
     if (!id) return;
     selectProject(id);
     fetchTree(id);
-  }, [id, selectProject, fetchTree]);
+    initConversationProject(id);
+  }, [id, selectProject, fetchTree, initConversationProject]);
 
   // Handle file selection from tree
   const handleFileSelect = useCallback(
@@ -251,18 +277,6 @@ export default function EditorPage() {
     [activeFile, markDirty],
   );
 
-  const handleUndo = useCallback(() => {
-    editorRef.current?.undo();
-  }, []);
-
-  const handleRedo = useCallback(() => {
-    editorRef.current?.redo();
-  }, []);
-
-  const handleInsert = useCallback((text: string, wrapSelection?: boolean) => {
-    editorRef.current?.insertText(text, wrapSelection);
-  }, []);
-
   // Compile handler
   const handleCompile = useCallback(async () => {
     if (!id) return;
@@ -287,10 +301,6 @@ export default function EditorPage() {
     }
   }, [id, compiler, setCompileStatus, addToast]);
 
-  // Refresh PDF without recompiling
-  const handlePdfRefresh = useCallback(() => {
-    setPdfKey((k) => k + 1);
-  }, []);
 
   // Ctrl+S save handler and Ctrl+Shift+B compile shortcut
   useEffect(() => {
@@ -346,9 +356,34 @@ export default function EditorPage() {
     return () => window.removeEventListener('aitex:revert-file', onRevert);
   }, [id, saveFile, addToast]);
 
-  const roleLabel = isAdmin ? 'Admin' : isOwner ? 'Owner' : 'Member';
+  useEffect(() => {
+    if (!id || !pdfPanelOpen || !pdfExists || !activeFile) return;
+    if (!activeFile.endsWith('.tex')) return;
+    if (suppressForwardSyncRef.current) return;
+    if (!cursorLine) return;
+
+    const timer = window.setTimeout(async () => {
+      if (suppressForwardSyncRef.current) return;
+      try {
+        const res = await synctexForward(id, {
+          file: activeFile,
+          line: cursorLine,
+          column: cursorCol,
+        });
+        if (res?.page && Number.isFinite(res.x) && Number.isFinite(res.y)) {
+          setPdfSyncTarget({ page: res.page, x: res.x, y: res.y });
+        }
+      } catch {
+        // ignore sync errors
+      }
+    }, 220);
+
+    return () => window.clearTimeout(timer);
+  }, [id, pdfPanelOpen, pdfExists, activeFile, cursorLine, cursorCol]);
+
   const userInitial = (username || 'U').slice(0, 1).toUpperCase();
-  const onlinePreview = onlineUsers.slice(0, 4);
+  const onlinePreview = onlineUsers.slice(0, 3);
+  const connectionStatus = onlineUsers.length > 0 ? 'connected' : 'disconnected';
 
   return (
     <div className="editor-page">
@@ -358,62 +393,118 @@ export default function EditorPage() {
             className="editor-page__sidebar"
             style={{ width: panelWidths.sidebar }}
           >
-            <div className="editor-page__sidebar-main">
-              <FileTree
-                files={fileTree}
-                activeFile={activeFile}
-                isOwner={isOwner}
-                projectName={currentProject?.name}
-                downloadUrl={currentProject ? getDownloadUrl(currentProject.id) : undefined}
-                onSelect={handleFileSelect}
-                onCreateFile={handleCreateFile}
-                onCreateFolder={handleCreateFolder}
-                onDeleteFile={handleDeleteFile}
-                onRenameFile={handleRenameFile}
-                onMoveFile={handleMoveFile}
-                onUpload={handleUpload}
-                onShare={toggleCollabManager}
-              />
+            <div className="editor-page__sidebar-brand">
+              <button
+                className="editor-page__sidebar-brand-link"
+                onClick={() => navigate('/')}
+                title="Back to projects"
+                type="button"
+              >
+                <span className="editor-page__brand-text">Aitex</span>
+                <span className="editor-page__brand-badge">AI</span>
+              </button>
+              <button
+                className="editor-page__sidebar-settings"
+                onClick={() => setShowSettings(true)}
+                title="Settings"
+                type="button"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+                  <path d="M6.5 2.2h3l.4 1.7 1.6.8 1.6-.7 1.6 2.6-1.3 1.2.2 1.8 1.5 1-1.6 2.6-1.7-.5-1.4 1.1-.4 1.8h-3l-.4-1.8-1.4-1.1-1.7.5L.9 12l1.5-1 .2-1.8L1.3 8 2.9 5.4l1.6.7 1.6-.8.4-1.7z" />
+                  <circle cx="8" cy="8" r="2.2" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="editor-page__sidebar-tabs">
+              <button
+                className={`editor-page__sidebar-tab${sidebarTab === 'cowork' ? ' editor-page__sidebar-tab--active' : ''}`}
+                onClick={() => setSidebarTab('cowork')}
+                type="button"
+              >
+                Cowork
+              </button>
+              <button
+                className={`editor-page__sidebar-tab${sidebarTab === 'chat' ? ' editor-page__sidebar-tab--active' : ''}`}
+                onClick={() => setSidebarTab('chat')}
+                type="button"
+              >
+                Chat
+              </button>
+            </div>
+
+            <div className="editor-page__sidebar-content">
+              {sidebarTab === 'chat' ? (
+                <ConversationList />
+              ) : (
+                <FileTree
+                  files={fileTree}
+                  activeFile={activeFile}
+                  isOwner={isOwner}
+                  projectName={currentProject?.name}
+                  downloadUrl={currentProject ? getDownloadUrl(currentProject.id) : undefined}
+                  onSelect={handleFileSelect}
+                  onCreateFile={handleCreateFile}
+                  onCreateFolder={handleCreateFolder}
+                  onDeleteFile={handleDeleteFile}
+                  onRenameFile={handleRenameFile}
+                  onMoveFile={handleMoveFile}
+                  onUpload={handleUpload}
+                  onShare={toggleCollabManager}
+                />
+              )}
             </div>
 
             <div className="editor-page__sidebar-footer">
-              <div className="editor-page__identity">
-                <span className="editor-page__identity-avatar">{userInitial}</span>
-                <span className="editor-page__identity-main">
-                  <span className="editor-page__identity-name">{username || 'user'}</span>
-                  <span className="editor-page__identity-role">{roleLabel}</span>
-                </span>
-                <button
-                  type="button"
-                  className="editor-page__collab-btn"
-                  onClick={toggleCollabManager}
-                  title="Open collaborators"
-                >
-                  协同
-                </button>
-              </div>
-
-              <div className="editor-page__presence">
-                <span className="editor-page__presence-label">实时在线</span>
-                <span className="editor-page__presence-stack">
-                  {onlinePreview.length > 0 ? (
-                    onlinePreview.map((member, index) => (
-                      <span
-                        key={member.clientId}
-                        className="editor-page__presence-avatar"
-                        style={{ backgroundColor: member.color, zIndex: onlinePreview.length - index }}
-                        title={member.name}
-                      >
-                        {member.name.slice(0, 1).toUpperCase()}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="editor-page__presence-avatar editor-page__presence-avatar--empty">•</span>
+              <div className="editor-page__user-card">
+                <div className="editor-page__user-avatar-ring">
+                  <div className="editor-page__user-avatar">{userInitial}</div>
+                  <span className={`editor-page__user-status editor-page__user-status--${connectionStatus}`} />
+                </div>
+                <div className="editor-page__user-info">
+                  <div className="editor-page__user-name">{username || 'Guest'}</div>
+                  <div className="editor-page__user-project">
+                    <svg className="editor-page__user-project-icon" viewBox="0 0 12 12" fill="none">
+                      <rect x="1.5" y="2.5" width="9" height="7" rx="1" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M1.5 4.5H10.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M4 2.5V1.5H8V2.5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+                    </svg>
+                    <span className="editor-page__user-project-name">{currentProject?.name || 'No project'}</span>
+                  </div>
+                </div>
+                <div className="editor-page__online-indicator">
+                  <button
+                    className="editor-page__online-btn"
+                    onClick={() => setOnlineDropdownOpen((v) => !v)}
+                    title={`${onlineUsers.length} user${onlineUsers.length !== 1 ? 's' : ''} online`}
+                    type="button"
+                  >
+                    <span className="editor-page__online-dots">
+                      {onlinePreview.map((member, index) => (
+                        <span
+                          key={member.clientId}
+                          className="editor-page__online-dot"
+                          style={{ backgroundColor: member.color, zIndex: onlinePreview.length - index }}
+                        />
+                      ))}
+                    </span>
+                    <span className="editor-page__online-count">{onlineUsers.length} online</span>
+                  </button>
+                  {onlineDropdownOpen && (
+                    <div className="editor-page__online-dropdown">
+                      {onlineUsers.length === 0 ? (
+                        <div className="editor-page__online-dropdown-empty">No users online</div>
+                      ) : (
+                        onlineUsers.map((member) => (
+                          <div key={member.clientId} className="editor-page__online-dropdown-item">
+                            <span className="editor-page__online-dot" style={{ backgroundColor: member.color }} />
+                            <span className="editor-page__online-dropdown-name">{member.name}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   )}
-                  <span className="editor-page__presence-count" title="Online users">
-                    {onlineUsers.length}
-                  </span>
-                </span>
+                </div>
               </div>
             </div>
           </aside>
@@ -423,14 +514,6 @@ export default function EditorPage() {
       <main className="editor-page__main">
         <TabBar />
         <ChangeBanner />
-        <EditorToolbar
-          onInsert={handleInsert}
-          onUndo={handleUndo}
-          onRedo={handleRedo}
-          fontSize={editorFontSize}
-          onFontSizeChange={setEditorFontSize}
-          disabled={!activeFile}
-        />
         <div className="editor-page__content editor-page__content--stack" ref={editorStackWrapRef}>
           {id && (
             <SearchPanel
@@ -474,6 +557,8 @@ export default function EditorPage() {
               <div className="editor-page__ai-dock-panel">
                 <AiChatPanel
                   projectId={id}
+                  showCollapse={aiDockExpanded}
+                  onCollapse={() => setAiDockExpanded(false)}
                   onActivate={() => {
                     setAiDockVisible(true);
                     setAiDockExpanded(true);
@@ -498,8 +583,8 @@ export default function EditorPage() {
               projectId={id}
               pdfExists={pdfExists}
               compileLog={compileLog}
-              onRefresh={handlePdfRefresh}
-              onJumpToLine={(_file, line) => handleJumpToLine(line)}
+              syncTarget={pdfSyncTarget}
+              onJumpToLine={handlePdfJump}
             />
           </aside>
         </>
@@ -507,6 +592,87 @@ export default function EditorPage() {
       {collabManagerOpen && id && (
         <CollabManager projectId={id} onClose={toggleCollabManager} />
       )}
+      <Modal
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        title="Settings"
+        footer={(
+          <button
+            className="ft-settings__close"
+            onClick={() => setShowSettings(false)}
+            type="button"
+          >
+            Close
+          </button>
+        )}
+      >
+        <div className="ft-settings">
+          <div className="ft-settings__section">
+            <div className="ft-settings__title">外观设置</div>
+            <div className="ft-settings__row">
+              <span>编辑器字号</span>
+              <div className="ft-settings__stepper">
+                <button
+                  type="button"
+                  onClick={() => setEditorFontSize(Math.max(12, editorFontSize - 1))}
+                  disabled={editorFontSize <= 12}
+                >
+                  -
+                </button>
+                <span>{editorFontSize}px</span>
+                <button
+                  type="button"
+                  onClick={() => setEditorFontSize(Math.min(28, editorFontSize + 1))}
+                  disabled={editorFontSize >= 28}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div className="ft-settings__row">
+              <span>主题模式</span>
+              <select
+                className="ft-settings__select"
+                value={theme}
+                onChange={(e) => setTheme(e.target.value as typeof theme)}
+              >
+                <option value="dark">夜间</option>
+                <option value="light">白天</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="ft-settings__section">
+            <div className="ft-settings__title">编译引擎设置</div>
+            <div className="ft-settings__row">
+              <span>默认引擎</span>
+              <select
+                className="ft-settings__select"
+                value={compiler}
+                onChange={(e) => setCompiler(e.target.value as typeof compiler)}
+              >
+                <option value="xelatex">XeLaTeX</option>
+                <option value="pdflatex">pdfLaTeX</option>
+                <option value="lualatex">LuaLaTeX</option>
+                <option value="latexmk">Latexmk</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="ft-settings__section">
+            <div className="ft-settings__title">AI设置</div>
+            <label className="ft-settings__row ft-settings__toggle">
+              <span>显示AI面板</span>
+              <input
+                type="checkbox"
+                checked={aiDockVisible}
+                onChange={(e) => setAiDockVisible(e.target.checked)}
+              />
+            </label>
+            <div className="ft-settings__hint">模型可在左侧栏切换</div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

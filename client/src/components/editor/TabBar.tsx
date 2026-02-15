@@ -38,7 +38,7 @@ const TabBar: React.FC = () => {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const inspectorOpen = useUiStore((s) => s.inspectorOpen);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
-  const setInspectorOpen = useUiStore((s) => s.setInspectorOpen);
+  const togglePdfPanel = useUiStore((s) => s.togglePdfPanel);
   const aiDockVisible = useUiStore((s) => s.aiDockVisible);
   const toggleAiDockVisible = useUiStore((s) => s.toggleAiDockVisible);
 
@@ -49,7 +49,7 @@ const TabBar: React.FC = () => {
   };
 
   const toggleInspector = () => {
-    setInspectorOpen(!inspectorOpen);
+    togglePdfPanel();
   };
 
   return (

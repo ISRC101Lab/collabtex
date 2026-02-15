@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import './FileTree.css';
 
 interface FileTreeProps {
@@ -303,8 +302,8 @@ export default function FileTree({
   onRenameFile,
   onMoveFile,
   onUpload,
+  onShare,
 }: FileTreeProps) {
-  const navigate = useNavigate();
   const tree = useMemo(() => buildTree(files), [files]);
   const [showNew, setShowNew] = useState<false | 'file' | 'folder'>(false);
   const [newName, setNewName] = useState('');
@@ -312,6 +311,7 @@ export default function FileTree({
   const [showMenu, setShowMenu] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const ctxRef = useRef<HTMLDivElement>(null);
 
   // Collect all folder paths for move menu
@@ -391,6 +391,18 @@ export default function FileTree({
     return () => document.removeEventListener('mousedown', handler);
   }, [ctxMenu]);
 
+  // Close add menu on outside click
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
+
   return (
     <div
       className="ft"
@@ -399,15 +411,18 @@ export default function FileTree({
     >
       {/* ── Toolbar: Files label + actions ── */}
       <div className="ft-toolbar">
-        <button
-          type="button"
-          className="ft-toolbar__label ft-toolbar__label--brand"
-          onClick={() => navigate('/')}
-          title="返回项目列表"
-        >
-          Aitex
-        </button>
+        <span className="ft-toolbar__label">Files</span>
         <div className="ft-toolbar__actions">
+          {onShare && (
+            <button className="ft-toolbar__btn" onClick={onShare} title="Share project" type="button">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="3" r="2" />
+                <circle cx="12" cy="13" r="2" />
+                <circle cx="4" cy="8" r="2" />
+                <path d="M5.8 6.9L10.2 4.1M5.8 9.1L10.2 11.9" />
+              </svg>
+            </button>
+          )}
           {downloadUrl && (
             <a className="ft-toolbar__btn" href={downloadUrl} title="Download ZIP">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -417,7 +432,7 @@ export default function FileTree({
             </a>
           )}
           {isOwner && (
-            <div className="ft-add-menu-wrap">
+            <div className="ft-add-menu-wrap" ref={menuRef}>
               <button
                 className="ft-toolbar__btn"
                 onClick={() => setShowMenu((v) => !v)}
@@ -463,6 +478,7 @@ export default function FileTree({
           )}
         </div>
       </div>
+
 
       {/* Hidden upload input */}
       <input

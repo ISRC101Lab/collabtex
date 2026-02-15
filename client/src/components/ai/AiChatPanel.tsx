@@ -4,104 +4,38 @@ import type { AiStreamEvent, FileChange, ToolCall } from '@/api/client';
 import { useUiStore } from '@/stores/uiStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { usePendingChangesStore } from '@/stores/pendingChangesStore';
+import { useConversationStore, loadConvoMessages, saveConvoMessages } from '@/stores/conversationStore';
 import AiMessage, { type ChatMessage } from '@/components/ai/AiMessage';
 import FileMentionPopup from '@/components/ai/FileMentionPopup';
 import './AiChatPanel.css';
 
 interface AiChatPanelProps {
   projectId: string;
+  showCollapse?: boolean;
+  onCollapse?: () => void;
   onActivate?: () => void;
 }
 
-// ── Multi-conversation persistence helpers ──────────────────────────
-interface ConvoMeta {
-  id: string;
-  title: string;
-  updatedAt: number;
-}
+const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, showCollapse, onCollapse, onActivate }) => {
+  const activeConvoId = useConversationStore((s) => s.activeConvoId);
+  const updateConvoMeta = useConversationStore((s) => s.updateConvoMeta);
+  const selectedModel = useConversationStore((s) => s.selectedModel);
+  const activeConvoIdRef = useRef(activeConvoId);
+  const skipNextSaveRef = useRef(false);
 
-const CONVOS_KEY = (pid: string) => `aitex-convos-${pid}`;
-const CONV_KEY = (pid: string, cid: string) => `aitex-conv-${pid}-${cid}`;
-const MAX_PERSISTED = 50;
-
-function genId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-
-function loadConvoList(projectId: string): ConvoMeta[] {
-  try {
-    const raw = localStorage.getItem(CONVOS_KEY(projectId));
-    return raw ? (JSON.parse(raw) as ConvoMeta[]) : [];
-  } catch { return []; }
-}
-
-function saveConvoList(projectId: string, list: ConvoMeta[]) {
-  try {
-    localStorage.setItem(CONVOS_KEY(projectId), JSON.stringify(list));
-  } catch { /* ignore */ }
-}
-
-function loadConvoMessages(projectId: string, convoId: string): ChatMessage[] {
-  try {
-    const raw = localStorage.getItem(CONV_KEY(projectId, convoId));
-    if (!raw) return [];
-    return (JSON.parse(raw) as ChatMessage[]).map((m) => ({ ...m, streaming: false }));
-  } catch { return []; }
-}
-
-function saveConvoMessages(projectId: string, convoId: string, msgs: ChatMessage[]) {
-  try {
-    const toSave = msgs
-      .filter((m) => !m.streaming)
-      .slice(-MAX_PERSISTED)
-      .map((m) => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp,
-        thinking: m.thinking,
-        toolCalls: m.toolCalls,
-        fileChanges: m.fileChanges?.map((fc) => ({
-          action: fc.action,
-          path: fc.path,
-          oldContent: null,
-          newContent: null,
-        })),
-      }));
-    localStorage.setItem(CONV_KEY(projectId, convoId), JSON.stringify(toSave));
-  } catch { /* quota exceeded */ }
-}
-
-function deleteConvo(projectId: string, convoId: string) {
-  localStorage.removeItem(CONV_KEY(projectId, convoId));
-}
-
-const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
-  // Multi-conversation state
-  const [convoList, setConvoList] = useState<ConvoMeta[]>(() => loadConvoList(projectId));
-  const [activeConvoId, setActiveConvoId] = useState<string>(() => {
-    const list = loadConvoList(projectId);
-    return list.length > 0 ? list[0].id : genId();
-  });
-  const [showHistory, setShowHistory] = useState(false);
-
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const list = loadConvoList(projectId);
-    if (list.length > 0) return loadConvoMessages(projectId, list[0].id);
-    return [];
-  });
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    loadConvoMessages(projectId, activeConvoId),
+  );
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
-  const [aiProvider, setAiProvider] = useState('');
-  const [models, setModels] = useState<string[]>([]);
-  const [selectedModel, setSelectedModel] = useState('');
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const messagesRef = useRef<ChatMessage[]>(messages);
 
-  const setAiDockVisible = useUiStore((s) => s.setAiDockVisible);
-  const setAiDockExpanded = useUiStore((s) => s.setAiDockExpanded);
   const addToast = useUiStore((s) => s.addToast);
   const fetchTree = useEditorStore((s) => s.fetchTree);
   const refreshFile = useEditorStore((s) => s.refreshFile);
@@ -113,111 +47,65 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(-1);
 
-
-
   // Persist messages to localStorage when they change
   useEffect(() => {
-    if (messages.length > 0 && !messages.some((m) => m.streaming)) {
-      saveConvoMessages(projectId, activeConvoId, messages);
-      // Update convo list metadata
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+    if (!messages.some((m) => m.streaming)) {
+      const convoId = activeConvoIdRef.current;
+      saveConvoMessages(projectId, convoId, messages);
       const firstUserMsg = messages.find((m) => m.role === 'user');
       const title = firstUserMsg?.content?.slice(0, 40) || 'New Chat';
-      setConvoList((prev) => {
-        const exists = prev.find((c) => c.id === activeConvoId);
-        let updated: ConvoMeta[];
-        if (exists) {
-          updated = prev.map((c) =>
-            c.id === activeConvoId ? { ...c, title, updatedAt: Date.now() } : c,
-          );
-        } else {
-          updated = [{ id: activeConvoId, title, updatedAt: Date.now() }, ...prev];
-        }
-        saveConvoList(projectId, updated);
-        return updated;
-      });
+      updateConvoMeta(convoId, title);
     }
-  }, [messages, projectId, activeConvoId]);
+  }, [messages, projectId, updateConvoMeta]);
 
-  // Reload when projectId changes
+  // Reload when convo changes
   useEffect(() => {
-    const list = loadConvoList(projectId);
-    setConvoList(list);
-    if (list.length > 0) {
-      setActiveConvoId(list[0].id);
-      setMessages(loadConvoMessages(projectId, list[0].id));
-    } else {
-      setActiveConvoId(genId());
-      setMessages([]);
-    }
-    setShowHistory(false);
-  }, [projectId]);
-
-  // Check AI provider status on mount
-  useEffect(() => {
-    api.aiStatus().then(
-      (res) => {
-        setAiConfigured(res.configured);
-        setAiProvider(res.provider);
-        if (res.models?.length) {
-          setModels(res.models);
-          setSelectedModel(res.provider);
-        }
-      },
-      () => {
-        setAiConfigured(false);
-      },
-    );
-  }, []);
+    activeConvoIdRef.current = activeConvoId;
+    skipNextSaveRef.current = true;
+    setMessages(loadConvoMessages(projectId, activeConvoId));
+  }, [projectId, activeConvoId]);
 
   // Auto-scroll to latest message
   useEffect(() => {
+    messagesRef.current = messages;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
   // Build history for the API (only role + content)
-  const buildHistory = useCallback((): api.ChatHistoryMessage[] => {
-    return messages
+  const buildHistoryFrom = useCallback((baseMessages: ChatMessage[]): api.ChatHistoryMessage[] => {
+    return baseMessages
       .filter((m) => m.content)
       .map((m) => ({ role: m.role, content: m.content }));
-  }, [messages]);
+  }, []);
 
-  // Send message handler (SSE streaming)
-  const handleSend = useCallback(async () => {
-    const trimmed = input.trim();
-    if (!trimmed || loading) return;
-
-    setMentionActive(false);
-
-    // Resolve @file references — fetch content and prepend as context
+  const resolveMentions = useCallback(async (text: string) => {
     const mentionRegex = /@([\w./_-]+)/g;
-    const mentions = [...trimmed.matchAll(mentionRegex)].map((m) => m[1]);
+    const mentions = [...text.matchAll(mentionRegex)].map((m) => m[1]);
     const validMentions = mentions.filter((m) => fileTree.includes(m));
 
-    let messageToSend = trimmed;
-    if (validMentions.length > 0) {
-      const contextBlocks: string[] = [];
-      for (const filePath of validMentions) {
-        try {
-          const res = await api.getFile(projectId, filePath);
-          contextBlocks.push(`[Context: @${filePath}]\n${res.content}\n[End context]`);
-        } catch { /* skip unreadable files */ }
-      }
-      if (contextBlocks.length > 0) {
-        messageToSend = contextBlocks.join('\n\n') + '\n\n' + trimmed;
+    if (validMentions.length === 0) return text;
+
+    const contextBlocks: string[] = [];
+    for (const filePath of validMentions) {
+      try {
+        const res = await api.getFile(projectId, filePath);
+        contextBlocks.push(`[Context: @${filePath}]\n${res.content}\n[End context]`);
+      } catch {
+        // skip unreadable files
       }
     }
 
-    const userMsg: ChatMessage = {
-      role: 'user',
-      content: trimmed,
-      timestamp: Date.now(),
-    };
+    if (contextBlocks.length === 0) return text;
+    return contextBlocks.join('\n\n') + '\n\n' + text;
+  }, [fileTree, projectId]);
 
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
+  const startStream = useCallback(async (messageToSend: string, baseMessages: ChatMessage[]) => {
     setLoading(true);
 
-    // Create a streaming assistant message placeholder
     const streamMsg: ChatMessage = {
       role: 'assistant',
       content: '',
@@ -227,12 +115,11 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
       fileChanges: [],
       thinking: '',
     };
-    setMessages((prev) => [...prev, streamMsg]);
+    setMessages([...baseMessages, streamMsg]);
 
     const abort = new AbortController();
     abortRef.current = abort;
 
-    // Mutable accumulators for the streaming message
     let content = '';
     let thinking = '';
     const toolCalls: ToolCall[] = [];
@@ -249,7 +136,7 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
     };
 
     try {
-      const history = buildHistory();
+      const history = buildHistoryFrom(baseMessages);
       await api.aiChatStream(
         projectId,
         messageToSend,
@@ -277,14 +164,15 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
               const tc = toolCalls.find((t) => t.name === event.name && !t.result);
               if (tc) tc.result = event.result;
               updateStream({ toolCalls: [...toolCalls] });
-              // Auto-refresh PDF after AI compile
               if (event.name === 'compile_project') {
                 try {
                   const res = JSON.parse(event.result);
                   if (res.ok && res.pdfExists) {
                     window.dispatchEvent(new CustomEvent('aitex:compile-done'));
                   }
-                } catch { /* ignore parse errors */ }
+                } catch {
+                  // ignore parse errors
+                }
               }
               break;
             }
@@ -297,7 +185,6 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
               });
               fileChangeCount++;
               updateStream({ fileChanges: [...fileChanges] });
-              // Sync editor (P0-2)
               if (refreshFile) refreshFile(projectId, event.path);
               fetchTree(projectId);
               break;
@@ -308,7 +195,6 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
                 streaming: false,
                 timestamp: Date.now(),
               });
-              // Push file changes to the pending changes store for banner review
               if (fileChanges.length > 0) {
                 usePendingChangesStore.getState().addChanges(fileChanges);
               }
@@ -321,7 +207,6 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
         abort.signal,
       );
 
-      // Finalize
       if (fileChangeCount > 0) {
         addToast(
           `AI modified ${fileChangeCount} file${fileChangeCount > 1 ? 's' : ''}`,
@@ -333,44 +218,97 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
         addToast('Failed to get AI response', 'error');
       }
     } finally {
-      // Ensure streaming flag is off
       updateStream({ streaming: false, timestamp: Date.now() });
       setLoading(false);
       abortRef.current = null;
       inputRef.current?.focus();
     }
-  }, [input, loading, projectId, buildHistory, addToast, selectedModel, fetchTree, refreshFile, fileTree]);
+  }, [addToast, buildHistoryFrom, fetchTree, projectId, refreshFile, selectedModel]);
 
-  // Delete a specific conversation
-  const handleDeleteConvo = useCallback((convoId: string) => {
-    deleteConvo(projectId, convoId);
-    setConvoList((prev) => {
-      const updated = prev.filter((c) => c.id !== convoId);
-      saveConvoList(projectId, updated);
-      return updated;
-    });
-    // If deleting the active conversation, reset to new
-    if (convoId === activeConvoId) {
-      const newId = genId();
-      setActiveConvoId(newId);
-      setMessages([]);
-    }
-  }, [projectId, activeConvoId]);
+  // Send message handler (SSE streaming)
+  const handleSend = useCallback(async () => {
+    const trimmed = input.trim();
+    if (!trimmed || loading) return;
 
-  // New conversation
-  const handleNewChat = useCallback(() => {
-    const newId = genId();
-    setActiveConvoId(newId);
-    setMessages([]);
-    setShowHistory(false);
+    setMentionActive(false);
+
+    const userMsg: ChatMessage = {
+      role: 'user',
+      content: trimmed,
+      timestamp: Date.now(),
+    };
+
+    const baseMessages = [...messagesRef.current, userMsg];
+    setMessages(baseMessages);
+    setInput('');
+
+    const messageToSend = await resolveMentions(trimmed);
+    await startStream(messageToSend, baseMessages);
+  }, [input, loading, resolveMentions, startStream]);
+
+  const handleEditStart = useCallback((index: number) => {
+    const msg = messagesRef.current[index];
+    if (!msg || msg.role !== 'user') return;
+    setEditingIndex(index);
+    setEditDraft(msg.content);
   }, []);
 
-  // Switch to existing conversation
-  const handleSwitchConvo = useCallback((convoId: string) => {
-    setActiveConvoId(convoId);
-    setMessages(loadConvoMessages(projectId, convoId));
-    setShowHistory(false);
-  }, [projectId]);
+  const handleEditCancel = useCallback(() => {
+    setEditingIndex(null);
+    setEditDraft('');
+  }, []);
+
+  const handleEditSave = useCallback(async (index: number) => {
+    if (loading) return;
+    const trimmed = editDraft.trim();
+    if (!trimmed) return;
+
+    abortRef.current?.abort();
+
+    const prev = messagesRef.current;
+    if (!prev[index] || prev[index].role !== 'user') return;
+
+    const updated: ChatMessage[] = prev.slice(0, index + 1).map((m, i) =>
+      i === index ? { ...m, content: trimmed, timestamp: Date.now() } : m,
+    );
+
+    setEditingIndex(null);
+    setEditDraft('');
+    setMessages(updated);
+
+    const messageToSend = await resolveMentions(trimmed);
+    await startStream(messageToSend, updated);
+  }, [editDraft, loading, resolveMentions, startStream]);
+
+  const handleCopyMessage = useCallback((index: number) => {
+    const msg = messagesRef.current[index];
+    if (!msg?.content) return;
+    navigator.clipboard.writeText(msg.content).then(
+      () => addToast('Copied', 'success'),
+      () => addToast('Copy failed', 'error'),
+    );
+  }, [addToast]);
+
+  const handleRegenerateFrom = useCallback(async (index: number) => {
+    if (loading) return;
+    abortRef.current?.abort();
+
+    const prev = messagesRef.current;
+    const userIndex = [...prev.slice(0, index + 1)]
+      .map((m, i) => ({ m, i }))
+      .reverse()
+      .find((item) => item.m.role === 'user')?.i;
+
+    if (userIndex === undefined) return;
+
+    const baseMessages = prev.slice(0, userIndex + 1);
+    const userMsg = prev[userIndex];
+    if (!userMsg?.content) return;
+
+    setMessages(baseMessages);
+    const messageToSend = await resolveMentions(userMsg.content);
+    await startStream(messageToSend, baseMessages);
+  }, [loading, resolveMentions, startStream]);
 
   // @ mention: select a file from popup
   const handleMentionSelect = useCallback(
@@ -424,110 +362,21 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
 
   return (
     <aside className="ai-chat-panel">
-      {/* Header */}
-      <div className="ai-chat-panel__header">
-        <div className="ai-chat-panel__header-left">
-          <span className="ai-chat-panel__title">
-            AI Assistant
-            {messages.length > 0 && (
-              <span className="ai-chat-panel__history-badge">{messages.length}</span>
-            )}
-          </span>
-          <div className="ai-chat-panel__header-meta">
-            {aiConfigured !== null && (
-              <span
-                className={
-                  'ai-chat-panel__status-inline' +
-                  (aiConfigured ? ' ai-chat-panel__status-inline--ok' : ' ai-chat-panel__status-inline--error')
-                }
-              >
-                {aiConfigured
-                  ? `Connected${aiProvider ? ` · ${aiProvider}` : ''}`
-                  : 'AI not configured'}
-              </span>
-            )}
-            {aiConfigured && models.length > 0 && (
-              <select
-                className="ai-chat-panel__header-select"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                disabled={loading}
-                title="Select model"
-              >
-                {models.map((m) => (
-                  <option key={m} value={m}>
-                    {m.replace('Qwen3-VL-', '').replace('-Instruct', '').replace('-Thinking', ' Think')}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        </div>
-        <div className="ai-chat-panel__header-actions">
+      {showCollapse && (
+        <div className="ai-chat-panel__top">
+          <span className="ai-chat-panel__grip" />
           <button
-            className="ai-chat-panel__header-btn"
-            onClick={handleNewChat}
+            className="ai-chat-panel__collapse"
+            onClick={onCollapse}
+            title="Collapse"
             type="button"
-            title="New conversation"
           >
-            &#x2795;
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+              <path d="M4 6l4 4 4-4" />
+            </svg>
           </button>
-          {convoList.length > 0 && (
-            <button
-              className={'ai-chat-panel__header-btn' + (showHistory ? ' ai-chat-panel__header-btn--active' : '')}
-              onClick={() => setShowHistory((v) => !v)}
-              type="button"
-              title="Conversation history"
-            >
-              &#x1F4CB;
-            </button>
-          )}
-          <button
-            className="ai-chat-panel__header-btn"
-            onClick={() => {
-              setAiDockExpanded(false);
-              setAiDockVisible(true);
-            }}
-            type="button"
-            title="Close panel"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      {/* Conversation history list */}
-      {showHistory && (
-        <div className="ai-chat-panel__convo-list">
-          {convoList.map((c) => (
-            <div
-              key={c.id}
-              className={'ai-chat-panel__convo-item' + (c.id === activeConvoId ? ' ai-chat-panel__convo-item--active' : '')}
-            >
-              <button
-                className="ai-chat-panel__convo-main"
-                onClick={() => handleSwitchConvo(c.id)}
-                type="button"
-              >
-                <span className="ai-chat-panel__convo-title">{c.title}</span>
-                <span className="ai-chat-panel__convo-date">
-                  {new Date(c.updatedAt).toLocaleDateString()}
-                </span>
-              </button>
-              <button
-                className="ai-chat-panel__convo-delete"
-                onClick={(e) => { e.stopPropagation(); handleDeleteConvo(c.id); }}
-                type="button"
-                title="Delete conversation"
-              >
-                &#x2715;
-              </button>
-            </div>
-          ))}
         </div>
       )}
-
-      {/* Messages area */}
       {messages.length === 0 && !loading ? (
         <div className="ai-chat-panel__empty">
           Ask a question about your LaTeX project
@@ -535,7 +384,19 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
       ) : (
         <div className="ai-chat-panel__messages">
           {messages.map((msg, i) => (
-            <AiMessage key={i} message={msg} />
+            <AiMessage
+              key={i}
+              message={msg}
+              canEdit={msg.role === 'user' && !loading && !msg.streaming}
+              isEditing={editingIndex === i}
+              editValue={editingIndex === i ? editDraft : ''}
+              onEditStart={() => handleEditStart(i)}
+              onEditChange={setEditDraft}
+              onEditCancel={handleEditCancel}
+              onEditSave={() => handleEditSave(i)}
+              onCopy={() => handleCopyMessage(i)}
+              onRegenerate={() => handleRegenerateFrom(i)}
+            />
           ))}
           {loading && (
             <div className="ai-chat-panel__loading">
@@ -548,7 +409,6 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
         </div>
       )}
 
-      {/* Input area */}
       <div className="ai-chat-panel__input-area">
         {mentionActive && mentionFiltered.length > 0 && (
           <FileMentionPopup
@@ -568,7 +428,6 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
           onChange={(e) => {
             const val = e.target.value;
             setInput(val);
-            // Detect @ mention trigger
             const cursor = e.target.selectionStart ?? val.length;
             const before = val.slice(0, cursor);
             const atIdx = before.lastIndexOf('@');
@@ -605,7 +464,10 @@ const AiChatPanel: React.FC<AiChatPanelProps> = ({ projectId, onActivate }) => {
             type="button"
             aria-label="Send message"
           >
-            &#10148;
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden>
+              <path d="M3.5 9.5L16.5 3.5L13 16.5L9.5 11.5L3.5 9.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M9.5 11.5L16.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
           </button>
         )}
       </div>

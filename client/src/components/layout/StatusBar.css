@@ -44,3 +44,10 @@
 .status-bar__compile--error {
   color: var(--error, #f38ba8);
 }
+
+:root[data-theme='light'] .status-bar {
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  border-radius: 0;
+}

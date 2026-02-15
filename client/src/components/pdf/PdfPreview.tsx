@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import { getPdfUrl, getDownloadUrl } from '@/api/client';
+import { TextLayerBuilder } from 'pdfjs-dist/web/pdf_viewer';
+import { getPdfUrl, getDownloadUrl, synctexInverse } from '@/api/client';
 import ChevronIcon from '@/components/common/ChevronIcon';
 import { useUiStore } from '@/stores/uiStore';
 import CompileLog from './CompileLog';
@@ -29,18 +30,8 @@ interface PdfPreviewProps {
   projectId: string;
   pdfExists: boolean;
   compileLog: string;
-  onRefresh: () => void;
+  syncTarget?: { page: number; x: number; y: number } | null;
   onJumpToLine?: (file: string | undefined, line: number) => void;
-}
-
-
-function RefreshIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <path d="M16 10A6 6 0 1 1 10 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M10 2.8V5.1H12.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
 function DownloadIcon({ className }: { className?: string }) {
@@ -53,14 +44,48 @@ function DownloadIcon({ className }: { className?: string }) {
   );
 }
 
+function PdfIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path d="M6 3.5H11.5L15 7V16.5H6V3.5Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M11.5 3.5V7H15" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M7.5 12H13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M7.5 9.5H11.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function LogIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <rect x="4" y="3.5" width="12" height="13" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M7 7H13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M7 10H13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M7 13H11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FitWidthIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <rect x="4" y="5" width="12" height="10" rx="1.8" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M2.5 10H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M14 10H17.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M5 8L2.5 10L5 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 8L17.5 10L15 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function PdfPreview({
   projectId,
   pdfExists,
   compileLog,
-  onRefresh,
+  syncTarget,
   onJumpToLine,
 }: PdfPreviewProps) {
-  const [cacheBuster, setCacheBuster] = useState(Date.now());
+  const [cacheBuster] = useState(Date.now());
   const [logVisible, setLogVisible] = useState(false);
 
   // PDF state
@@ -80,15 +105,13 @@ export default function PdfPreview({
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
   const renderTaskRef = useRef<Map<number, pdfjsLib.RenderTask>>(new Map());
-
-  const handleRefresh = useCallback(() => {
-    setCacheBuster(Date.now());
-    onRefresh();
-  }, [onRefresh]);
+  const pageViewportRef = useRef<Map<number, pdfjsLib.PageViewport>>(new Map());
+  const syncMarkerRef = useRef<HTMLDivElement | null>(null);
 
   const toggleLog = useCallback(() => {
     setLogVisible((v) => !v);
   }, []);
+
 
   // Load PDF document
   useEffect(() => {
@@ -130,6 +153,46 @@ export default function PdfPreview({
     };
   }, [projectId, pdfExists, cacheBuster]);
 
+  const handleInverseSync = useCallback(
+    async (page: number, x: number, y: number) => {
+      try {
+        const result = await synctexInverse(projectId, { page, x, y });
+        if (result?.file && result?.line) {
+          onJumpToLine?.(result.file, result.line);
+        }
+      } catch {
+        // ignore sync errors
+      }
+    },
+    [projectId, onJumpToLine],
+  );
+
+  const placeSyncMarker = useCallback((page: number, x: number, y: number) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const pageEl = container.querySelector(`[data-page="${page}"]`) as HTMLElement | null;
+    if (!pageEl) return;
+    const viewport = pageViewportRef.current.get(page);
+    if (!viewport) return;
+
+    const [vx, vy] = viewport.convertToViewportPoint(x, y);
+    const marker = syncMarkerRef.current ?? document.createElement('div');
+    marker.className = 'pdf-preview__sync-marker';
+    marker.style.left = `${vx}px`;
+    marker.style.top = `${vy}px`;
+    marker.style.opacity = '1';
+
+    if (marker.parentElement !== pageEl) {
+      marker.parentElement?.removeChild(marker);
+      pageEl.appendChild(marker);
+    }
+
+    marker.animate([
+      { transform: 'translate(-50%, -50%) scale(0.9)', opacity: 1 },
+      { transform: 'translate(-50%, -50%) scale(1.15)', opacity: 0.15 },
+    ], { duration: 900, easing: 'ease-out' });
+  }, []);
+
   // Render visible pages when doc/scale changes
   useEffect(() => {
     const doc = pdfDocRef.current;
@@ -144,14 +207,18 @@ export default function PdfPreview({
 
     // Clear container
     container.innerHTML = '';
+    pageViewportRef.current.clear();
 
     const renderPage = async (pageNum: number) => {
       const page = await doc.getPage(pageNum);
       const viewport = page.getViewport({ scale });
+      pageViewportRef.current.set(pageNum, viewport);
 
       const wrapper = document.createElement('div');
       wrapper.className = 'pdf-preview__page';
       wrapper.dataset.page = String(pageNum);
+      wrapper.style.width = `${viewport.width}px`;
+      wrapper.style.height = `${viewport.height}px`;
 
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(viewport.width * window.devicePixelRatio);
@@ -162,6 +229,16 @@ export default function PdfPreview({
       wrapper.appendChild(canvas);
       container.appendChild(wrapper);
 
+      wrapper.addEventListener('click', (event) => {
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) return;
+        const rect = wrapper.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const [pdfX, pdfY] = viewport.convertToPdfPoint(x, y);
+        handleInverseSync(pageNum, pdfX, pdfY);
+      });
+
       const ctx = canvas.getContext('2d')!;
       ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
@@ -170,6 +247,16 @@ export default function PdfPreview({
 
       try {
         await renderTask.promise;
+        const textLayerBuilder = new TextLayerBuilder({
+          pdfPage: page,
+          onAppend: (div) => {
+            div.classList.add('pdf-preview__text-layer');
+            div.style.width = `${viewport.width}px`;
+            div.style.height = `${viewport.height}px`;
+            wrapper.appendChild(div);
+          },
+        });
+        await textLayerBuilder.render(viewport);
       } catch {
         // render cancelled
       }
@@ -180,18 +267,26 @@ export default function PdfPreview({
     for (let i = 1; i <= doc.numPages; i++) {
       renderPage(i);
     }
-  }, [pdfDocRef.current, scale]);
+  }, [pdfDocRef.current, scale, handleInverseSync]);
 
-  // Compute scale from zoom mode
   useEffect(() => {
+    if (!syncTarget) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const target = container.querySelector(`[data-page="${syncTarget.page}"]`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    placeSyncMarker(syncTarget.page, syncTarget.x, syncTarget.y);
+  }, [syncTarget, placeSyncMarker, numPages]);
+
+  const recomputeScale = useCallback(() => {
     const doc = pdfDocRef.current;
     const container = containerRef.current;
     if (!doc || !container || zoomMode === 'custom') return;
 
     doc.getPage(1).then((page) => {
       const unscaledViewport = page.getViewport({ scale: 1 });
-      const containerWidth = container.clientWidth - 24; // padding
-      const containerHeight = container.clientHeight - 24;
+      const containerWidth = Math.max(0, container.clientWidth - 24); // padding
+      const containerHeight = Math.max(0, container.clientHeight - 24);
 
       if (zoomMode === 'fit-width') {
         setScale(containerWidth / unscaledViewport.width);
@@ -201,7 +296,17 @@ export default function PdfPreview({
         setScale(Math.min(scaleW, scaleH));
       }
     });
-  }, [pdfDocRef.current, zoomMode, numPages]);
+  }, [zoomMode, numPages]);
+
+  // Compute scale from zoom mode
+  useEffect(() => {
+    recomputeScale();
+  }, [recomputeScale]);
+
+  const handleFitWidth = useCallback(() => {
+    setZoomMode('fit-width');
+    recomputeScale();
+  }, [recomputeScale]);
 
   // Track current page on scroll
   useEffect(() => {
@@ -279,118 +384,108 @@ export default function PdfPreview({
     <div className="pdf-preview">
       {/* Toolbar */}
       <div className="pdf-preview__toolbar">
-        <div className="pdf-preview__compile-group">
-          <button
-            className="pdf-preview__compile-btn"
-            onClick={() => window.dispatchEvent(new CustomEvent('aitex:compile'))}
-            disabled={isCompiling}
-            title="Compile (Ctrl+Shift+B)"
+        <div className="pdf-preview__toolbar-left">
+          <div className="pdf-preview__compile-group">
+            <button
+              className="pdf-preview__compile-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent('aitex:compile'))}
+              disabled={isCompiling}
+              title="Compile (Ctrl+Shift+B)"
+            >
+              {renderCompileIcon()}
+              {isCompiling ? 'Compiling...' : 'Compile'}
+            </button>
+            <button
+              className="pdf-preview__compile-dropdown"
+              onClick={() => setCompilerMenuOpen((v) => !v)}
+              disabled={isCompiling}
+              title="Select compiler"
+            >
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M3 6l5 5 5-5H3z" />
+              </svg>
+            </button>
+            {compilerMenuOpen && (
+              <div className="pdf-preview__compiler-menu">
+                {COMPILERS.map((c) => (
+                  <button
+                    key={c.value}
+                    className={`pdf-preview__compiler-opt${compiler === c.value ? ' pdf-preview__compiler-opt--active' : ''}`}
+                    onClick={() => { setCompiler(c.value as typeof compiler); setCompilerMenuOpen(false); }}
+                  >
+                    {compiler === c.value && <span className="pdf-preview__compiler-check">&#x2713;</span>}
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <a
+            className="pdf-preview__toolbar-btn"
+            href={getDownloadUrl(projectId).replace('/download', '/pdf')}
+            download
+            title="Download PDF"
           >
-            {renderCompileIcon()}
-            {isCompiling ? 'Compiling...' : 'Compile'}
-          </button>
+            <PdfIcon className="pdf-preview__toolbar-icon" />
+          </a>
           <button
-            className="pdf-preview__compile-dropdown"
-            onClick={() => setCompilerMenuOpen((v) => !v)}
-            disabled={isCompiling}
-            title="Select compiler"
+            className={'pdf-preview__toolbar-btn' + (logVisible ? ' pdf-preview__toolbar-btn--active' : '')}
+            onClick={toggleLog}
+            title="Toggle compile log"
           >
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M3 6l5 5 5-5H3z" />
-            </svg>
+            <LogIcon className="pdf-preview__toolbar-icon" />
           </button>
-          {compilerMenuOpen && (
-            <div className="pdf-preview__compiler-menu">
-              {COMPILERS.map((c) => (
-                <button
-                  key={c.value}
-                  className={`pdf-preview__compiler-opt${compiler === c.value ? ' pdf-preview__compiler-opt--active' : ''}`}
-                  onClick={() => { setCompiler(c.value as typeof compiler); setCompilerMenuOpen(false); }}
-                >
-                  {compiler === c.value && <span className="pdf-preview__compiler-check">&#x2713;</span>}
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
-
-        <a
-          className="pdf-preview__toolbar-btn"
-          href={getDownloadUrl(projectId).replace('/download', '/pdf')}
-          download
-          title="Download PDF"
-        >
-          <DownloadIcon className="pdf-preview__toolbar-icon" />
-          <span className="pdf-preview__toolbar-label">PDF</span>
-        </a>
-        <button
-          className={'pdf-preview__toolbar-btn' + (logVisible ? ' pdf-preview__toolbar-btn--active' : '')}
-          onClick={toggleLog}
-          title="Toggle compile log"
-        >
-          Log
-        </button>
-
-        <span className="pdf-preview__toolbar-sep" />
-
-        <button
-          className="pdf-preview__toolbar-btn"
-          onClick={() => goToPage(currentPage - 1)}
-          disabled={currentPage <= 1}
-          title="Previous page"
-        >
-          <ChevronIcon className="pdf-preview__toolbar-icon" direction="left" />
-        </button>
-        <div className="pdf-preview__page-nav">
-          <input
-            className="pdf-preview__page-input"
-            value={pageInput}
-            onChange={(e) => setPageInput(e.target.value)}
-            onBlur={handlePageInputSubmit}
-            onKeyDown={(e) => e.key === 'Enter' && handlePageInputSubmit()}
-            size={3}
-          />
-          <span className="pdf-preview__page-total">of {pageDisplayTotal}</span>
-        </div>
-        <button
-          className="pdf-preview__toolbar-btn"
-          onClick={() => goToPage(currentPage + 1)}
-          disabled={currentPage >= numPages}
-          title="Next page"
-        >
-          <ChevronIcon className="pdf-preview__toolbar-icon" direction="right" />
-        </button>
-
-        <span className="pdf-preview__toolbar-sep" />
-
-        <button className="pdf-preview__toolbar-btn" onClick={zoomOut} title="Zoom out">
-          −
-        </button>
-        <span className="pdf-preview__zoom-label">{zoomPercent}%</span>
-        <button className="pdf-preview__toolbar-btn" onClick={zoomIn} title="Zoom in">
-          +
-        </button>
-        <button
-          className={'pdf-preview__toolbar-btn' + (zoomMode === 'fit-width' ? ' pdf-preview__toolbar-btn--active' : '')}
-          onClick={() => setZoomMode('fit-width')}
-          title="Fit width"
-        >
-          Fit Width
-        </button>
-        <button
-          className={'pdf-preview__toolbar-btn' + (zoomMode === 'fit-page' ? ' pdf-preview__toolbar-btn--active' : '')}
-          onClick={() => setZoomMode('fit-page')}
-          title="Fit page"
-        >
-          Fit Page
-        </button>
 
         <div className="pdf-preview__toolbar-spacer" />
 
-        <button className="pdf-preview__toolbar-btn" onClick={handleRefresh} title="Refresh PDF">
-          <RefreshIcon className="pdf-preview__toolbar-icon" />
-        </button>
+        <div className="pdf-preview__toolbar-right">
+          <button
+            className="pdf-preview__toolbar-btn"
+            onClick={() => goToPage(currentPage - 1)}
+            disabled={currentPage <= 1}
+            title="Previous page"
+          >
+            <ChevronIcon className="pdf-preview__toolbar-icon" direction="left" />
+          </button>
+          <div className="pdf-preview__page-nav">
+            <input
+              className="pdf-preview__page-input"
+              value={pageInput}
+              onChange={(e) => setPageInput(e.target.value)}
+              onBlur={handlePageInputSubmit}
+              onKeyDown={(e) => e.key === 'Enter' && handlePageInputSubmit()}
+              size={3}
+            />
+            <span className="pdf-preview__page-total">of {pageDisplayTotal}</span>
+          </div>
+          <button
+            className="pdf-preview__toolbar-btn"
+            onClick={() => goToPage(currentPage + 1)}
+            disabled={currentPage >= numPages}
+            title="Next page"
+          >
+            <ChevronIcon className="pdf-preview__toolbar-icon" direction="right" />
+          </button>
+
+          <span className="pdf-preview__toolbar-sep" />
+
+          <button className="pdf-preview__toolbar-btn" onClick={zoomOut} title="Zoom out">
+            −
+          </button>
+          <span className="pdf-preview__zoom-label">{zoomPercent}%</span>
+          <button className="pdf-preview__toolbar-btn" onClick={zoomIn} title="Zoom in">
+            +
+          </button>
+          <button
+            className={'pdf-preview__toolbar-btn' + (zoomMode === 'fit-width' ? ' pdf-preview__toolbar-btn--active' : '')}
+            onClick={handleFitWidth}
+            title="Fit width"
+          >
+            <FitWidthIcon className="pdf-preview__toolbar-icon" />
+          </button>
+        </div>
       </div>
 
       {/* PDF canvas area */}
